@@ -139,6 +139,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+*.pyc
 *.so
 
 # Ignore additional environment files (security)
