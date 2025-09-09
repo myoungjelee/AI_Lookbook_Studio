@@ -13,6 +13,11 @@ import { imageProxy } from '../../../services/imageProxy.service';
 import { ModelPicker } from './ModelPicker';
 import { tryOnHistory } from '../../../services/tryon_history.service';
 import { TryOnHistory } from './TryOnHistory';
+import { StyleTipsCard } from '../tips/StyleTipsCard';
+import { ComparePanel } from './ComparePanel';
+import { HistoryEvaluator } from './HistoryEvaluator';
+import { shareOrDownloadResult } from '../../../utils/shareImage';
+import { SnsShareDialog } from './SnsShareDialog';
 
 export const VirtualTryOnUI: React.FC = () => {
     const [personImage, setPersonImage] = useState<UploadedImage | null>(null);
@@ -29,6 +34,7 @@ export const VirtualTryOnUI: React.FC = () => {
     const [isLoadingRecommendations, setIsLoadingRecommendations] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const { addToast } = useToast();
+    const [shareOpen, setShareOpen] = useState<boolean>(false);
 
     // Likes feed for quick fitting
     const [likedItems, setLikedItems] = useState<RecommendationItem[]>([]);
@@ -220,7 +226,9 @@ export const VirtualTryOnUI: React.FC = () => {
                         <div className="lg:col-span-8 order-1 bg-white p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 xl:gap-7">
                                 <div className="md:col-span-1">
-                                    <ModelPicker direction="vertical" onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }} />
+                                    <div className={personSource === 'model' ? 'ring-4 ring-blue-200 rounded-2xl' : ''}>
+                                        <ModelPicker direction="vertical" onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }} />
+                                    </div>
                                 </div>
                                 <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 xl:gap-7">
                                     <ImageUploader
@@ -229,6 +237,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         description="Upload a full-body photo."
                                         onImageUpload={(img) => { setPersonImage(img); setPersonSource(img ? 'upload' : 'unknown'); recordInput({ person: img }, undefined, 'delta', img ? 'upload' : 'unknown'); }}
                                         externalImage={personImage}
+                                        active={!!personImage && personSource === 'upload'}
                                     />
                                     <ImageUploader
                                         id="top-image"
@@ -236,6 +245,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         description="Upload a photo of a top."
                                         onImageUpload={(img) => { setTopImage(img); setTopLabel(img ? '업로드' : undefined); recordInput({ top: img }, { top: img ? '업로드' : undefined }, 'delta'); }}
                                         externalImage={topImage}
+                                        active={!!topImage}
                                     />
                                     <ImageUploader
                                         id="pants-image"
@@ -243,6 +253,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         description="Upload a photo of pants."
                                         onImageUpload={(img) => { setPantsImage(img); setPantsLabel(img ? '업로드' : undefined); recordInput({ pants: img }, { pants: img ? '업로드' : undefined }, 'delta'); }}
                                         externalImage={pantsImage}
+                                        active={!!pantsImage}
                                     />
                                     <ImageUploader
                                         id="shoes-image"
@@ -250,6 +261,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         description="Upload a photo of shoes."
                                         onImageUpload={(img) => { setShoesImage(img); setShoesLabel(img ? '업로드' : undefined); recordInput({ shoes: img }, { shoes: img ? '업로드' : undefined }, 'delta'); }}
                                         externalImage={shoesImage}
+                                        active={!!shoesImage}
                                     />
                                 </div>
                             </div>
@@ -289,7 +301,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         </div>
 
                         {/* Action and Result Section */}
-                        <div className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-0 self-start">
+                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-0 self-start">
                             <CombineButton
                                 onClick={handleCombineClick}
                                 disabled={!canCombine || isLoading}
@@ -300,6 +312,15 @@ export const VirtualTryOnUI: React.FC = () => {
                                 isLoading={isLoading}
                                 error={error}
                             />
+                            {/* Style Tips below result */}
+                            <StyleTipsCard generatedImage={generatedImage || undefined} />
+                            {/* Share button (feature flag default ON) */}
+                            {(() => { const v = (import.meta as any).env?.VITE_FEATURE_SHARE; const on = !(String(v).toLowerCase() === '0' || String(v).toLowerCase() === 'false' || String(v).toLowerCase() === 'off'); return on; })() && (
+                                <div>
+                                    <Button disabled={!generatedImage} onClick={() => setShareOpen(true)}>SNS 공유용 이미지 저장</Button>
+                                </div>
+                            )}
+                            <SnsShareDialog open={shareOpen} onClose={() => setShareOpen(false)} image={generatedImage || undefined} />
                             {/* ModelPicker moved to left sidebar in input section */}
                             {likedItems.length > 0 && (
                                 <Card className="space-y-3">
@@ -424,6 +445,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                     }}
                                 />
                             ) : null}
+                        </div>
+                    )}
+                    {/* LLM 평가: 히스토리 선택 후 점수화 */}
+                    {(() => { const v = (import.meta as any).env?.VITE_FEATURE_EVALUATE; const on = !(String(v).toLowerCase() === '0' || String(v).toLowerCase() === 'false' || String(v).toLowerCase() === 'off'); return on; })() && (
+                        <div className="mt-8">
+                            <HistoryEvaluator />
                         </div>
                     )}
                     {/* Fallback random items before recommendations are available */}

@@ -16,6 +16,7 @@ export type TryOnOutputHistoryItem = {
   id: string;
   ts: number;
   image: string; // data URI
+  evaluation?: { score: number; reasoning?: string; model?: string; ts: number };
 };
 
 const KEY_INPUTS = 'app:tryon:history:inputs:v1';
@@ -60,6 +61,15 @@ export const tryOnHistory = {
     const list = [now, ...read<TryOnOutputHistoryItem>(KEY_OUTPUTS)].slice(0, LIMIT);
     write(KEY_OUTPUTS, list);
     notify();
+  },
+  updateOutput(id: string, patch: Partial<TryOnOutputHistoryItem>) {
+    const list = read<TryOnOutputHistoryItem>(KEY_OUTPUTS);
+    const idx = list.findIndex(it => it.id === id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...patch };
+      write(KEY_OUTPUTS, list);
+      notify();
+    }
   },
   inputs(): TryOnInputHistoryItem[] { return read<TryOnInputHistoryItem>(KEY_INPUTS); },
   outputs(): TryOnOutputHistoryItem[] { return read<TryOnOutputHistoryItem>(KEY_OUTPUTS); },

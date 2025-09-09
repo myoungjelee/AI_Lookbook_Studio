@@ -67,6 +67,17 @@ export interface RecommendationOptions {
     excludeTags?: string[];
 }
 
+// Style tips
+export interface StyleTipsResponse {
+    tips: string[];
+    tone?: string;
+    occasion?: string;
+    source: 'ai' | 'fallback';
+    requestId?: string;
+    timestamp?: string;
+    score?: number; // 0..100
+}
+
 // Frontend State Types
 export interface VirtualTryOnState {
     personImage: UploadedImage | null;

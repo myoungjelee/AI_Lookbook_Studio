@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Button } from '../../ui';
-import { tryOnHistory } from '../../../services/tryon_history.service';
+import { tryOnHistory, TryOnOutputHistoryItem } from '../../../services/tryon_history.service';
 import { FullScreenImage } from '../common/FullScreenImage';
 
 interface TryOnHistoryProps {
@@ -84,9 +84,14 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
           <div className="text-sm text-gray-500">기록이 없습니다.</div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {outputs.map(o => (
-              <button key={o.id} onClick={() => setView(o.image)} className="group aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
+            {outputs.map((o: TryOnOutputHistoryItem) => (
+              <button key={o.id} onClick={() => setView(o.image)} className="relative group aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
                 <img src={o.image} alt="history" className="w-full h-full object-cover" />
+                {o.evaluation && (
+                  <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-md">
+                    {o.evaluation.score}%
+                  </div>
+                )}
               </button>
             ))}
           </div>

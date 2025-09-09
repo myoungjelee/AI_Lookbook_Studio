@@ -108,6 +108,18 @@ export class VirtualTryOnService {
     }
 
     /**
+     * Get concise style tips based on generated image or history images
+     * @param payload - { generatedImage?: string; historyImages?: string[]; options?: { tone?: 'warm'|'cool'|'neutral'; occasion?: string; maxTips?: number } }
+     */
+    async getStyleTips(payload: { generatedImage?: string; historyImages?: string[]; person?: any; clothingItems?: any; options?: { tone?: string; occasion?: string; maxTips?: number } }): Promise<import('../types').StyleTipsResponse> {
+        const response = await apiClient.post<import('../types').StyleTipsResponse>('/api/tips', payload, { timeout: 20000 });
+        if ((response as any).error) {
+            return { tips: [], source: 'fallback' } as any;
+        }
+        return response as any;
+    }
+
+    /**
      * Check if virtual try-on generation is currently loading
      */
     isGenerating(): boolean {
@@ -127,6 +139,12 @@ export class VirtualTryOnService {
      */
     isLoading(): boolean {
         return this.isGenerating() || this.isLoadingRecommendations();
+    }
+
+    /** Evaluate outfits (result images) with LLM */
+    async evaluateOutfits(payload: { images: string[]; options?: { occasion?: string; tone?: string; style?: string } }): Promise<{ results: { index: number; score: number; reasoning?: string }[]; source: 'ai'|'fallback' }>{
+        const res = await apiClient.post<any>('/api/evaluate', payload, { timeout: 30000 });
+        return res as any;
     }
 }
 
