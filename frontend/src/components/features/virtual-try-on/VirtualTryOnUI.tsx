@@ -35,6 +35,11 @@ export const VirtualTryOnUI: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const { addToast } = useToast();
     const [shareOpen, setShareOpen] = useState<boolean>(false);
+    // UI highlight states
+    const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+    const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
+    const [selectedPantsId, setSelectedPantsId] = useState<string | null>(null);
+    const [selectedShoesId, setSelectedShoesId] = useState<string | null>(null);
 
     // Likes feed for quick fitting
     const [likedItems, setLikedItems] = useState<RecommendationItem[]>([]);
@@ -207,9 +212,9 @@ export const VirtualTryOnUI: React.FC = () => {
         }
         try {
             const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
-            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); recordInput({ top: up }, { top: item.title }, 'delta'); }
-            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); recordInput({ pants: up }, { pants: item.title }, 'delta'); }
-            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); recordInput({ shoes: up }, { shoes: item.title }, 'delta'); }
+            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta'); }
+            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta'); }
+            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta'); }
             addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
         } catch (e: any) {
             addToast(toast.error('가져오기에 실패했어요', e?.message));
@@ -226,8 +231,13 @@ export const VirtualTryOnUI: React.FC = () => {
                         <div className="lg:col-span-8 order-1 bg-white p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 xl:gap-7">
                                 <div className="md:col-span-1">
-                                    <div className={personSource === 'model' ? 'ring-4 ring-blue-200 rounded-2xl' : ''}>
-                                        <ModelPicker direction="vertical" onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }} />
+                                    <div>
+                                        <ModelPicker
+                                            direction="vertical"
+                                            selectedId={personSource === 'model' ? (selectedModelId || undefined) : undefined}
+                                            onSelectModel={(id) => setSelectedModelId(id)}
+                                            onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }}
+                                        />
                                     </div>
                                 </div>
                                 <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 xl:gap-7">
@@ -235,7 +245,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         id="person-image"
                                         title="Person"
                                         description="Upload a full-body photo."
-                                        onImageUpload={(img) => { setPersonImage(img); setPersonSource(img ? 'upload' : 'unknown'); recordInput({ person: img }, undefined, 'delta', img ? 'upload' : 'unknown'); }}
+                                        onImageUpload={(img) => { setPersonImage(img); setPersonSource(img ? 'upload' : 'unknown'); setSelectedModelId(null); recordInput({ person: img }, undefined, 'delta', img ? 'upload' : 'unknown'); }}
                                         externalImage={personImage}
                                         active={!!personImage && personSource === 'upload'}
                                     />
@@ -467,7 +477,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.top.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addCatalogItemToSlot(item)} padding="sm">
-                                                    <div className="aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2">
+                                                    <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedTopId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
                                                     <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
@@ -480,7 +490,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.pants.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addCatalogItemToSlot(item)} padding="sm">
-                                                    <div className="aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2">
+                                                    <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedPantsId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
                                                     <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
@@ -493,7 +503,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.shoes.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addCatalogItemToSlot(item)} padding="sm">
-                                                    <div className="aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2">
+                                                    <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedShoesId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
                                                     <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
