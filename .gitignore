@@ -147,4 +147,5 @@ __pycache__/
 .env.production
 frontend/.env.development
 .venv
+.pyc
 

@@ -8,7 +8,7 @@ from .routes.generate import router as generate_router
 from .routes.recommend import router as recommend_router
 from .routes.proxy import router as proxy_router
 from .routes.tips import router as tips_router
-from .routes.evaluate import router as evaluate_router
+# from .routes.evaluate import router as evaluate_router  # disabled per request
 
 
 app = FastAPI(title="AI Virtual Try-On API (Python)")
@@ -29,7 +29,7 @@ app.include_router(generate_router)
 app.include_router(recommend_router)
 app.include_router(proxy_router)
 app.include_router(tips_router)
-app.include_router(evaluate_router)
+# app.include_router(evaluate_router)  # disabled per request
 
 
 @app.get("/")

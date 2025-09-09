@@ -15,7 +15,6 @@ import { tryOnHistory } from '../../../services/tryon_history.service';
 import { TryOnHistory } from './TryOnHistory';
 import { StyleTipsCard } from '../tips/StyleTipsCard';
 import { ComparePanel } from './ComparePanel';
-import { HistoryEvaluator } from './HistoryEvaluator';
 import { shareOrDownloadResult } from '../../../utils/shareImage';
 import { SnsShareDialog } from './SnsShareDialog';
 
@@ -472,11 +471,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         </div>
                     )}
                     {/* LLM 평가: 히스토리 선택 후 점수화 */}
-                    {(() => { const v = (import.meta as any).env?.VITE_FEATURE_EVALUATE; const on = !(String(v).toLowerCase() === '0' || String(v).toLowerCase() === 'false' || String(v).toLowerCase() === 'off'); return on; })() && (
-                        <div className="mt-8">
-                            <HistoryEvaluator />
-                        </div>
-                    )}
+                    {/* HistoryEvaluator removed per request */}
                     {/* Fallback random items before recommendations are available */}
                     {!recommendations && !isLoadingRecommendations && (
                         <div className="mt-8">

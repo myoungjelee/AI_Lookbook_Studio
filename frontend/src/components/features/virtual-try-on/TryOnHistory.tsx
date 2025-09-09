@@ -11,7 +11,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
   const [inputs, setInputs] = useState(tryOnHistory.inputs());
   const [outputs, setOutputs] = useState(tryOnHistory.outputs());
   const [view, setView] = useState<string | null>(null);
-  const [sortMode, setSortMode] = useState<'recent' | 'score'>('recent');
+  const [sortMode] = useState<'recent'>('recent');
 
   const refresh = () => {
     setInputs(tryOnHistory.inputs());
@@ -40,22 +40,13 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
 
   const outputsSorted = useMemo(() => {
     const arr = [...outputs];
-    if (sortMode === 'score') {
-      arr.sort((a, b) => {
-        const sa = typeof a.evaluation?.score === 'number' ? a.evaluation!.score : -1;
-        const sb = typeof b.evaluation?.score === 'number' ? b.evaluation!.score : -1;
-        if (sb !== sa) return sb - sa; // desc
-        return (b.ts || 0) - (a.ts || 0);
-      });
-    } else {
-      arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    }
+    arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
     return arr;
-  }, [outputs, sortMode]);
+  }, [outputs]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card className="space-y-3 lg:col-span-1 min-h-[260px]">
+      <Card className="space-y-3 md:col-span-2 min-h-[260px] order-2">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800">입력 히스토리</h3>
           <div className="flex gap-2">
@@ -63,40 +54,42 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
             <Button size="sm" variant="ghost" onClick={() => { tryOnHistory.clearInputs(); refresh(); }}>비우기</Button>
           </div>
         </div>
-        <div className="columns-2 gap-x-3">
-          {inputs.length === 0 ? (
-            <div className="col-span-2 py-4 text-sm text-gray-500 text-center">기록이 없습니다.</div>
-          ) : inputs.map(item => {
-            // Prefer clothing thumbnails over person to avoid showing AI model face
-            const first = item.topImage || item.pantsImage || item.shoesImage || item.personImage;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onApply?.({ person: item.personImage, top: item.topImage, pants: item.pantsImage, shoes: item.shoesImage, topLabel: item.topLabel, pantsLabel: item.pantsLabel, shoesLabel: item.shoesLabel })}
-                className="mb-3 break-inside-avoid rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition w-full"
-                title="클릭하면 입력을 적용합니다"
-              >
-                {first ? (
-                  <img src={first} alt="input" className="block w-full h-auto object-cover" />
-                ) : (
-                  <div className="aspect-[4/5] w-full flex items-center justify-center text-gray-400 text-xs">-</div>
-                )}
-              </button>
-            );
-          })}
+        <div className="overflow-x-auto">
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[160px] gap-3 pr-1">
+            {inputs.length === 0 ? (
+              <div className="row-span-2 flex items-center justify-center text-sm text-gray-500 w-80">기록이 없습니다.</div>
+            ) : inputs.map(item => {
+              // Prefer clothing thumbnails over person to avoid showing AI model face
+              const first = item.topImage || item.pantsImage || item.shoesImage || item.personImage;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onApply?.({ person: item.personImage, top: item.topImage, pants: item.pantsImage, shoes: item.shoesImage, topLabel: item.topLabel, pantsLabel: item.pantsLabel, shoesLabel: item.shoesLabel })}
+                  className="relative w-40 aspect-[4/5] rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition"
+                  title="클릭하면 입력을 적용합니다"
+                >
+                  {first ? (
+                    <img src={first} alt="input" className="absolute inset-0 w-full h-full object-cover" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">-</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </Card>
 
-      <Card className="space-y-3 lg:col-span-2 min-h-[260px]">
+      <Card className="space-y-3 md:col-span-2 min-h-[260px] order-1">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800">결과 히스토리</h3>
           <div className="flex gap-2">
+            <Button size="sm" variant={sortMode === 'rank' ? 'secondary' : 'outline'} onClick={() => setSortMode(sortMode === 'rank' ? 'recent' : 'rank')}>
+              {sortMode === 'rank' ? '최신순' : '랭킹순위'}
+            </Button>
             <Button size="sm" variant="outline" onClick={refresh}>새로고침</Button>
             <Button size="sm" variant="ghost" onClick={() => { tryOnHistory.clearOutputs(); refresh(); }}>비우기</Button>
-            <Button size="sm" variant={sortMode === 'score' ? 'secondary' : 'outline'} onClick={() => setSortMode(sortMode === 'score' ? 'recent' : 'score')}>
-              {sortMode === 'score' ? '최신순' : '점수순 보기'}
-            </Button>
           </div>
         </div>
         {outputsSorted.length === 0 ? (
@@ -106,13 +99,10 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
             {outputsSorted.map((o: TryOnOutputHistoryItem, idx: number) => (
               <button key={o.id} onClick={() => setView(o.image)} className="relative group aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
                 <img src={o.image} alt="history" className="w-full h-full object-cover" />
-                {o.evaluation && (
-                  <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-md">
-                    ⭐ {o.evaluation.score}%
+                {typeof o.evaluation?.score === 'number' && (
+                  <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-md">
+                    ⭐ {o.evaluation!.score}점
                   </div>
-                )}
-                {sortMode === 'score' && (
-                  <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-md">#{idx + 1}</div>
                 )}
               </button>
             ))}
