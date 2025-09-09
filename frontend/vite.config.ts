@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '')
-    const target = env.VITE_API_URL || 'http://localhost:3000'
+    // Default to FastAPI dev port if not provided
+    const target = env.VITE_API_URL || 'http://localhost:3001'
     return {
         plugins: [react()],
         server: {
@@ -48,4 +49,3 @@ export default defineConfig(({ mode }) => {
         },
     }
 })
-

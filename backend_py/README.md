@@ -22,7 +22,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run (env vars optional via .env)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 3000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 3001
 ```
 
 ## Environment
@@ -30,7 +30,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 3000
 Copy `.env.example` to `.env` if needed.
 
 ```env
-PORT=3000
+PORT=3001
 HOST=0.0.0.0
 NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
@@ -42,7 +42,7 @@ FRONTEND_URL=http://localhost:5173
 # GEMINI_MAX_RETRIES=3
 
 # Optional: during migration, proxy to Node backend generate endpoint
-# GENERATE_PROXY_TARGET=http://localhost:3000
+# GENERATE_PROXY_TARGET=
 ```
 
 ## Notes
@@ -83,7 +83,7 @@ python -m venv .venv
 .\.venv\Scripts\activate   # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 
-uvicorn app.main:app --reload --host 0.0.0.0 --port 3000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 3001
 ```
 
 ### 라우트 개요
@@ -96,7 +96,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 3000
 
 ### 환경변수(.env)
 ```
-PORT=3000
+PORT=3001
 HOST=0.0.0.0
 NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
@@ -106,10 +106,9 @@ FRONTEND_URL=http://localhost:5173
 # GEMINI_TIMEOUT_MS=30000
 # GEMINI_MAX_RETRIES=3
 # (선택) 마이그레이션 동안 프록시 사용
-# GENERATE_PROXY_TARGET=http://localhost:3000
+# GENERATE_PROXY_TARGET=
 ```
 
 ### 비고
 - 로컬 개발을 위해 `FRONTEND_URL` CORS 허용.
 - 현재는 단계적 이전을 위한 구조이며, 실제 로직은 점진적으로 이관합니다.
-

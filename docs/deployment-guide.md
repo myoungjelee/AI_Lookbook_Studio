@@ -4,6 +4,8 @@ Comprehensive deployment guide for the AI Virtual Try-On application across diff
 
 ## Overview
 
+Note: Backend is now Python FastAPI (`backend_py`). Any references to the legacy Node backend in this document are for historical context and will be revised. For current Docker Compose, see `docker-compose.yml` and `docker-compose.dev.yml` which build from `./backend_py`.
+
 The AI Virtual Try-On application consists of two main components:
 - **Backend**: Node.js API server with AI services
 - **Frontend**: React application with static assets
@@ -88,7 +90,7 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 #### Development (`.env.development`)
 ```env
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=http://localhost:3001
 VITE_DEBUG=true
 ```
 
@@ -155,8 +157,8 @@ VITE_DEBUG=false
 
 5. **Access the application**
    - Frontend: http://localhost:5173
-   - Backend API: http://localhost:3000
-   - Health check: http://localhost:3000/health
+   - Backend API: http://localhost:3001
+   - Health check: http://localhost:3001/health
 
 ## Docker Deployment
 
@@ -183,7 +185,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "const http = require('http'); http.get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
+  CMD node -e "const http = require('http'); http.get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
 
 # Start application
 CMD ["npm", "start"]
@@ -284,7 +286,7 @@ services:
     env_file:
       - ./backend/.env.production
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -344,7 +346,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:3000
+      - VITE_API_URL=http://localhost:3001
 ```
 
 ### Running with Docker Compose

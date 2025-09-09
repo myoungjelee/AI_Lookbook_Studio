@@ -89,14 +89,14 @@ AZURE_COMPUTER_VISION_KEY=your-computer-vision-key
 
 ```bash
 # Health check
-curl http://localhost:3000/api/recommend-visual/health
+curl http://localhost:3001/api/recommend-visual/health
 ```
 
 ### 2. Azure 연결 테스트
 
 ```bash
 # Azure provider 강제 사용
-curl -X POST http://localhost:3000/api/recommend-visual \
+curl -X POST http://localhost:3001/api/recommend-visual \
   -H "Content-Type: application/json" \
   -d '{
     "image": "data:image/jpeg;base64,/9j/4AAQ...",

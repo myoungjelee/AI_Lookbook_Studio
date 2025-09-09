@@ -47,7 +47,7 @@ React-based frontend application for the AI Virtual Try-On system, providing an 
    Edit `.env` file:
    ```env
    # API Configuration
-   VITE_API_URL=http://localhost:3000
+   VITE_API_URL=http://localhost:3001
    
    # Environment
    NODE_ENV=development
@@ -250,7 +250,7 @@ frontend/
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `VITE_API_URL` | Backend API base URL | No | http://localhost:3000 |
+| `VITE_API_URL` | Backend API base URL | No | http://localhost:3001 |
 | `NODE_ENV` | Environment (development/production) | No | development |
 
 ### Vite Configuration

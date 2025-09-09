@@ -4,7 +4,7 @@ Complete API documentation for the AI Virtual Try-On backend service.
 
 ## Base URL
 
-- **Development**: `http://localhost:3000`
+- **Development**: `http://localhost:3001`
 - **Production**: `https://your-domain.com`
 
 ## Authentication
@@ -173,7 +173,7 @@ Generate a virtual try-on image by combining a person image with clothing items.
 
 **Example cURL:**
 ```bash
-curl -X POST http://localhost:3000/api/generate \
+curl -X POST http://localhost:3001/api/generate \
   -H "Content-Type: application/json" \
   -d '{
     "person": {
@@ -490,7 +490,7 @@ def generate_virtual_try_on(person_image_path, top_image_path):
     
     # Make request
     response = requests.post(
-        'http://localhost:3000/api/generate',
+        'http://localhost:3001/api/generate',
         headers={'Content-Type': 'application/json'},
         json=payload
     )
