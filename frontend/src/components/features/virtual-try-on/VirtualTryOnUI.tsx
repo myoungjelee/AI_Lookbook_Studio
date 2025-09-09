@@ -41,6 +41,19 @@ export const VirtualTryOnUI: React.FC = () => {
     const [selectedPantsId, setSelectedPantsId] = useState<string | null>(null);
     const [selectedShoesId, setSelectedShoesId] = useState<string | null>(null);
 
+    // Reflect history evaluations (scores) for current generated image
+    const [historyTick, setHistoryTick] = useState<number>(0);
+    useEffect(() => {
+        const unsub = tryOnHistory.subscribe(() => setHistoryTick((x) => x + 1));
+        return () => { unsub(); };
+    }, []);
+    const currentScore = React.useMemo(() => {
+        if (!generatedImage) return null;
+        const outs = tryOnHistory.outputs();
+        const found = outs.find(o => o.image === generatedImage);
+        return (found && typeof found.evaluation?.score === 'number') ? found.evaluation!.score : null;
+    }, [generatedImage, historyTick]);
+
     // Likes feed for quick fitting
     const [likedItems, setLikedItems] = useState<RecommendationItem[]>([]);
     useEffect(() => {
@@ -321,6 +334,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                 generatedImage={generatedImage}
                                 isLoading={isLoading}
                                 error={error}
+                                score={currentScore ?? undefined}
                             />
                             {/* Style Tips below result */}
                             <StyleTipsCard generatedImage={generatedImage || undefined} />

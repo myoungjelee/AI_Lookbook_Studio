@@ -70,9 +70,14 @@ export const SnsShareDialog: React.FC<{ open: boolean; onClose: () => void; imag
                 )}
               </div>
               <div className="flex-1 p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="w-full h-full bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                <div className="relative w-full h-full bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
                   {image ? (
-                    <img src={image} alt="result" className="object-contain max-w-full max-h-full" />
+                    <>
+                      <img src={image} alt="result" className="object-contain max-w-full max-h-full" />
+                      {typeof score === 'number' && (
+                        <div className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-md">⭐ {score}%</div>
+                      )}
+                    </>
                   ) : (
                     <div className="text-gray-400 text-sm">No image</div>
                   )}
@@ -104,4 +109,3 @@ export const SnsShareDialog: React.FC<{ open: boolean; onClose: () => void; imag
 };
 
 export default SnsShareDialog;
-

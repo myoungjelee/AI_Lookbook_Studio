@@ -41,7 +41,16 @@ export const StyleTipsCard: React.FC<StyleTipsCardProps> = ({ generatedImage }) 
       const res: StyleTipsResponse = await virtualTryOnService.getStyleTips(payload);
       setTips(res.tips || []);
       setSource(res.source as any);
-      setScore(typeof res.score === 'number' ? Math.max(0, Math.min(100, res.score)) : null);
+      const normalized = typeof res.score === 'number' ? Math.max(0, Math.min(100, res.score)) : null;
+      setScore(normalized);
+      // Persist score into output history for ranking
+      if (generatedImage && normalized !== null) {
+        const outs = tryOnHistory.outputs();
+        const found = outs.find(o => o.image === generatedImage);
+        if (found) {
+          tryOnHistory.updateOutput(found.id, { evaluation: { score: normalized, reasoning: undefined, ts: Date.now(), model: 'tips' } as any });
+        }
+      }
     } catch (e: any) {
       setError(e?.message || 'Failed to load tips');
     } finally { setLoading(false); }

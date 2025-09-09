@@ -9,12 +9,14 @@ interface ResultDisplayProps {
     generatedImage: string | null;
     isLoading: boolean;
     error: string | null;
+    score?: number | null; // optional AI score to overlay
 }
 
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({
     generatedImage,
     isLoading,
-    error
+    error,
+    score,
 }) => {
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -45,6 +47,11 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
                 {!isLoading && !error && generatedImage && !isPlaceholder && (
                     <div className="relative w-full h-full group">
                         <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain rounded-lg" />
+                        {typeof score === 'number' && (
+                            <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-md select-none">
+                                ⭐ {Math.max(0, Math.min(100, score))}%
+                            </div>
+                        )}
                         <button
                             onClick={() => setIsFullScreen(true)}
                             className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg cursor-pointer"

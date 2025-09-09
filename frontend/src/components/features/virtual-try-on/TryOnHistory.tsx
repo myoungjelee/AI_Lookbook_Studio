@@ -11,6 +11,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
   const [inputs, setInputs] = useState(tryOnHistory.inputs());
   const [outputs, setOutputs] = useState(tryOnHistory.outputs());
   const [view, setView] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<'recent' | 'score'>('recent');
 
   const refresh = () => {
     setInputs(tryOnHistory.inputs());
@@ -36,6 +37,21 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
     const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
     const day = Math.floor(h / 24); return `${day}d ago`;
   };
+
+  const outputsSorted = useMemo(() => {
+    const arr = [...outputs];
+    if (sortMode === 'score') {
+      arr.sort((a, b) => {
+        const sa = typeof a.evaluation?.score === 'number' ? a.evaluation!.score : -1;
+        const sb = typeof b.evaluation?.score === 'number' ? b.evaluation!.score : -1;
+        if (sb !== sa) return sb - sa; // desc
+        return (b.ts || 0) - (a.ts || 0);
+      });
+    } else {
+      arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    }
+    return arr;
+  }, [outputs, sortMode]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -78,19 +94,25 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={refresh}>새로고침</Button>
             <Button size="sm" variant="ghost" onClick={() => { tryOnHistory.clearOutputs(); refresh(); }}>비우기</Button>
+            <Button size="sm" variant={sortMode === 'score' ? 'secondary' : 'outline'} onClick={() => setSortMode(sortMode === 'score' ? 'recent' : 'score')}>
+              {sortMode === 'score' ? '최신순' : '점수순 보기'}
+            </Button>
           </div>
         </div>
-        {outputs.length === 0 ? (
+        {outputsSorted.length === 0 ? (
           <div className="text-sm text-gray-500">기록이 없습니다.</div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {outputs.map((o: TryOnOutputHistoryItem) => (
+            {outputsSorted.map((o: TryOnOutputHistoryItem, idx: number) => (
               <button key={o.id} onClick={() => setView(o.image)} className="relative group aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
                 <img src={o.image} alt="history" className="w-full h-full object-cover" />
                 {o.evaluation && (
                   <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-md">
-                    {o.evaluation.score}%
+                    ⭐ {o.evaluation.score}%
                   </div>
+                )}
+                {sortMode === 'score' && (
+                  <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-md">#{idx + 1}</div>
                 )}
               </button>
             ))}
