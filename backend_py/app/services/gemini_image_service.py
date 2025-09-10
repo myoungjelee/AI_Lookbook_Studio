@@ -163,8 +163,8 @@ class GeminiImageService:
 
     def _call_new_genai(self, parts: List[Dict[str, Any]], key: str) -> Optional[str]:
         # New client: from google import genai
-        # Recreate client for the provided key to allow key fallback
-        self._new_client = self._new_genai.Client(api_key=key)  # type: ignore[attr-defined]
+        # Recreate client per-call to ensure session isolation; do not retain client across calls
+        client = self._new_genai.Client(api_key=key)  # type: ignore[attr-defined]
 
         # Convert any base64 strings to raw bytes for the new SDK
         norm_parts: List[Dict[str, Any]] = []
@@ -184,22 +184,27 @@ class GeminiImageService:
                 # text parts or others as-is
                 norm_parts.append(p)
 
-        # The new API mirrors Node but uses snake_case fields
-        resp = self._new_client.models.generate_content(
-            model=self.model,
-            # Align to docs: wrap parts in a user Content object
-            contents=[{"role": "user", "parts": norm_parts}],
-            # Prefer image output; temperature unified via self.temperature
-            config={"response_modalities": ["IMAGE"], "temperature": self.temperature},
-        )
-
-        return self._extract_image_from_response(resp)
+        try:
+            # The new API mirrors Node but uses snake_case fields
+            resp = client.models.generate_content(
+                model=self.model,
+                contents=[{"role": "user", "parts": norm_parts}],
+                config={"response_modalities": ["IMAGE"], "temperature": self.temperature},
+            )
+            return self._extract_image_from_response(resp)
+        finally:
+            # Explicitly drop reference to avoid any implicit session reuse
+            try:
+                del client
+            except Exception:
+                pass
+            self._new_client = None
 
     def _call_legacy_genai(self, parts: List[Dict[str, Any]], key: str) -> Optional[str]:
         # Legacy client: import google.generativeai as genai
-        # Reconfigure model per key
+        # Configure per-call; avoid retaining model across calls
         self._legacy_genai.configure(api_key=key)  # type: ignore[attr-defined]
-        self._legacy_model = self._legacy_genai.GenerativeModel(self.model)  # type: ignore[attr-defined]
+        model = self._legacy_genai.GenerativeModel(self.model)  # type: ignore[attr-defined]
 
         # Convert to legacy-friendly inputs: list where inline_data -> dict with mime_type, data
         legacy_inputs: List[Any] = []
@@ -213,14 +218,22 @@ class GeminiImageService:
                 })
 
         try:
-            resp = self._legacy_model.generate_content(  # type: ignore[assignment]
-                legacy_inputs,
-                generation_config={"temperature": self.temperature},
-            )
-        except TypeError:
-            # For older SDKs without generation_config support
-            resp = self._legacy_model.generate_content(legacy_inputs)
-        return self._extract_image_from_response(resp)
+            try:
+                resp = model.generate_content(  # type: ignore[assignment]
+                    legacy_inputs,
+                    generation_config={"temperature": self.temperature},
+                )
+            except TypeError:
+                # For older SDKs without generation_config support
+                resp = model.generate_content(legacy_inputs)
+            return self._extract_image_from_response(resp)
+        finally:
+            # Explicitly drop reference to avoid any implicit session reuse
+            try:
+                del model
+            except Exception:
+                pass
+            self._legacy_model = None
 
     @staticmethod
     def _extract_image_from_response(resp: Any) -> Optional[str]:
