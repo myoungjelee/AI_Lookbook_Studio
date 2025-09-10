@@ -121,6 +121,8 @@ class GeminiImageService:
 
         # Person image
         p_b64, p_mime = self._normalize_image(person.get("base64"), person.get("mimeType"))
+        # Make the role of the next image explicit for the model
+        parts.append({"text": "PERSON (BASE IMAGE): use this exact face and hair as the unchanged base (FACE PIXEL LOCK)"})
         parts.append({
             "inline_data": {
                 "data": p_b64,
@@ -133,6 +135,8 @@ class GeminiImageService:
             item = clothing_items.get(key)
             if item and item.get("base64"):
                 b64, mime = self._normalize_image(item.get("base64"), item.get("mimeType"))
+                # Label each clothing image to avoid confusion with PERSON
+                parts.append({"text": f"CLOTHING ({key}): SEGMENT GARMENT ONLY; ignore any person/face/hair/skin in this photo"})
                 parts.append({
                     "inline_data": {
                         "data": b64,
@@ -304,22 +308,22 @@ class GeminiImageService:
 
     @staticmethod
     def _build_prompt_v2(clothing_pieces: List[str]) -> str:
-        safety = GeminiImageService._safety_directives_v2()
-        ordering = "\n".join([
-            "INPUT ORDERING:",
-            "- The image PART immediately following this instruction is the PERSON base image (face identity).",
-            "- Subsequent image PARTs are CLOTHING product photos in the order they are provided: top, pants, shoes (any may be omitted).",
-        ])
-        items = ", ".join(clothing_pieces)
-        task = (
+        return (
+            "CRITICAL SAFETY & CONSISTENCY DIRECTIVES:\n\n"
+            "The FIRST image is the definitive base for the person’s facial identity, background, perspective, and lighting.\n"
+            "FACE PIXEL LOCK: Preserve the same face pixel-for-pixel — no changes, retouching, beautification, color shift, or landmark adjustments.\n"
+            "The HEAD MUST REMAIN FULLY VISIBLE; do not crop above the forehead or remove/replace the head. Hair length/style/hairline must remain unchanged.\n"
+            "The output must look indistinguishable from a real photo, as if only the clothing was changed in the original environment.\n"
+            "Background, shadows, and natural skin textures must be maintained exactly.\n"
+            "From each clothing product image: REMOVE background and ANY person/face/hair/skin; segment the garment ONLY.\n"
+            "Fit each garment naturally to the body and pose, preserving original occlusion (e.g., arms/hands in front stay in front).\n"
+            "No text, logo, watermark, or accessories should be added/removed.\n"
+            "If there is any conflict, facial identity takes absolute priority.\n"
             "TASK (for realistic online fashion try-on):\n"
             "Step 1: Extract only the garments from product photos, ignoring all background and mannequins.\n"
-            "Step 2: Seamlessly fit all garments to the PERSON in the FIRST image, matching pose, proportions, and natural wrinkles/shading.\n"
+            "Step 2: Seamlessly fit all garments to the PERSON’s body in the FIRST image, matching pose, proportions, and natural wrinkles/shading. Do not alter the head, face, or hair.\n"
             "Step 3: Ensure the output matches the original scene/framing, preserving environment and lighting.\n"
-            f"Provided garments: {items}. Replace existing garments accordingly (top->torso/arms, pants->legs to ankles, shoes->feet).\n"
-            "Output exactly one photorealistic image of the SAME PERSON wearing the garments."
         )
-        return f"{safety}\n\n{ordering}\n\n{task}"
     @staticmethod
     def _safety_directives() -> str:
         return "\n".join([
