@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -126,72 +126,156 @@ def _build_content_for_llm(req: StyleTipsRequest) -> List[Dict]:
     return content
 
 
+@router.get("/status")
+def status():
+    """Lightweight status endpoint to verify Azure GPT deployment wiring.
+
+    Returns availability and configured deployment info without secrets.
+    """
+    return {
+        "azure": {
+            "available": azure_openai_service.available(),
+            "deploymentId": getattr(azure_openai_service, "deployment_id", None),
+            "apiVersion": getattr(azure_openai_service, "api_version", None),
+            "usingSdk": azure_openai_service.client is not None,
+            "endpoint": (getattr(azure_openai_service, "endpoint", None) or "").rstrip("/") if getattr(azure_openai_service, "endpoint", None) else None,
+        }
+    }
+
+
 @router.post("")
 def generate_style_tips(req: StyleTipsRequest) -> StyleTipsResponse:
     # Prefer Azure OpenAI if configured
     if not azure_openai_service.available():
         return _fallback_tips(req)
 
-    content = _build_content_for_llm(req)
-    try:
+    def _call_chat(parts: List[Dict[str, Any]]) -> str:
         client = azure_openai_service.client
-        temperature = 0.2
+        # Start with configured temperature; some preview models only allow default (1)
+        base_temp = getattr(azure_openai_service, "temperature", 0.2) or 0.2
+        temperature = base_temp
         max_tokens = 300
         if client is not None:
-            resp = client.chat.completions.create(
-                model=azure_openai_service.deployment_id,
-                messages=[{"role": "user", "content": content}],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            text = resp.choices[0].message.content or "{}"
+            print("[tips] calling Azure Chat via SDK", flush=True)
+            try:
+                resp = client.chat.completions.create(
+                    model=azure_openai_service.deployment_id,
+                    messages=[{"role": "user", "content": parts}],
+                    temperature=temperature,
+                    max_completion_tokens=max_tokens,
+                )
+            except TypeError:
+                resp = client.chat.completions.create(
+                    model=azure_openai_service.deployment_id,
+                    messages=[{"role": "user", "content": parts}],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except Exception as e:
+                # Retry without temperature if model rejects custom values
+                msg = str(e).lower()
+                print(f"[tips] SDK call failed: {e}", flush=True)
+                try:
+                    resp = client.chat.completions.create(
+                        model=azure_openai_service.deployment_id,
+                        messages=[{"role": "user", "content": parts}],
+                        # omit temperature to use model default
+                        max_completion_tokens=max_tokens,
+                    )
+                except TypeError:
+                    resp = client.chat.completions.create(
+                        model=azure_openai_service.deployment_id,
+                        messages=[{"role": "user", "content": parts}],
+                        max_tokens=max_tokens,
+                    )
+            return resp.choices[0].message.content or "{}"
         else:
-            # HTTP fallback
+            print("[tips] calling Azure Chat via HTTP", flush=True)
             import httpx
-
-            url = f"{azure_openai_service.endpoint}/openai/deployments/{azure_openai_service.deployment_id}/chat/completions"
+            endpoint = (azure_openai_service.endpoint or "").rstrip("/")
+            url = f"{endpoint}/openai/deployments/{azure_openai_service.deployment_id}/chat/completions"
             params = {"api-version": azure_openai_service.api_version}
             headers = {"api-key": azure_openai_service.api_key or "", "content-type": "application/json"}
-            payload = {"messages": [{"role": "user", "content": content}], "temperature": temperature, "max_tokens": max_tokens}
+            # Prefer new param name for latest preview models
+            payload = {"messages": [{"role": "user", "content": parts}], "temperature": temperature, "max_completion_tokens": max_tokens}
             with httpx.Client(timeout=20.0) as http:
-                r = http.post(url, params=params, headers=headers, json=payload)
-                r.raise_for_status()
+                try:
+                    r = http.post(url, params=params, headers=headers, json=payload)
+                    r.raise_for_status()
+                except httpx.HTTPStatusError as he:
+                    body = he.response.text[:800] if he.response is not None else ""
+                    print(f"[tips] HTTP error {he.response.status_code if he.response else '??'}: {body}", flush=True)
+                    # If server complains about max_completion_tokens, retry with legacy max_tokens
+                    if "max_completion_tokens" in body and "unsupported" in body.lower():
+                        legacy_payload = {"messages": [{"role": "user", "content": parts}], "temperature": temperature, "max_tokens": max_tokens}
+                        r = http.post(url, params=params, headers=headers, json=legacy_payload)
+                        r.raise_for_status()
+                    # If temperature unsupported, retry without temperature (use model default)
+                    elif "temperature" in body.lower() and "unsupported" in body.lower():
+                        payload_no_temp = {"messages": [{"role": "user", "content": parts}], "max_completion_tokens": max_tokens}
+                        r = http.post(url, params=params, headers=headers, json=payload_no_temp)
+                        r.raise_for_status()
+                    else:
+                        raise
                 data = r.json()
-                text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "{}")
+                return (data.get("choices") or [{}])[0].get("message", {}).get("content", "{}")
 
-        # Extract JSON safely
+    def _strip_images(parts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for p in parts:
+            if p.get("type") == "text":
+                out.append(p)
+        return out if out else parts
+
+    def _parse_json(text: str) -> Dict[str, Any]:
         import json as _json
-
         if "```" in text:
             chunk = text.split("```json")[-1].split("```")[0]
-            text = chunk if chunk.strip().startswith("{") else text
-        # tolerate extra text
-        start = text.find("{")
-        end = text.rfind("}")
-        obj: Dict = {}
+            if chunk.strip().startswith("{"):
+                text = chunk
+        start = text.find("{"); end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
-            obj = _json.loads(text[start : end + 1])
-        tips = [str(t).strip() for t in (obj.get("tips") or []) if str(t).strip()]
-        score_val = obj.get("score")
+            try:
+                return _json.loads(text[start:end+1])
+            except Exception:
+                return {}
+        return {}
+
+    content = _build_content_for_llm(req)
+    text: str = "{}"
+    try:
+        text = _call_chat(content)
+    except Exception as e:
+        print(f"[tips] first chat call failed: {e}", flush=True)
+        # Always try a text-only retry if any image parts were present
         try:
-            score_int = None if score_val is None else int(score_val)
-        except Exception:
-            score_int = None
-        if score_int is not None:
-            score_int = max(0, min(100, score_int))
-        if not tips:
-            # fall back softly
+            text = _call_chat(_strip_images(content))
+            print("[tips] succeeded on text-only retry", flush=True)
+        except Exception as e2:
+            print(f"[tips] text-only retry failed: {e2}", flush=True)
             return _fallback_tips(req)
 
-        now = datetime.utcnow().isoformat() + "Z"
-        return StyleTipsResponse(
-            tips=tips[: (req.options.maxTips if req.options else 5)],
-            tone=(obj.get("tone") or (req.options.tone if req.options else None)),
-            occasion=(obj.get("occasion") or (req.options.occasion if req.options else None)),
-            source="ai",
-            requestId=f"tips_{int(datetime.utcnow().timestamp())}",
-            timestamp=now,
-            score=score_int,
-        )
-    except Exception:
+    obj = _parse_json(text)
+    tips = [str(t).strip() for t in (obj.get("tips") or []) if str(t).strip()]
+    # Try to coerce scores like "87%" or "87.0"
+    score_val = obj.get("score")
+    score_int = None
+    if score_val is not None:
+        try:
+            score_int = int(str(score_val).strip().rstrip('%').split('.')[0])
+            score_int = max(0, min(100, score_int))
+        except Exception:
+            score_int = None
+    if not tips:
         return _fallback_tips(req)
+
+    now = datetime.utcnow().isoformat() + "Z"
+    return StyleTipsResponse(
+        tips=tips[: (req.options.maxTips if req.options else 5)],
+        tone=(obj.get("tone") or (req.options.tone if req.options else None)),
+        occasion=(obj.get("occasion") or (req.options.occasion if req.options else None)),
+        source="ai",
+        requestId=f"tips_{int(datetime.utcnow().timestamp())}",
+        timestamp=now,
+        score=score_int,
+    )

@@ -92,12 +92,36 @@ class AzureOpenAIService:
     # --------------------------- internal helpers ------------------------ #
     def _chat_to_json(self, content: List[Dict]) -> Dict:
         if self.client is not None:
-            resp = self.client.chat.completions.create(
-                model=self.deployment_id,
-                messages=[{"role": "user", "content": content}],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+            # Prefer new param names first, then fall back
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.deployment_id,
+                    messages=[{"role": "user", "content": content}],
+                    temperature=self.temperature,
+                    max_completion_tokens=self.max_tokens,  # new style
+                )
+            except TypeError:
+                # Older SDK signature
+                resp = self.client.chat.completions.create(
+                    model=self.deployment_id,
+                    messages=[{"role": "user", "content": content}],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
+            except Exception as e:
+                # Retry without temperature if model rejects custom values
+                try:
+                    resp = self.client.chat.completions.create(
+                        model=self.deployment_id,
+                        messages=[{"role": "user", "content": content}],
+                        max_completion_tokens=self.max_tokens,
+                    )
+                except TypeError:
+                    resp = self.client.chat.completions.create(
+                        model=self.deployment_id,
+                        messages=[{"role": "user", "content": content}],
+                        max_tokens=self.max_tokens,
+                    )
             text = resp.choices[0].message.content or ""
         else:
             # HTTP fallback for Azure Chat Completions
@@ -107,14 +131,37 @@ class AzureOpenAIService:
                 "api-key": self.api_key or "",
                 "content-type": "application/json",
             }
-            payload = {
+            # Try with new param name first
+            payload_new = {
                 "messages": [{"role": "user", "content": content}],
                 "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
+                "max_completion_tokens": self.max_tokens,
             }
             with httpx.Client(timeout=30.0) as client:
-                r = client.post(url, params=params, headers=headers, json=payload)
-                r.raise_for_status()
+                try:
+                    r = client.post(url, params=params, headers=headers, json=payload_new)
+                    r.raise_for_status()
+                except httpx.HTTPStatusError as he:
+                    body = he.response.text if he.response is not None else ""
+                    if "max_completion_tokens" in body and "unsupported" in body.lower():
+                        # Retry with legacy param
+                        payload_old = {
+                            "messages": [{"role": "user", "content": content}],
+                            "temperature": self.temperature,
+                            "max_tokens": self.max_tokens,
+                        }
+                        r = client.post(url, params=params, headers=headers, json=payload_old)
+                        r.raise_for_status()
+                    elif "temperature" in body.lower() and "unsupported" in body.lower():
+                        # Retry without temperature
+                        payload_no_temp = {
+                            "messages": [{"role": "user", "content": content}],
+                            "max_completion_tokens": self.max_tokens,
+                        }
+                        r = client.post(url, params=params, headers=headers, json=payload_no_temp)
+                        r.raise_for_status()
+                    else:
+                        raise
                 data = r.json()
                 text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
 

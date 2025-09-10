@@ -14,7 +14,8 @@ class ClothingItems(BaseModel):
 
 
 class VirtualTryOnRequest(BaseModel):
-    person: ApiFile
+    # Person can be omitted to allow outfit-only composition
+    person: Optional[ApiFile] = None
     clothingItems: ClothingItems
 
 

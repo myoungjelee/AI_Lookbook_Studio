@@ -20,7 +20,8 @@ export interface ClothingItems {
 }
 
 export interface VirtualTryOnRequest {
-    person: ApiFile;
+    // Person image is now optional to allow outfit-only composition
+    person?: ApiFile | null;
     clothingItems: ClothingItems;
 }
 

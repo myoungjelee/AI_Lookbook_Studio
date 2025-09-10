@@ -145,7 +145,7 @@ class GeminiImageService:
             raise ValueError("At least one clothing item (top/pants/shoes) is required")
 
         # Add consolidated text (safety + task) as a single initial instruction
-        consolidated_text = self._build_prompt(clothing_pieces)
+        consolidated_text = self._build_prompt_v2(clothing_pieces)
         parts.insert(0, {"text": consolidated_text})
         return parts
 
@@ -285,6 +285,41 @@ class GeminiImageService:
 
         # Fallback: unknown type, keep data but relabel to jpeg to attempt best-effort
         return b64, "image/jpeg"
+
+    # --------------------------- prompt helpers (v2) ------------------------- #
+    @staticmethod
+    def _safety_directives_v2() -> str:
+        return "\n".join([
+            "CRITICAL SAFETY & CONSISTENCY DIRECTIVES:",
+            "- The FIRST image is the definitive base for the PERSON’s facial identity, background, perspective, and lighting.",
+            "- The face in the FIRST image must be preserved pixel-for-pixel, with absolutely no changes, retouching, or landmark adjustments.",
+            "- No smoothing, beautification, or expression change is allowed.",
+            "- The output must look indistinguishable from a real photo, as if only the clothing was changed in the original environment.",
+            "- Background, shadows, and natural skin textures must be maintained exactly.",
+            "- Remove all backgrounds from clothing product images; only segment the garment(s)—ignore any mannequin/person.",
+            "- Fit each garment naturally to the body and pose, preserving original occlusion (e.g., arms/hands in front stay in front).",
+            "- No text, logo, watermark, or accessories should be added/removed.",
+            "- If there is any conflict, facial identity takes absolute priority.",
+        ])
+
+    @staticmethod
+    def _build_prompt_v2(clothing_pieces: List[str]) -> str:
+        safety = GeminiImageService._safety_directives_v2()
+        ordering = "\n".join([
+            "INPUT ORDERING:",
+            "- The image PART immediately following this instruction is the PERSON base image (face identity).",
+            "- Subsequent image PARTs are CLOTHING product photos in the order they are provided: top, pants, shoes (any may be omitted).",
+        ])
+        items = ", ".join(clothing_pieces)
+        task = (
+            "TASK (for realistic online fashion try-on):\n"
+            "Step 1: Extract only the garments from product photos, ignoring all background and mannequins.\n"
+            "Step 2: Seamlessly fit all garments to the PERSON in the FIRST image, matching pose, proportions, and natural wrinkles/shading.\n"
+            "Step 3: Ensure the output matches the original scene/framing, preserving environment and lighting.\n"
+            f"Provided garments: {items}. Replace existing garments accordingly (top->torso/arms, pants->legs to ankles, shoes->feet).\n"
+            "Output exactly one photorealistic image of the SAME PERSON wearing the garments."
+        )
+        return f"{safety}\n\n{ordering}\n\n{task}"
     @staticmethod
     def _safety_directives() -> str:
         return "\n".join([

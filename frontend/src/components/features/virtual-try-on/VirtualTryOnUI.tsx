@@ -129,8 +129,12 @@ export const VirtualTryOnUI: React.FC = () => {
     };
 
     const handleCombineClick = useCallback(async () => {
-        if (!personImage || (!topImage && !pantsImage && !shoesImage)) {
-            setError("Please upload a person's image and at least one clothing item.");
+        const hasAnyClothing = !!(topImage || pantsImage || shoesImage);
+        const hasAllClothing = !!(topImage && pantsImage && shoesImage);
+        const allowWithoutPerson = !personImage && hasAllClothing;
+        const allowWithPerson = !!personImage && hasAnyClothing;
+        if (!(allowWithoutPerson || allowWithPerson)) {
+            setError("인물 사진 또는 상/하의/신발 3종 모두를 제공해 주세요.");
             return;
         }
 
@@ -161,7 +165,7 @@ export const VirtualTryOnUI: React.FC = () => {
             });
 
             const result = await virtualTryOnService.combineImages({
-                person: convertToApiFile(personImage),
+                person: personImage ? convertToApiFile(personImage) : undefined,
                 clothingItems,
             });
 
@@ -207,7 +211,7 @@ export const VirtualTryOnUI: React.FC = () => {
         await handleCombineClick();
     }, [handleCombineClick]);
 
-    const canCombine = personImage && (topImage || pantsImage || shoesImage);
+    const canCombine = (!!personImage && (topImage || pantsImage || shoesImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
 
     // Helper: add a catalog/recommendation item into proper slot
     const addCatalogItemToSlot = useCallback(async (item: RecommendationItem) => {

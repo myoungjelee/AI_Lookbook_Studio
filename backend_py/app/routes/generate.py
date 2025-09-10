@@ -1,6 +1,9 @@
 from datetime import datetime
 import os
 import httpx
+import base64
+import io
+from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException
 from ..models import VirtualTryOnRequest, VirtualTryOnResponse
 from ..services.gemini_image_service import gemini_image_service
@@ -29,10 +32,68 @@ def status():
     }
 
 
+def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
+    """Compose a simple collage image from clothing items when no person is provided.
+
+    Returns a data URI string or None on failure.
+    """
+    try:
+        from PIL import Image, ImageOps  # type: ignore
+    except Exception as e:  # noqa: BLE001
+        print(f"[generate] PIL not available for collage fallback: {e}")
+        return None
+    # Collect present images in display order
+    order = ["top", "pants", "shoes"]
+    present: list[Image.Image] = []
+    try:
+        for key in order:
+            f = items.get(key) or None
+            if not f:
+                continue
+            b64 = f.get("base64") if isinstance(f, dict) else None  # type: ignore[assignment]
+            mime = (f.get("mimeType") if isinstance(f, dict) else None) or "image/jpeg"
+            if not b64:
+                continue
+            raw = base64.b64decode(b64)
+            im = Image.open(io.BytesIO(raw)).convert("RGBA")
+            # Best-effort normalize HEIC/AVIF already handled upstream; just continue
+            present.append(im)
+        if not present:
+            return None
+
+        n = len(present)
+        # Canvas: square for 1, vertical stack for 2-3
+        W = 1080
+        H = 1080 if n == 1 else 1080 * n
+        bg = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+
+        tile_h = H // n
+        pad = 48
+        for i, im in enumerate(present):
+            box_w = W - pad * 2
+            box_h = tile_h - pad * 2
+            # Contain within the tile box
+            fitted = ImageOps.contain(im, (box_w, box_h))
+            # Center position
+            x = (W - fitted.width) // 2
+            y = i * tile_h + (tile_h - fitted.height) // 2
+            # Use paste with alpha mask for broad Pillow compatibility
+            bg.paste(fitted, (x, y), fitted)
+
+        # Encode as PNG data URI
+        out = io.BytesIO()
+        bg.convert("RGBA").save(out, format="PNG")
+        b64out = base64.b64encode(out.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{b64out}"
+    except Exception as e:  # noqa: BLE001
+        print(f"[generate] collage fallback error: {e}")
+        return None
+
+
 @router.post("")
 def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
     # Option A: Use native Python Gemini service if available
-    if gemini_image_service.available():
+    if gemini_image_service.available() and req.person is not None:
         try:
             result = gemini_image_service.generate_virtual_try_on_image(
                 person=req.person.model_dump(),
@@ -50,6 +111,35 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
         except Exception as e:
             # Log and fall back (do not surface 502 from this stage)
             print(f"[generate] Python Gemini error, falling back: {e}")
+
+    # Option A2: If no person provided, attempt local collage composition from clothing items
+    if req.person is None and req.clothingItems:
+        clothing = req.clothingItems.model_dump() if hasattr(req.clothingItems, "model_dump") else dict(req.clothingItems)
+        # Require at least three items for person-less composition (ideal)
+        present = [k for k in ("top", "pants", "shoes") if clothing.get(k)]
+        present_count = len(present)
+        print(f"[generate] no-person path: clothing present={present}")
+        if present_count >= 3:
+            collaged = _compose_outfit_collage(clothing)
+            if collaged:
+                return VirtualTryOnResponse(
+                    generatedImage=collaged,
+                    requestId=f"req_{int(datetime.utcnow().timestamp())}",
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                )
+            else:
+                print("[generate] collage failed, falling back to single item data URI")
+        # Last-resort: return the first available clothing image as the result
+        for k in ("top", "pants", "shoes"):
+            f = clothing.get(k)
+            if f and isinstance(f, dict) and f.get("base64"):
+                mime = f.get("mimeType") or "image/jpeg"
+                data_uri = f"data:{mime};base64,{f.get('base64')}"
+                return VirtualTryOnResponse(
+                    generatedImage=data_uri,
+                    requestId=f"req_{int(datetime.utcnow().timestamp())}",
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                )
 
     # Option B: Proxy to existing Node backend if configured (recommended during migration)
     proxy_target = os.getenv("GENERATE_PROXY_TARGET")

@@ -165,17 +165,21 @@ export function useVirtualTryOn(options: UseVirtualTryOnOptions = {}): UseVirtua
 
     // Generate virtual try-on image
     const generateImage = useCallback(async (): Promise<VirtualTryOnResponse | null> => {
-        if (!state.personImage) {
-            throw new Error('Person image is required');
-        }
+        const clothingValues = Object.values(state.clothingItems);
+        const clothingCount = clothingValues.filter(item => item !== null).length;
 
-        const hasClothing = Object.values(state.clothingItems).some(item => item !== null);
-        if (!hasClothing) {
+        // Allow generation when either:
+        // - person image is provided and at least one clothing item
+        // - OR no person image, but all three clothing items are provided
+        if (!state.personImage && clothingCount < 3) {
+            throw new Error('Provide a person image or all three clothing items (top, pants, shoes).');
+        }
+        if (state.personImage && clothingCount < 1) {
             throw new Error('At least one clothing item is required');
         }
 
         const request: VirtualTryOnRequest = {
-            person: toApiFile(state.personImage)!,
+            person: toApiFile(state.personImage) || undefined,
             clothingItems: toApiClothingItems(state.clothingItems),
         };
 
