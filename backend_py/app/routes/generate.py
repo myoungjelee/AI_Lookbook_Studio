@@ -93,11 +93,14 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
 @router.post("")
 def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
     # Option A: Use native Python Gemini service if available
-    if gemini_image_service.available() and req.person is not None:
+    if gemini_image_service.available():
         try:
+            # 호환성: 혹시 클라이언트가 prprompt로 보낸 경우 대비
+            user_prompt = getattr(req, 'prompt', None) or getattr(req, 'prprompt', None)
             result = gemini_image_service.generate_virtual_try_on_image(
                 person=req.person.model_dump(),
                 clothing_items=(req.clothingItems.model_dump() if req.clothingItems else {}),
+                prompt=(user_prompt or None),
             )
             if result:
                 return VirtualTryOnResponse(
@@ -111,6 +114,25 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
         except Exception as e:
             # Log and fall back (do not surface 502 from this stage)
             print(f"[generate] Python Gemini error, falling back: {e}")
+
+    # Option A1: If person is not provided, still attempt Gemini using prompt/clothing-only
+    if gemini_image_service.available() and req.person is None:
+        try:
+            user_prompt = getattr(req, 'prompt', None) or getattr(req, 'prprompt', None)
+            clothing_dict = (req.clothingItems.model_dump() if req.clothingItems else {})
+            result = gemini_image_service.generate_virtual_try_on_image(
+                person=None,
+                clothing_items=clothing_dict,
+                prompt=(user_prompt or None),
+            )
+            if result:
+                return VirtualTryOnResponse(
+                    generatedImage=result,
+                    requestId=f"req_{int(datetime.utcnow().timestamp())}",
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                )
+        except Exception as e:
+            print(f"[generate] person-less Gemini path failed: {e}")
 
     # Option A2: If no person provided, attempt local collage composition from clothing items
     if req.person is None and req.clothingItems:

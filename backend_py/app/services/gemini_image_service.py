@@ -29,7 +29,8 @@ class GeminiImageService:
       GEMINI_MODEL (default: gemini-2.5-flash-image-preview)
       GEMINI_TIMEOUT_MS (default: 30000)
       GEMINI_MAX_RETRIES (default: 3)
-      GEMINI_TEMPERATURE (default: 0.0)
+      GEMINI_TEMPERATURE (default: 1.0)
+      GEMINI_FIXED_PROMPT (optional baseline prompt)
     """
 
     def __init__(self) -> None:
@@ -51,8 +52,12 @@ class GeminiImageService:
         self.model: str = _get_env("GEMINI_MODEL", "gemini-2.5-flash-image-preview")  # noqa: E501
         self.timeout_ms: int = int(_get_env("GEMINI_TIMEOUT_MS", "30000") or 30000)
         self.max_retries: int = int(_get_env("GEMINI_MAX_RETRIES", "3") or 3)
-        # Unified temperature: single source of truth
-        self.temperature: float = float(_get_env("GEMINI_TEMPERATURE", "0.0") or 0.0)
+        # Unified temperature: single source of truth (default 1.0)
+        self.temperature: float = float(_get_env("GEMINI_TEMPERATURE", "1") or 1)
+        # Fixed(기본) 프롬프트: 사용자 프롬프트가 비었을 때 사용하고, 있으면 먼저 baseline으로 붙입니다.
+        self.fixed_prompt: str = _get_env(
+            "GEMINI_FIXED_PROMPT")
+        
 
         self._new_client = None  # type: ignore[var-annotated]
         self._legacy_model = None  # type: ignore[var-annotated]
@@ -75,7 +80,7 @@ class GeminiImageService:
     def available(self) -> bool:
         return bool(self.api_keys and (self._new_genai or self._legacy_genai))
 
-    def generate_virtual_try_on_image(self, person: Dict, clothing_items: Dict | None = None) -> Optional[str]:
+    def generate_virtual_try_on_image(self, person: Optional[Dict] = None, clothing_items: Dict | None = None, prompt: Optional[str] = None) -> Optional[str]:
         """
         Returns a data URI (e.g., 'data:image/png;base64,....') of the generated image
         or None if generation succeeded but no image was returned.
@@ -84,11 +89,13 @@ class GeminiImageService:
         if not self.available():
             raise RuntimeError("Gemini service is not available (missing API key or client library)")
 
-        if not person or not person.get("base64") or not person.get("mimeType"):
-            raise ValueError("Person image requires base64 and mimeType")
+        # Allow person-less generation (text-only or clothing-only) by relaxing validation
+        if person is not None:
+            if not person.get("base64") or not person.get("mimeType"):
+                raise ValueError("Person image requires base64 and mimeType when provided")
 
         clothing_items = clothing_items or {}
-        parts = self._build_parts(person, clothing_items)
+        parts = self._build_parts(person, clothing_items, prompt)
 
         last_error: Optional[Exception] = None
         # Iterate keys with per-key retries
@@ -114,43 +121,44 @@ class GeminiImageService:
         raise last_error
 
     # ----------------------------- internal helpers --------------------------- #
-    def _build_parts(self, person: Dict, clothing_items: Dict) -> List[Dict[str, Any]]:
+    def _build_parts(self, person: Optional[Dict], clothing_items: Dict, prompt: Optional[str]) -> List[Dict[str, Any]]:
         parts: List[Dict[str, Any]] = []
 
-        # Build a single consolidated instruction block (safety + task)
+        # Baseline 고정 프롬프트 먼저 추가, 사용자 프롬프트가 있으면 이어붙임
+        if getattr(self, "fixed_prompt", None) and str(self.fixed_prompt).strip():
+            parts.append({"text": str(self.fixed_prompt).strip()})
+        if prompt and str(prompt).strip():
+            parts.append({"text": str(prompt).strip()})
 
-        # Person image
-        p_b64, p_mime = self._normalize_image(person.get("base64"), person.get("mimeType"))
-        # Make the role of the next image explicit for the model
-        parts.append({"text": "PERSON (BASE IMAGE): use this exact face and hair as the unchanged base (FACE PIXEL LOCK)"})
-        parts.append({
-            "inline_data": {
-                "data": p_b64,
-                "mime_type": p_mime,
-            }
-        })
+        # Person image (optional) with minimal role hint
+        if person is not None:
+            p_b64, p_mime = self._normalize_image(person.get("base64"), person.get("mimeType"))
+            parts.append({"text": "BASE PERSON: keep same person and face; keep background."})
+            parts.append({
+                "inline_data": {
+                    "data": p_b64,
+                    "mime_type": p_mime,
+                }
+            })
 
-        clothing_pieces: List[str] = []
+        # Clothing images
+        has_any_clothing = False
         for key in ("top", "pants", "shoes"):
             item = clothing_items.get(key)
             if item and item.get("base64"):
                 b64, mime = self._normalize_image(item.get("base64"), item.get("mimeType"))
-                # Label each clothing image to avoid confusion with PERSON
-                parts.append({"text": f"CLOTHING ({key}): SEGMENT GARMENT ONLY; ignore any person/face/hair/skin in this photo"})
+                # Minimal role hint per garment image
+                parts.append({"text": f"GARMENT {key}: clothing only; ignore person and background."})
                 parts.append({
                     "inline_data": {
                         "data": b64,
                         "mime_type": mime,
                     }
                 })
-                clothing_pieces.append(f"the {key}")
+                has_any_clothing = True
 
-        if not clothing_pieces:
-            raise ValueError("At least one clothing item (top/pants/shoes) is required")
+        # Allow text-only generation when neither person nor clothing is present
 
-        # Add consolidated text (safety + task) as a single initial instruction
-        consolidated_text = self._build_prompt_v2(clothing_pieces)
-        parts.insert(0, {"text": consolidated_text})
         return parts
 
     def _call_new_genai(self, parts: List[Dict[str, Any]], key: str) -> Optional[str]:
@@ -293,6 +301,7 @@ class GeminiImageService:
     # --------------------------- prompt helpers (v2) ------------------------- #
     @staticmethod
     def _safety_directives_v2() -> str:
+        return ""
         return "\n".join([
             "CRITICAL SAFETY & CONSISTENCY DIRECTIVES:",
             "- The FIRST image is the definitive base for the PERSON’s facial identity, background, perspective, and lighting.",
@@ -308,6 +317,7 @@ class GeminiImageService:
 
     @staticmethod
     def _build_prompt_v2(clothing_pieces: List[str]) -> str:
+        return ""
         return (
             "CRITICAL SAFETY & CONSISTENCY DIRECTIVES:\n\n"
             "The FIRST image is the definitive base for the person’s facial identity, background, perspective, and lighting.\n"
@@ -326,6 +336,7 @@ class GeminiImageService:
         )
     @staticmethod
     def _safety_directives() -> str:
+        return ""
         return "\n".join([
             "CRITICAL SAFETY AND CONSISTENCY DIRECTIVES:",
             "- The FIRST image MUST be used as the definitive source for the person's face and overall appearance.",
@@ -347,6 +358,7 @@ class GeminiImageService:
     @staticmethod
     def _build_prompt(clothing_pieces: List[str]) -> str:
         """Single consolidated prompt used for generation (safety + task)."""
+        return ""
         safety = "\n".join([
             "CRITICAL SAFETY AND CONSISTENCY DIRECTIVES:",
             "- The FIRST image MUST be used as the base and definitive source for the person's identity and appearance.",

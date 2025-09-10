@@ -81,10 +81,18 @@ def _build_content_for_llm(req: StyleTipsRequest) -> List[Dict]:
         {
             "type": "text",
             "text": (
-                "You are a concise stylist. Generate 3-6 SHORT, actionable style tips in Korean.\n"
-                "Focus on color pairing, fit/silhouette, proportion, and occasion.\n"
-                "Also provide an overall AI score as an integer 0-100 summarizing outfit quality.\n"
-                "Return ONLY JSON: {\"tips\":[string,...], \"tone\":string?, \"occasion\":string?, \"score\": number }."
+                # Instruction in Korean with a clear 0-100 rubric to avoid fixed scores
+                "패션 스타일리스트로서 간결한 한국어 팁을 제시하세요. 3~6개의 짧고 실행 가능한 팁을 생성하고,\n"
+                "색 조합, 핏/실루엣, 비율(상·하의 길이/허리선), TPO(상황 적합성)를 고려해 ‘종합 점수’를 0~100 범위의 정수로 산출하세요.\n"
+                "점수 산정 규칙(가이드):\n"
+                "- 기준점 60에서 시작.\n"
+                "- 색 조화/톤 정합성 +0~+20,\n"
+                "- 핏/실루엣 일치 +0~+10,\n"
+                "- 비율/프로포션 +0~+5,\n"
+                "- 상황 적합성(occasion) +0~+5,\n"
+                "- 색 충돌/로고 과다/노이즈 요소는 -0~-20 감점.\n"
+                "최종 점수는 0~100 정수로 반올림/절삭하여 반환하세요. 소수점/기호(%) 없이.\n"
+                "반환 형식은 JSON만 허용합니다: {\"tips\":[string,...], \"tone\":string?, \"occasion\":string?, \"score\": number }"
             ),
         }
     ]
