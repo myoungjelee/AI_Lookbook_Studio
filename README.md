@@ -2,49 +2,71 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# AI Virtual Try‑On (FastAPI + React/Vite)
 
-Note: Backend is now Python FastAPI (backend_py) only. Legacy Node backend was removed to avoid confusion.
+Monorepo with a Python FastAPI backend (`backend_py`) and a React + Vite + TypeScript frontend (`frontend`). The legacy Node backend has been removed to avoid confusion.
 
-This contains everything you need to run your app locally.
+View in AI Studio: https://ai.studio/apps/drive/1ORGriwJMQVw1Sd-cSjddK7sGBrrm_B6D
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ORGriwJMQVw1Sd-cSjddK7sGBrrm_B6D
+## What’s Included
+- Backend: FastAPI with routes for generate, recommendations, style tips, history evaluation, proxy/image tools
+- Frontend: React 19 + Vite 6 + Tailwind
+- Tools: CSV ingest to catalog, transparent‑background image selector
+- Docker: Dev and Prod compose files
+
+## Prerequisites
+- Python 3.11+
+- Node.js 18+ (frontend tooling only)
 
 ## Run Locally
 
-**Prerequisites:**  Node.js (frontend tooling) and Python 3.11+ (backend_py)
+Backend (FastAPI)
+- Terminal A
+  - `cd backend_py`
+  - `python -m venv .venv`
+  - Activate venv (Windows) `.venv\Scripts\activate` / (Linux/macOS) `source .venv/bin/activate`
+  - `pip install -r requirements.txt`
+  - `uvicorn app.main:app --reload --host 0.0.0.0 --port 3001`
 
+Frontend (Vite)
+- Terminal B
+  - `cd frontend`
+  - `npm install` (or `npm ci`)
+  - `npm run dev` (opens on 5173)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app with Python backend:
-   `npm run dev:py`
+Tip: `scripts/quickstart.ps1` installs frontend deps, prepares backend venv, ingests CSVs if present, and starts both.
 
----
+## Endpoints
+- `GET /health`
+- `POST /api/generate`
+- `POST /api/recommend`
+- `POST /api/recommend/from-fitting`
+- `POST /api/tips`
+- `POST /api/evaluate`
+- `POST /api/recommend/by-positions` (optional, external recommender bridge)
 
-## 로컬 실행(한국어)
+## Configuration
+Copy `backend_py/.env.example` to `backend_py/.env` and set keys as needed.
+- CORS: `FRONTEND_URL`
+- Azure OpenAI (optional): `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT_ID`
+- Gemini (optional): `GEMINI_API_KEY`, `GEMINI_FIXED_PROMPT`, `GEMINI_TEMPERATURE`
+- External recommender (optional): `RECOMMENDER_URL`, `RECOMMENDER_TIMEOUT`
 
-사전 준비: Node.js 설치
+Frontend dev uses `VITE_API_URL` when provided; otherwise defaults to `http://localhost:3001` via `vite.config.ts`.
 
-1) 의존성 설치
-```
-npm install
-```
+## Docker
+- Dev: `docker compose -f docker-compose.dev.yml up`
+- Prod: `docker compose up -d`
 
-2) 환경 변수 설정
-- `GEMINI_API_KEY`를 로컬 환경변수 또는 `.env.local`(존재 시) 등에 설정
+## Data Prep
+- CSV → catalog.json: `python backend_py/tools/ingest_csv_to_catalog.py`
+- Transparent‑only selection: `python backend_py/tools/select_transparent_images.py --input real_data/images --output real_data_no_bg --extensions .png .webp`
+  - Details: `docs/data-prep-transparent-images.md`
 
-3) 앱 실행
-```
-npm run dev
-```
+## Troubleshooting
+- Vite not found: `cd frontend && npm install`
+- npm ERESOLVE: ensure `@testing-library/react@^16` then reinstall; as fallback use `npm install --legacy-peer-deps`
+- Import error `ModuleNotFoundError: app`: run from `backend_py` or use `uvicorn backend_py.app.main:app` at repo root
+- Windows EOL warning on `git add`: harmless; use `.gitattributes` to normalize
+- Root Node workspace was removed — run all Node commands inside `frontend/`. Use `backend_py/.venv` only
 
-분리된 백엔드/프론트 구조를 사용하는 경우(모노레포):
-```
-npm run install:all   # 루트/백엔드/프론트 의존성 설치
-npm run dev           # 백엔드(3000) + 프론트(5173) 동시 실행
-
-# 또는 FastAPI(Python) 백엔드로 테스트
-npm run dev:py        # FastAPI(3001) + 프론트(5173)
-```

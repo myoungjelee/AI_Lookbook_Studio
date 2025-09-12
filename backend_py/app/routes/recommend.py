@@ -8,6 +8,7 @@ from ..models import (
     RecommendationItem,
 )
 from ..services.catalog import get_catalog_service
+from ..services.db_recommender import db_pos_recommender
 from ..services.llm_ranker import llm_ranker
 from ..services.azure_openai_service import azure_openai_service
 
@@ -43,10 +44,28 @@ def catalog_stats():
 
 @router.get("/random")
 def random_products(limit: int = 18, category: str | None = None):
-    svc = get_catalog_service()
-    products = svc.get_all()
-    if category in {"top", "pants", "shoes", "accessories"}:
-        products = [p for p in products if p.get("category") == category]
+    # Prefer DB-backed products when available, otherwise use catalog JSON
+    if db_pos_recommender.available():
+        products = list(db_pos_recommender.products)
+    else:
+        svc = get_catalog_service()
+        products = svc.get_all()
+
+    valid_cats = {"top", "pants", "shoes", "accessories"}
+    if category:
+        catq = (category or "").strip().lower()
+        def slot_of(c: str) -> str:
+            cl = (c or "").strip().lower()
+            if any(k in cl for k in ["top", "상의", "outer", "자켓", "코트", "아우터"]):
+                return "top"
+            if any(k in cl for k in ["pant", "하의", "바지", "denim", "슬랙스"]):
+                return "pants"
+            if any(k in cl for k in ["shoe", "신발", "스니커", "부츠", "로퍼"]):
+                return "shoes"
+            return cl
+        filtered = [p for p in products if slot_of(str(p.get("category") or "")) == slot_of(catq)]
+        if filtered:
+            products = filtered
 
     import random
     random.shuffle(products)
