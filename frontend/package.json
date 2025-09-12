@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "dev:py": "cross-env VITE_API_URL=http://localhost:3001 vite",
+        "dev:py": "vite",
         "build": "npm run build:clean && npm run build:prod",
         "build:clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', {recursive: true});\"",
         "build:prod": "cross-env NODE_ENV=production vite build",
@@ -26,8 +26,8 @@
         "html2canvas": "^1.4.1"
     },
     "devDependencies": {
-        "@testing-library/jest-dom": "^6.1.5",
-        "@testing-library/react": "^14.1.2",
+        "@testing-library/jest-dom": "^6.4.5",
+        "@testing-library/react": "^16.0.0",
         "@types/react": "^18.2.43",
         "@types/react-dom": "^18.2.17",
         "@typescript-eslint/eslint-plugin": "^6.14.0",
