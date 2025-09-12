@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "dev:py": "cross-env VITE_API_URL=http://localhost:3001 vite",
+        "dev:py": "vite",
         "build": "npm run build:clean && npm run build:prod",
         "build:clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', {recursive: true});\"",
         "build:prod": "cross-env NODE_ENV=production vite build",
@@ -21,17 +21,15 @@
         "lint:fix": "eslint . --ext ts,tsx --fix"
     },
     "dependencies": {
-        "@types/react": "^19.1.12",
-        "@types/react-dom": "^19.1.9",
-        "expo": "^53.0.22",
-        "html2canvas": "^1.4.1",
         "react": "^19.1.1",
-        "react-dom": "^19.1.1"
+        "react-dom": "^19.1.1",
+        "html2canvas": "^1.4.1"
     },
     "devDependencies": {
-        "@testing-library/dom": "^10.4.1",
-        "@testing-library/jest-dom": "^6.1.5",
-        "@testing-library/react": "^16.3.0",
+        "@testing-library/jest-dom": "^6.4.5",
+        "@testing-library/react": "^16.0.0",
+        "@types/react": "^18.2.43",
+        "@types/react-dom": "^18.2.17",
         "@typescript-eslint/eslint-plugin": "^6.14.0",
         "@typescript-eslint/parser": "^6.14.0",
         "@vitejs/plugin-react": "^4.2.1",
@@ -47,9 +45,6 @@
         "typescript": "~5.8.2",
         "vite": "^6.2.0",
         "vitest": "^1.0.4"
-    },
-    "optionalDependencies": {
-        "@rollup/rollup-linux-x64-gnu": "*"
     },
     "keywords": [
         "react",
