@@ -11,10 +11,15 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is r
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw 'Python is required' }
 Write-Ok "Node $(node -v) / Python $((python -V).Split()[1])"
 
-# 2) NPM install (root/backend/frontend)
-Write-Step "Installing Node dependencies (workspace)"
-npm run install:all
-Write-Ok "Node dependencies installed"
+# 2) NPM install (frontend only)
+Write-Step "Installing frontend Node dependencies"
+Push-Location frontend
+try {
+  if (Test-Path 'package-lock.json') { npm ci } else { npm install }
+  Write-Ok "Frontend dependencies installed"
+} finally {
+  Pop-Location
+}
 
 # 3) Python venv + deps via JS runner (ensures pip install)
 Write-Step "Ensuring Python venv and dependencies for backend_py"
