@@ -1,0 +1,57 @@
+name: Deploy to Test Environment
+
+on:
+  push:
+    branches: [exp/backend-py-skeleton]
+
+jobs:
+  build-and-deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Login to ACR
+      run: |
+        echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
+
+    - name: Build and Push Backend
+      run: |
+        docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }} ./backend_py
+        docker push ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
+
+    - name: Deploy Backend to App Service
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        images: ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
+
+  build-and-deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js 18
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'package-lock.json'
+
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm install --legacy-peer-deps
+        npm install @rollup/rollup-linux-x64-gnu --save-optional
+        VITE_API_URL=${{ secrets.FRONTEND_API_URL }} npm run build
+        ls -la dist/
+
+    - name: Deploy to Static Web Apps
+      uses: Azure/static-web-apps-deploy@v1
+      with:
+        azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        action: "upload"
+        app_location: "/frontend"
+        output_location: "dist"
+        skip_app_build: true

@@ -5,11 +5,15 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Accept build-time API URL for embedding into Vite build
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (fallback if no lockfile)
+RUN npm ci || npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -20,8 +24,11 @@ RUN npm run build:prod
 # Production stage - Use nginx to serve static files
 FROM nginx:alpine AS production
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+# Select nginx config per environment (default: prod)
+ARG NGINX_CONF=nginx.prod.conf
+
+# Copy selected nginx configuration
+COPY ${NGINX_CONF} /etc/nginx/nginx.conf
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
