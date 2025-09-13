@@ -1,48 +1,189 @@
-name: Deploy to Test Environment
+name: Deploy AI Virtual Try-On to Test Environment
 
 on:
   push:
-    branches: [develop_deploy_pipeline]  # 현재 브랜치명으로 변경
+    branches: [main, develop, test]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
+  REGISTRY_USERNAME: ${{ secrets.ACR_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+  BACKEND_IMAGE: backend-fastapi
+  FRONTEND_IMAGE: frontend-react
 
 jobs:
-  build-and-deploy-backend:
+  # 🔍 코드 품질 및 보안 검사
+  quality-checks:
     runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.changes.outputs.backend == 'true' || steps.changes.outputs.frontend == 'true' }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Login to ACR
-        run: |
-          echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
-
-      - name: Build and Push Backend
-        run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }} ./backend_py
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
-
-      - name: Deploy Backend to App Service
-        uses: azure/webapps-deploy@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          images: ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
+          fetch-depth: 0
 
-  build-and-deploy-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Detect changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend_py/**'
+            frontend:
+              - 'frontend/**'
+            config:
+              - 'docker-compose*.yml'
+              - '.github/workflows/**'
 
-      - name: Setup Node.js 18
+      - name: Setup Python for Backend Linting
+        if: steps.changes.outputs.backend == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Python dependencies
+        if: steps.changes.outputs.backend == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend_py/requirements.txt') }}
+
+      - name: Install Python dependencies
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          cd backend_py
+          pip install -r requirements.txt
+
+      # - name: Run Python tests
+      #   if: steps.changes.outputs.backend == 'true'
+      #   run: |
+      #     cd backend_py
+      #     pytest --cov=app --cov-report=term-missing
+
+      - name: Setup Node.js for Frontend
+        if: steps.changes.outputs.frontend == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Build Frontend
+      - name: Install Frontend dependencies
+        if: steps.changes.outputs.frontend == 'true'
         run: |
           cd frontend
           npm ci --legacy-peer-deps
-          VITE_API_URL=${{ secrets.FRONTEND_API_URL }} npm run build
+
+      - name: Frontend Type Check & Lint
+        if: steps.changes.outputs.frontend == 'true'
+        run: |
+          cd frontend
+          npm run lint
+
+      # - name: Frontend Tests
+      #   if: steps.changes.outputs.frontend == 'true'
+      #   run: |
+      #     cd frontend
+      #     npm run test
+
+  # 🐳 백엔드 빌드 및 푸시
+  build-backend:
+    needs: quality-checks
+    if: needs.quality-checks.outputs.should-deploy == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      backend-image-tag: ${{ steps.meta.outputs.tags }}
+      backend-image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Backend
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend_py
+          file: ./backend_py/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ENVIRONMENT=test
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+
+  # ⚛️ 프론트엔드 빌드 및 배포
+  build-frontend:
+    needs: quality-checks
+    if: needs.quality-checks.outputs.should-deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+
+      - name: Build Frontend
+        env:
+          VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
+          NODE_ENV: production
+        run: |
+          cd frontend
+          npm run build
           ls -la dist/
 
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      - name: Build and push Frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Static Web Apps 배포 (선택사항)
       - name: Deploy to Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -52,3 +193,101 @@ jobs:
           app_location: "/frontend"
           output_location: "dist"
           skip_app_build: true
+
+  # 🚀 백엔드 Azure App Service 배포
+  deploy-backend:
+    needs: [quality-checks, build-backend]
+    if: needs.quality-checks.outputs.should-deploy == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: test
+      url: ${{ steps.deploy.outputs.webapp-url }}
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure App Service
+        id: deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
+          slot-name: 'test'
+          images: ${{ needs.build-backend.outputs.backend-image-tag }}
+
+      - name: Set App Service Environment Variables
+        uses: azure/appservice-settings@v1
+        with:
+          app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
+          slot-name: 'test'
+          app-settings-json: |
+            [
+              {
+                "name": "PORT",
+                "value": "3001"
+              },
+              {
+                "name": "NODE_ENV",
+                "value": "test"
+              },
+              {
+                "name": "GEMINI_API_KEY",
+                "value": "${{ secrets.TEST_GEMINI_API_KEY }}"
+              },
+              {
+                "name": "AZURE_OPENAI_ENDPOINT",
+                "value": "${{ secrets.TEST_AZURE_OPENAI_ENDPOINT }}"
+              },
+              {
+                "name": "AZURE_OPENAI_KEY",
+                "value": "${{ secrets.TEST_AZURE_OPENAI_KEY }}"
+              },
+              {
+                "name": "AZURE_OPENAI_DEPLOYMENT_ID",
+                "value": "${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}"
+              }
+            ]
+
+  # 🧪 배포 후 테스트
+  post-deploy-tests:
+    needs: [deploy-backend, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Health Check - Backend
+        run: |
+          curl -f ${{ secrets.TEST_BACKEND_URL }}/health || exit 1
+
+      - name: API Integration Tests
+        run: |
+          # Generate 테스트
+          curl -X POST "${{ secrets.TEST_BACKEND_URL }}/api/generate/status" \
+            -H "Content-Type: application/json" || exit 1
+          
+          # Recommend 테스트  
+          curl -X GET "${{ secrets.TEST_BACKEND_URL }}/api/recommend/status" \
+            -H "Content-Type: application/json" || exit 1
+
+  # 📊 알림
+  notify:
+    needs: [deploy-backend, build-frontend, post-deploy-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify Success
+        if: needs.post-deploy-tests.result == 'success'
+        run: |
+          echo "✅ 테스트 환경 배포 성공!"
+          echo "🔗 Backend: ${{ secrets.TEST_BACKEND_URL }}"
+          echo "🔗 Frontend: ${{ secrets.TEST_FRONTEND_URL }}"
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          echo "❌ 테스트 환경 배포 실패!"
+          echo "📝 로그를 확인하세요."
