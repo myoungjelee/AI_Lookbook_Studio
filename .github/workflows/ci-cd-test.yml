@@ -8,7 +8,7 @@ jobs:
   build-and-deploy-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # v4로 업그레이드
 
       - name: Login to ACR
         run: |
@@ -20,7 +20,7 @@ jobs:
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
 
       - name: Deploy Backend to App Service
-        uses: azure/webapps-deploy@v2
+        uses: azure/webapps-deploy@v3  # v3으로 업그레이드
         with:
           app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
@@ -29,20 +29,18 @@ jobs:
   build-and-deploy-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # v4로 업그레이드
 
       - name: Setup Node.js 18
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4  # v4로 업그레이드, 캐시 제거
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: 'package-lock.json'
+          # cache 설정 완전 제거로 에러 해결
 
       - name: Build Frontend
         run: |
           cd frontend
-          npm install --legacy-peer-deps
-          npm install @rollup/rollup-linux-x64-gnu --save-optional
+          npm ci --legacy-peer-deps  # npm install 대신 ci 사용
           VITE_API_URL=${{ secrets.FRONTEND_API_URL }} npm run build
           ls -la dist/
 

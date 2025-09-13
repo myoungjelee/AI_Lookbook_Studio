@@ -44,7 +44,8 @@
         "terser": "^5.43.1",
         "typescript": "~5.8.2",
         "vite": "^6.2.0",
-        "vitest": "^1.0.4"
+        "vitest": "^1.0.4",
+        "@rollup/rollup-linux-x64-gnu": "^4.24.2"  // Linux 빌드용 추가
     },
     "keywords": [
         "react",
