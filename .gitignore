@@ -13,15 +13,21 @@ out/
 
 # Environment variables (중요: API 키 보안)
 .env
+*.env
 .env.local
 .env.dev
 .env.prod
+.env.development
+.env.staging
+.env.production
 frontend/.env.local
 frontend/.env.development
 frontend/.env.production
 backend_py/.env.local
 backend_py/.env.dev
 backend_py/.env.prod
+.env*
+!.env.example
 
 # Runtime data
 pids
@@ -148,3 +154,13 @@ __pycache__/
 
 /venv/
 /backend_py/venv/
+
+# AI Service Keys
+**/gemini_key*
+**/azure_key*
+**/openai_key*
+
+# Sensitive data
+secrets/
+keys/
+credentials/
