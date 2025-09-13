@@ -4,70 +4,54 @@ on:
   push:
     branches: [develop_deploy_pipeline]  # 현재 브랜치명으로 변경
 
-permissions:
-  contents: read
-  # id-token: write 제거
-
-env:
-  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-  ACR_NAME: ${{ secrets.ACR_NAME }}
-  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-  BACKEND_APP_NAME: ${{ secrets.BACKEND_WEBAPP_NAME }}
-  FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
-
 jobs:
-  build-and-deploy:
+  build-and-deploy-backend:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Azure Login (Service Principal)
-        uses: azure/login@v2
+      - name: Login to ACR
+        run: |
+          echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
+
+      - name: Build and Push Backend
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }} ./backend_py
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
+
+      - name: Deploy Backend to App Service
+        uses: azure/webapps-deploy@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          images: ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  build-and-deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
 
-      - name: Compute image tags
-        id: meta
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Build Frontend
         run: |
-          SHA="${GITHUB_SHA}"
-          echo "sha=${SHA}" >> $GITHUB_OUTPUT
-          echo "backend_image=${{ secrets.ACR_LOGIN_SERVER }}/ai-tryon-backend:test-${SHA}" >> $GITHUB_OUTPUT
-          echo "frontend_image=${{ secrets.ACR_LOGIN_SERVER }}/ai-tryon-frontend:test-${SHA}" >> $GITHUB_OUTPUT
+          cd frontend
+          npm install --legacy-peer-deps
+          npm install @rollup/rollup-linux-x64-gnu --save-optional
+          VITE_API_URL=${{ secrets.FRONTEND_API_URL }} npm run build
+          ls -la dist/
 
-      - name: Build & Push Backend
-        run: |
-          docker build -f backend_py/Dockerfile \
-            -t "${{ steps.meta.outputs.backend_image }}" \
-            --build-arg ENVIRONMENT=dev \
-            backend_py
-          docker push "${{ steps.meta.outputs.backend_image }}"
-
-      - name: Build & Push Frontend
-        run: |
-          docker build -f frontend/Dockerfile \
-            -t "${{ steps.meta.outputs.frontend_image }}" \
-            --build-arg NGINX_CONF=nginx.dev.conf \
-            --build-arg VITE_API_URL="${{ secrets.FRONTEND_API_URL_TEST }}" \
-            frontend
-          docker push "${{ steps.meta.outputs.frontend_image }}"
-
-      - name: Deploy Backend to Azure Container Apps
-        run: |
-          az containerapp update \
-            --name "${{ secrets.BACKEND_APP_NAME_TEST }}" \
-            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-            --image "${{ steps.meta.outputs.backend_image }}"
-
-      - name: Deploy Frontend to Azure Container Apps
-        run: |
-          az containerapp update \
-            --name "${{ secrets.FRONTEND_APP_NAME_TEST }}" \
-            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-            --image "${{ steps.meta.outputs.frontend_image }}"
+      - name: Deploy to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "/frontend"
+          output_location: "dist"
+          skip_app_build: true
