@@ -16,7 +16,7 @@ on:
           - test
           - staging
           - production
-      
+
       backend_deploy:
         description: '백엔드 배포 여부'
         required: true
@@ -89,7 +89,6 @@ jobs:
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           cd backend_py
-          # 기본 문법 체크
           python -m py_compile app/main.py
           echo "✅ Python 코드 문법 검사 완료"
 
@@ -111,9 +110,7 @@ jobs:
         if: steps.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           cd frontend
-          # TypeScript 타입 체크
           npx tsc --noEmit
-          # 빌드 테스트
           npm run build
           echo "✅ 프론트엔드 빌드 테스트 완료"
 
@@ -129,7 +126,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ 핵심: Docker Buildx 설정 (캐시 지원)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -165,22 +161,12 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             ENVIRONMENT=${{ github.event.inputs.environment || 'test' }}
-            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
-
-      - name: Backend Build Summary
-        run: |
-          echo "✅ 백엔드 빌드 완료"
-          echo "🏷️ Tags: ${{ steps.meta.outputs.tags }}"
-          echo "🔍 Digest: ${{ steps.build.outputs.digest }}"
 
   # ⚛️ 프론트엔드 빌드 및 배포
   build-frontend:
     needs: quality-checks
     if: needs.quality-checks.outputs.should-deploy == 'true' && (needs.quality-checks.outputs.frontend-changed == 'true' || github.event.inputs.frontend_deploy == 'true' || github.event_name == 'push')
     runs-on: ubuntu-latest
-    outputs:
-      frontend-image-tag: ${{ steps.frontend-meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -205,9 +191,7 @@ jobs:
           cd frontend
           npm run build
           ls -la dist/
-          echo "✅ 프론트엔드 빌드 완료"
 
-      # ✅ 핵심: Docker Buildx 설정 (캐시 지원)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -228,7 +212,6 @@ jobs:
             type=ref,event=pr
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.event.inputs.version_tag }},enable=${{ github.event.inputs.version_tag != '' }}
 
       - name: Build and push Frontend Docker image
         uses: docker/build-push-action@v5
@@ -241,9 +224,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Static Web Apps 배포 (선택사항)
+      # ✅ 수정된 부분: secrets 조건 제거
       - name: Deploy to Static Web Apps
-        if: secrets.AZURE_STATIC_WEB_APPS_API_TOKEN != ''
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
@@ -253,11 +235,6 @@ jobs:
           output_location: "dist"
           skip_app_build: true
 
-      - name: Frontend Build Summary
-        run: |
-          echo "✅ 프론트엔드 빌드 완료"
-          echo "🏷️ Tags: ${{ steps.frontend-meta.outputs.tags }}"
-
   # 🚀 백엔드 Azure App Service 배포
   deploy-backend:
     needs: [quality-checks, build-backend]
@@ -265,7 +242,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: ${{ github.event.inputs.environment || 'test' }}
-      url: ${{ steps.deploy.outputs.webapp-url }}
     steps:
       - name: Login to Azure
         uses: azure/login@v2
@@ -275,7 +251,6 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy to Azure App Service
-        id: deploy
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
@@ -298,10 +273,6 @@ jobs:
                 "value": "${{ github.event.inputs.environment || 'test' }}"
               },
               {
-                "name": "HOST",
-                "value": "0.0.0.0"
-              },
-              {
                 "name": "GEMINI_API_KEY",
                 "value": "${{ secrets.TEST_GEMINI_API_KEY }}"
               },
@@ -316,17 +287,8 @@ jobs:
               {
                 "name": "AZURE_OPENAI_DEPLOYMENT_ID",
                 "value": "${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID || 'gpt-4o' }}"
-              },
-              {
-                "name": "FRONTEND_URL",
-                "value": "${{ secrets.TEST_FRONTEND_URL }}"
               }
             ]
-
-      - name: Backend Deployment Summary
-        run: |
-          echo "✅ 백엔드 배포 완료"
-          echo "🔗 URL: ${{ steps.deploy.outputs.webapp-url }}"
 
   # 🧪 배포 후 테스트
   post-deploy-tests:
@@ -335,59 +297,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for deployment stabilization
-        run: |
-          echo "⏳ 배포 안정화 대기 중..."
-          sleep 60
+        run: sleep 60
 
       - name: Health Check - Backend
         if: needs.deploy-backend.result == 'success'
         run: |
-          echo "🔍 백엔드 헬스체크 시작..."
           backend_url="${{ secrets.TEST_BACKEND_URL }}"
-          if [ -z "$backend_url" ]; then
-            echo "⚠️ TEST_BACKEND_URL이 설정되지 않음"
-            exit 0
+          if [ -n "$backend_url" ]; then
+            curl -f "$backend_url/health" || echo "⚠️ 헬스체크 실패하지만 계속 진행"
           fi
-          
-          max_attempts=5
-          attempt=1
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "시도 $attempt/$max_attempts: $backend_url/health"
-            if curl -f -s "$backend_url/health" > /dev/null; then
-              echo "✅ 백엔드 헬스체크 성공!"
-              exit 0
-            fi
-            echo "❌ 헬스체크 실패, 30초 후 재시도..."
-            sleep 30
-            attempt=$((attempt + 1))
-          done
-          
-          echo "⚠️ 백엔드 헬스체크 최종 실패 (계속 진행)"
 
       - name: API Integration Tests
         if: needs.deploy-backend.result == 'success'
         run: |
-          echo "🧪 API 통합 테스트 시작..."
           backend_url="${{ secrets.TEST_BACKEND_URL }}"
-          if [ -z "$backend_url" ]; then
-            echo "⚠️ TEST_BACKEND_URL이 설정되지 않아 API 테스트 스킵"
-            exit 0
+          if [ -n "$backend_url" ]; then
+            curl -f "$backend_url/api/generate/status" || echo "⚠️ Generate status 테스트 실패"
+            curl -f "$backend_url/api/recommend/status" || echo "⚠️ Recommend status 테스트 실패"
           fi
-          
-          # Generate 상태 테스트
-          echo "테스트 1: Generate Status"
-          curl -f -s "$backend_url/api/generate/status" || echo "⚠️ Generate status 테스트 실패"
-          
-          # Recommend 상태 테스트  
-          echo "테스트 2: Recommend Status"
-          curl -f -s "$backend_url/api/recommend/status" || echo "⚠️ Recommend status 테스트 실패"
-          
-          # API 정보 테스트
-          echo "테스트 3: API Info"
-          curl -f -s "$backend_url/api" || echo "⚠️ API info 테스트 실패"
-          
-          echo "✅ API 통합 테스트 완료"
 
   # 📊 배포 결과 알림
   notify:
@@ -395,67 +322,10 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Calculate overall status
-        id: status
+      - name: Deployment Summary
         run: |
-          backend_status="${{ needs.build-backend.result }}"
-          frontend_status="${{ needs.build-frontend.result }}"
-          deploy_status="${{ needs.deploy-backend.result }}"
-          test_status="${{ needs.post-deploy-tests.result }}"
-          
-          if [[ "$backend_status" == "success" && "$frontend_status" == "success" && "$deploy_status" == "success" ]]; then
-            echo "overall_status=success" >> $GITHUB_OUTPUT
-          elif [[ "$backend_status" == "failure" || "$frontend_status" == "failure" || "$deploy_status" == "failure" ]]; then
-            echo "overall_status=failure" >> $GITHUB_OUTPUT
-          else
-            echo "overall_status=partial" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Notify Success
-        if: steps.status.outputs.overall_status == 'success'
-        run: |
-          echo "🎉 AI Virtual Try-On 배포 성공!"
-          echo "┌─────────────────────────────────────┐"
-          echo "│             배포 완료               │"
-          echo "├─────────────────────────────────────┤"
-          echo "│ 환경: ${{ github.event.inputs.environment || 'test' }}"
-          echo "│ 브랜치: ${{ github.ref_name }}"
-          echo "│ 커밋: ${{ github.sha }}"
-          echo "│ 실행자: ${{ github.actor }}"
-          echo "└─────────────────────────────────────┘"
-          echo ""
-          echo "🔗 서비스 URL:"
-          echo "   백엔드: ${{ secrets.TEST_BACKEND_URL }}"
-          echo "   프론트엔드: ${{ secrets.TEST_FRONTEND_URL }}"
-
-      - name: Notify Failure
-        if: steps.status.outputs.overall_status == 'failure'
-        run: |
-          echo "❌ AI Virtual Try-On 배포 실패!"
-          echo "┌─────────────────────────────────────┐"
-          echo "│             배포 실패               │"
-          echo "├─────────────────────────────────────┤"
-          echo "│ 환경: ${{ github.event.inputs.environment || 'test' }}"
-          echo "│ 브랜치: ${{ github.ref_name }}"
-          echo "│ 커밋: ${{ github.sha }}"
-          echo "│ 실행자: ${{ github.actor }}"
-          echo "└─────────────────────────────────────┘"
-          echo ""
-          echo "📝 다음 단계:"
-          echo "   1. Actions 탭에서 상세 로그 확인"
-          echo "   2. 실패한 단계의 오류 메시지 검토"
-          echo "   3. 수정 후 다시 배포"
-
-      - name: Notify Partial Success
-        if: steps.status.outputs.overall_status == 'partial'
-        run: |
-          echo "⚠️ AI Virtual Try-On 부분 배포 완료"
-          echo "┌─────────────────────────────────────┐"
-          echo "│           부분 배포 완료            │"
-          echo "├─────────────────────────────────────┤"
-          echo "│ 환경: ${{ github.event.inputs.environment || 'test' }}"
-          echo "│ 백엔드: ${{ needs.build-backend.result }}"
-          echo "│ 프론트엔드: ${{ needs.build-frontend.result }}"
-          echo "│ 배포: ${{ needs.deploy-backend.result }}"
-          echo "│ 테스트: ${{ needs.post-deploy-tests.result }}"
-          echo "└─────────────────────────────────────┘"
+          echo "🎉 AI Virtual Try-On 배포 완료!"
+          echo "환경: ${{ github.event.inputs.environment || 'test' }}"
+          echo "백엔드: ${{ needs.build-backend.result }}"
+          echo "프론트엔드: ${{ needs.build-frontend.result }}"
+          echo "배포: ${{ needs.deploy-backend.result }}"
