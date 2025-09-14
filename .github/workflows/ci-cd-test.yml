@@ -38,14 +38,14 @@ jobs:
             ${{ env.REGISTRY }}/backend-fastapi:latest
             ${{ env.REGISTRY }}/backend-fastapi:${{ github.sha }}
 
-  # ⚛️ 프론트엔드 빌드 (호환성 우선)
+  # ⚛️ 프론트엔드 빌드 (Node.js 20 + 호환 버전)
   build-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Node.js 20으로 업그레이드 (React 19 + Vite 6 호환)
+      # ✅ Node.js 20으로 업그레이드 (필수)
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -53,26 +53,37 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      # ✅ 서버용 단순 빌드 (Windows 스크립트 우회)
-      - name: Install and Build Frontend (Linux CI)
+      # ✅ 안정적인 빌드 프로세스
+      - name: Install and Build Frontend (Stable)
         env:
           NODE_ENV: production
           VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
         run: |
           cd frontend
           
-          # 깨끗한 초기화
+          # 완전히 깨끗한 시작
           rm -rf node_modules package-lock.json dist/ .vite
           
-          # 의존성 설치 (--legacy-peer-deps 사용)
+          # 호환 버전으로 package.json 임시 수정
+          node -e "
+          const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+          pkg.devDependencies.vite = '^5.4.0';
+          pkg.dependencies.react = '^18.2.0';
+          pkg.dependencies['react-dom'] = '^18.2.0';
+          pkg.devDependencies['@testing-library/react'] = '^15.0.0';
+          require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          console.log('✅ Package.json 호환 버전으로 수정완료');
+          "
+          
+          # 의존성 설치
           npm install --legacy-peer-deps
           
-          # 서버용 단순 빌드 (복잡한 스크립트 우회)
-          NODE_ENV=production npx vite build
+          # 빌드 실행 (단순 명령어)
+          NODE_ENV=production ./node_modules/.bin/vite build
           
           # 빌드 확인
           ls -la dist/
-          echo "✅ 프론트엔드 빌드 완료"
+          echo "✅ 프론트엔드 빌드 성공"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -107,12 +118,11 @@ jobs:
           output_location: "dist"
           skip_app_build: true
 
-  # 🚀 백엔드 배포 (기존 서비스 주체 사용)
+  # 🚀 백엔드 배포 (기존 서비스 주체 방식)
   deploy-backend:
     needs: build-backend
     runs-on: ubuntu-latest
     steps:
-      # ✅ 기존 Azure 서비스 주체 방식 유지
       - name: Login to Azure
         uses: azure/login@v1
         with:

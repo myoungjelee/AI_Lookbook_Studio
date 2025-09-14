@@ -19,9 +19,7 @@
         "build:simple": "vite build",
 
         "preview": "vite preview",
-        "preview:prod": "cross-env NODE_ENV=production vite preview",
         "test": "vitest --run",
-        "test:watch": "vitest",
         "lint": "eslint . --ext ts,tsx --max-warnings 0",
         "lint:fix": "eslint . --ext ts,tsx --fix",
 
