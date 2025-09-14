@@ -2,7 +2,7 @@ name: Deploy AI Virtual Try-On to Test Environment
 
 on:
   push:
-    branches: [main, develop, test]
+    branches: [main, develop, develop_deploy_pipeline]
   workflow_dispatch:
 
 env:
