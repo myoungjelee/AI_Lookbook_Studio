@@ -1,52 +1,34 @@
-# Build stage
-FROM node:20-alpine AS builder
+# Python 3.11+ 기반 이미지 사용
+FROM python:3.11-slim
+
+# 작업 디렉토리 설정
 WORKDIR /app
 
-# 환경변수 설정
-ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
+# 시스템 의존성 업데이트 및 설치
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# package 파일들 복사
-COPY package*.json ./
-COPY .npmrc ./
+# requirements.txt 복사 및 Python 패키지 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 호환 버전으로 임시 수정
-RUN node -e "
-const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
-pkg.devDependencies.vite = '^5.4.0';
-pkg.dependencies.react = '^18.2.0';
-pkg.dependencies['react-dom'] = '^18.2.0';
-require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-"
-
-# 의존성 설치
-RUN npm install --legacy-peer-deps
-
-# 소스 코드 복사
+# 애플리케이션 코드 복사
 COPY . .
 
-# 빌드 실행 (직접 실행)
-RUN ./node_modules/.bin/vite build
+# 포트 3001 노출 (FastAPI 기본)
+EXPOSE 3001
 
-# Production stage
-FROM nginx:alpine AS production
+# 환경 변수 설정
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PORT=3001
+ENV HOST=0.0.0.0
 
-# Nginx 설정
-ARG NGINX_CONF=nginx.prod.conf
-COPY ${NGINX_CONF} /etc/nginx/nginx.conf
+# Health check 추가
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
 
-# 빌드된 파일 복사
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# 보안 설정
-RUN addgroup -g 1001 -S frontend && \
-    adduser -S frontend -u 1001 -G frontend && \
-    chown -R frontend:frontend /usr/share/nginx/html && \
-    chown -R frontend:frontend /var/cache/nginx && \
-    chown -R frontend:frontend /var/run && \
-    chown -R frontend:frontend /etc/nginx/conf.d
-
-USER frontend
-
-EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+# FastAPI 애플리케이션 실행
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3001"]

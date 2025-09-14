@@ -11,7 +11,7 @@ env:
   REGISTRY_PASSWORD: ${{ secrets.ACR_PASSWORD }}
 
 jobs:
-  # 🐳 백엔드 빌드
+  # 🐳 백엔드 빌드 (기존 방식 그대로)
   build-backend:
     runs-on: ubuntu-latest
     steps:
@@ -38,14 +38,14 @@ jobs:
             ${{ env.REGISTRY }}/backend-fastapi:latest
             ${{ env.REGISTRY }}/backend-fastapi:${{ github.sha }}
 
-  # ⚛️ 프론트엔드 빌드 (Node.js 20 + 호환 버전)
+  # ⚛️ 프론트엔드 빌드 (최소 수정)
   build-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Node.js 20으로 업그레이드 (필수)
+      # Node.js 20으로만 변경
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -53,37 +53,28 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      # ✅ 안정적인 빌드 프로세스
-      - name: Install and Build Frontend (Stable)
+      # 기존 방식 + 호환 버전으로만 수정
+      - name: Install and Build Frontend
         env:
           NODE_ENV: production
           VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
         run: |
           cd frontend
           
-          # 완전히 깨끗한 시작
-          rm -rf node_modules package-lock.json dist/ .vite
+          # 깨끗한 시작
+          rm -rf node_modules package-lock.json dist/
           
-          # 호환 버전으로 package.json 임시 수정
-          node -e "
-          const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
-          pkg.devDependencies.vite = '^5.4.0';
-          pkg.dependencies.react = '^18.2.0';
-          pkg.dependencies['react-dom'] = '^18.2.0';
-          pkg.devDependencies['@testing-library/react'] = '^15.0.0';
-          require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          console.log('✅ Package.json 호환 버전으로 수정완료');
-          "
+          # 호환 버전으로 임시 수정 (CI에서만)
+          sed -i 's/"vite": ".*"/"vite": "^5.4.0"/' package.json
+          sed -i 's/"react": ".*"/"react": "^18.2.0"/' package.json
+          sed -i 's/"react-dom": ".*"/"react-dom": "^18.2.0"/' package.json
           
-          # 의존성 설치
+          # 설치 및 빌드
           npm install --legacy-peer-deps
-          
-          # 빌드 실행 (단순 명령어)
-          NODE_ENV=production ./node_modules/.bin/vite build
+          npm run build
           
           # 빌드 확인
           ls -la dist/
-          echo "✅ 프론트엔드 빌드 성공"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -118,7 +109,7 @@ jobs:
           output_location: "dist"
           skip_app_build: true
 
-  # 🚀 백엔드 배포 (기존 서비스 주체 방식)
+  # 🚀 백엔드 배포 (기존 방식)
   deploy-backend:
     needs: build-backend
     runs-on: ubuntu-latest
@@ -152,4 +143,3 @@ jobs:
           echo "백엔드: ${{ needs.build-backend.result }}"
           echo "프론트엔드: ${{ needs.build-frontend.result }}"
           echo "배포: ${{ needs.deploy-backend.result }}"
-          echo "SHA: ${{ github.sha }}"

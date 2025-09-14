@@ -6,37 +6,31 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 
-# package 파일들 복사
+# package.json 복사 및 의존성 설치
 COPY package*.json ./
 COPY .npmrc ./
 
-# 의존성 설치
+# 호환 버전으로 수정 (Docker 내에서만)
+RUN sed -i 's/"vite": ".*"/"vite": "^5.4.0"/' package.json && \
+    sed -i 's/"react": ".*"/"react": "^18.2.0"/' package.json && \
+    sed -i 's/"react-dom": ".*"/"react-dom": "^18.2.0"/' package.json
+
 RUN npm install --legacy-peer-deps
 
-# 소스 코드 복사
+# 소스 복사 및 빌드
 COPY . .
-
-# 단순 빌드 (복잡한 스크립트 우회)
-RUN npm run build:simple
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine AS production
-
-# Nginx 설정
 ARG NGINX_CONF=nginx.prod.conf
 COPY ${NGINX_CONF} /etc/nginx/nginx.conf
-
-# 빌드된 파일 복사
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 보안 설정
 RUN addgroup -g 1001 -S frontend && \
     adduser -S frontend -u 1001 -G frontend && \
-    chown -R frontend:frontend /usr/share/nginx/html && \
-    chown -R frontend:frontend /var/cache/nginx && \
-    chown -R frontend:frontend /var/run && \
-    chown -R frontend:frontend /etc/nginx/conf.d
-
+    chown -R frontend:frontend /usr/share/nginx/html
 USER frontend
 
 EXPOSE 8080
