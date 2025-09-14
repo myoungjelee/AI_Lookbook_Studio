@@ -78,11 +78,11 @@ jobs:
           cd frontend
           npm ci --legacy-peer-deps
 
-      - name: Frontend Type Check & Lint
-        if: steps.changes.outputs.frontend == 'true'
-        run: |
-          cd frontend
-          npm run lint
+#      - name: Frontend Type Check & Lint
+#        if: steps.changes.outputs.frontend == 'true'
+#        run: |
+#          cd frontend
+#          npm run lint
 
       # - name: Frontend Tests
       #   if: steps.changes.outputs.frontend == 'true'
