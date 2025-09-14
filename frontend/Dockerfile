@@ -19,7 +19,8 @@ RUN npm install --legacy-peer-deps
 
 # 소스 복사 및 빌드
 COPY . .
-RUN npm run build
+# cross-env 우회하고 직접 빌드
+RUN NODE_ENV=production npx vite build
 
 # Production stage
 FROM nginx:alpine AS production

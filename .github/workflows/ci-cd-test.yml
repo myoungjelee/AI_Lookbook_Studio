@@ -40,74 +40,77 @@ jobs:
 
   # ⚛️ 프론트엔드 빌드 (최소 수정)
   build-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
 
-      # Node.js 20으로만 변경
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+        # Node.js 20으로 변경
+        - name: Setup Node.js 20
+          uses: actions/setup-node@v4
+          with:
+            node-version: '20'
+            cache: 'npm'
+            cache-dependency-path: frontend/package-lock.json
 
-      # 기존 방식 + 호환 버전으로만 수정
-      - name: Install and Build Frontend
-        env:
-          NODE_ENV: production
-          VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
-        run: |
-          cd frontend
-          
-          # 깨끗한 시작
-          rm -rf node_modules package-lock.json dist/
-          
-          # 호환 버전으로 임시 수정 (CI에서만)
-          sed -i 's/"vite": ".*"/"vite": "^5.4.0"/' package.json
-          sed -i 's/"react": ".*"/"react": "^18.2.0"/' package.json
-          sed -i 's/"react-dom": ".*"/"react-dom": "^18.2.0"/' package.json
-          
-          # 설치 및 빌드
-          npm install --legacy-peer-deps
-          npm run build
-          
-          # 빌드 확인
-          ls -la dist/
+        # cross-env 우회 빌드
+        - name: Install and Build Frontend (Fixed)
+          env:
+            NODE_ENV: production
+            VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
+          run: |
+            cd frontend
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+            # 깨끗한 시작
+            rm -rf node_modules package-lock.json dist/
 
-      - name: Login to ACR
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+            # 호환 버전으로 수정 (CI에서만)
+            sed -i 's/"vite": ".*"/"vite": "^5.4.0"/' package.json
+            sed -i 's/"react": ".*"/"react": "^18.2.0"/' package.json
+            sed -i 's/"react-dom": ".*"/"react-dom": "^18.2.0"/' package.json
 
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          build-args: |
-            NGINX_CONF=nginx.prod.conf
-            VITE_API_URL=${{ secrets.TEST_BACKEND_URL }}
-          tags: |
-            ${{ env.REGISTRY }}/frontend-react:latest
-            ${{ env.REGISTRY }}/frontend-react:${{ github.sha }}
+            # 의존성 설치
+            npm install --legacy-peer-deps
 
-      - name: Deploy to Static Web Apps
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: "upload"
-          app_location: "/frontend"
-          output_location: "dist"
-          skip_app_build: true
+            # cross-env 없이 직접 빌드
+            NODE_ENV=production npx vite build
+
+            # 빌드 확인
+            ls -la dist/
+            echo "✅ 프론트엔드 빌드 완료"
+
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+
+        - name: Login to ACR
+          uses: azure/docker-login@v1
+          with:
+            login-server: ${{ env.REGISTRY }}
+            username: ${{ env.REGISTRY_USERNAME }}
+            password: ${{ env.REGISTRY_PASSWORD }}
+
+        - name: Build and push Frontend
+          uses: docker/build-push-action@v5
+          with:
+            context: ./frontend
+            file: ./frontend/Dockerfile
+            push: true
+            build-args: |
+              NGINX_CONF=nginx.prod.conf
+              VITE_API_URL=${{ secrets.TEST_BACKEND_URL }}
+            tags: |
+              ${{ env.REGISTRY }}/frontend-react:latest
+              ${{ env.REGISTRY }}/frontend-react:${{ github.sha }}
+
+        - name: Deploy to Static Web Apps
+          uses: Azure/static-web-apps-deploy@v1
+          with:
+            azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            action: "upload"
+            app_location: "/frontend"
+            output_location: "dist"
+            skip_app_build: true
 
   # 🚀 백엔드 배포 (기존 방식)
   deploy-backend:
