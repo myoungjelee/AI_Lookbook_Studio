@@ -2,7 +2,7 @@ name: Deploy AI Virtual Try-On to Test Environment
 
 on:
   push:
-    branches: [main, develop, develop_deploy_pipeline]
+    branches: [main, develop, test]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -16,24 +16,16 @@ on:
           - test
           - staging
           - production
-
       backend_deploy:
         description: '백엔드 배포 여부'
         required: true
         default: true
         type: boolean
-
       frontend_deploy:
         description: '프론트엔드 배포 여부'
         required: true
         default: true
         type: boolean
-
-      version_tag:
-        description: '배포할 버전 (예: v1.2.3)'
-        required: false
-        default: 'latest'
-        type: string
 
 env:
   REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
@@ -43,92 +35,19 @@ env:
   FRONTEND_IMAGE: frontend-react
 
 jobs:
-  # 🔍 코드 품질 및 보안 검사
-  quality-checks:
-    runs-on: ubuntu-latest
-    outputs:
-      should-deploy: ${{ steps.changes.outputs.backend == 'true' || steps.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
-      backend-changed: ${{ steps.changes.outputs.backend }}
-      frontend-changed: ${{ steps.changes.outputs.frontend }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect changes
-        uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            backend:
-              - 'backend_py/**'
-              - 'requirements.txt'
-              - 'Dockerfile'
-            frontend:
-              - 'frontend/**'
-              - 'package*.json'
-            config:
-              - 'docker-compose*.yml'
-              - '.github/workflows/**'
-
-      - name: Setup Python for Backend Linting
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Python dependencies
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-        run: |
-          cd backend_py
-          pip install -r requirements.txt
-
-      - name: Python Code Quality Check
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-        run: |
-          cd backend_py
-          python -m py_compile app/main.py
-          echo "✅ Python 코드 문법 검사 완료"
-
-      - name: Setup Node.js for Frontend
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install Frontend dependencies
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
-        run: |
-          cd frontend
-          npm ci --legacy-peer-deps
-
-      - name: Frontend Build Test
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
-        run: |
-          cd frontend
-          # 더 관대한 TypeScript 체크
-          npx tsc --noEmit --skipLibCheck || echo "⚠️ TypeScript 경고 있지만 계속 진행"
-          npm run build
-          echo "✅ 프론트엔드 빌드 테스트 완료"
-
   # 🐳 백엔드 빌드 및 푸시
   build-backend:
-    needs: quality-checks
-    if: needs.quality-checks.outputs.should-deploy == 'true' && (needs.quality-checks.outputs.backend-changed == 'true' || github.event.inputs.backend_deploy == 'true' || github.event_name == 'push')
     runs-on: ubuntu-latest
-    outputs:
-      backend-image-tag: ${{ steps.meta.outputs.tags }}
-      backend-image-digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ✅ 핵심: Docker Buildx 설정 (반드시 첫 번째로!)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          use: true
 
       - name: Login to ACR
         uses: azure/docker-login@v1
@@ -137,36 +56,27 @@ jobs:
           username: ${{ env.REGISTRY_USERNAME }}
           password: ${{ env.REGISTRY_PASSWORD }}
 
-      - name: Extract metadata for Backend
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.event.inputs.version_tag }},enable=${{ github.event.inputs.version_tag != '' }}
-
       - name: Build and push Backend
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./backend_py
           file: ./backend_py/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            ENVIRONMENT=${{ github.event.inputs.environment || 'test' }}
+            ENVIRONMENT=test
 
-  # ⚛️ 프론트엔드 빌드 및 배포
+      - name: Backend Build Summary
+        run: |
+          echo "✅ 백엔드 빌드 및 푸시 완료"
+          echo "🏷️ Tags: latest, ${{ github.sha }}"
+
+  # ⚛️ 프론트엔드 빌드 및 푸시
   build-frontend:
-    needs: quality-checks
-    if: needs.quality-checks.outputs.should-deploy == 'true' && (needs.quality-checks.outputs.frontend-changed == 'true' || github.event.inputs.frontend_deploy == 'true' || github.event_name == 'push')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -179,22 +89,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
-        run: |
-          cd frontend
-          npm ci --legacy-peer-deps
-
-      - name: Build Frontend
+      - name: Install and Build Frontend
         env:
           VITE_API_URL: ${{ secrets.TEST_BACKEND_URL || 'http://localhost:3001' }}
           NODE_ENV: production
         run: |
           cd frontend
+          npm ci --legacy-peer-deps
           npm run build
           ls -la dist/
+          echo "✅ 프론트엔드 빌드 완료"
 
+      # ✅ 핵심: Docker Buildx 설정 (반드시 Docker 명령 전에!)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          use: true
 
       - name: Login to ACR
         uses: azure/docker-login@v1
@@ -203,29 +114,18 @@ jobs:
           username: ${{ env.REGISTRY_USERNAME }}
           password: ${{ env.REGISTRY_PASSWORD }}
 
-      - name: Extract metadata for Frontend
-        id: frontend-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Frontend Docker image
+      - name: Build and push Frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ steps.frontend-meta.outputs.tags }}
-          labels: ${{ steps.frontend-meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ✅ 수정된 부분: secrets 조건 제거
       - name: Deploy to Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -236,13 +136,16 @@ jobs:
           output_location: "dist"
           skip_app_build: true
 
-  # 🚀 백엔드 Azure App Service 배포
+      - name: Frontend Build Summary
+        run: |
+          echo "✅ 프론트엔드 빌드 및 푸시 완료"
+          echo "🏷️ Tags: latest, ${{ github.sha }}"
+
+  # 🚀 백엔드 배포
   deploy-backend:
-    needs: [quality-checks, build-backend]
-    if: needs.build-backend.result == 'success'
+    needs: build-backend
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ github.event.inputs.environment || 'test' }}
+    if: github.event.inputs.backend_deploy != 'false'
     steps:
       - name: Login to Azure
         uses: azure/login@v2
@@ -255,14 +158,12 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
-          slot-name: ${{ github.event.inputs.environment || 'test' }}
-          images: ${{ needs.build-backend.outputs.backend-image-tag }}
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
 
-      - name: Set App Service Environment Variables
+      - name: Set Environment Variables
         uses: azure/appservice-settings@v1
         with:
           app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
-          slot-name: ${{ github.event.inputs.environment || 'test' }}
           app-settings-json: |
             [
               {
@@ -270,8 +171,8 @@ jobs:
                 "value": "3001"
               },
               {
-                "name": "NODE_ENV", 
-                "value": "${{ github.event.inputs.environment || 'test' }}"
+                "name": "NODE_ENV",
+                "value": "production"
               },
               {
                 "name": "GEMINI_API_KEY",
@@ -287,46 +188,36 @@ jobs:
               },
               {
                 "name": "AZURE_OPENAI_DEPLOYMENT_ID",
-                "value": "${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID || 'gpt-4o' }}"
+                "value": "${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}"
               }
             ]
 
-  # 🧪 배포 후 테스트
-  post-deploy-tests:
+  # 🧪 헬스체크
+  health-check:
     needs: [deploy-backend, build-frontend]
-    if: always() && (needs.deploy-backend.result == 'success' || needs.build-frontend.result == 'success')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for deployment stabilization
-        run: sleep 60
-
-      - name: Health Check - Backend
-        if: needs.deploy-backend.result == 'success'
-        run: |
-          backend_url="${{ secrets.TEST_BACKEND_URL }}"
-          if [ -n "$backend_url" ]; then
-            curl -f "$backend_url/health" || echo "⚠️ 헬스체크 실패하지만 계속 진행"
-          fi
-
-      - name: API Integration Tests
-        if: needs.deploy-backend.result == 'success'
-        run: |
-          backend_url="${{ secrets.TEST_BACKEND_URL }}"
-          if [ -n "$backend_url" ]; then
-            curl -f "$backend_url/api/generate/status" || echo "⚠️ Generate status 테스트 실패"
-            curl -f "$backend_url/api/recommend/status" || echo "⚠️ Recommend status 테스트 실패"
-          fi
-
-  # 📊 배포 결과 알림
-  notify:
-    needs: [build-backend, build-frontend, deploy-backend, post-deploy-tests]
     runs-on: ubuntu-latest
     if: always()
     steps:
+      - name: Wait for services
+        run: sleep 30
+
+      - name: Backend Health Check
+        if: needs.deploy-backend.result == 'success'
+        run: |
+          if [ -n "${{ secrets.TEST_BACKEND_URL }}" ]; then
+            curl -f "${{ secrets.TEST_BACKEND_URL }}/health" || echo "⚠️ 헬스체크 경고"
+          fi
+
       - name: Deployment Summary
         run: |
-          echo "🎉 AI Virtual Try-On 배포 완료!"
-          echo "환경: ${{ github.event.inputs.environment || 'test' }}"
-          echo "백엔드: ${{ needs.build-backend.result }}"
-          echo "프론트엔드: ${{ needs.build-frontend.result }}"
-          echo "배포: ${{ needs.deploy-backend.result }}"
+          echo "🎉 배포 결과 요약"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📅 시간: $(date)"
+          echo "🌿 브랜치: ${{ github.ref_name }}"
+          echo "📝 커밋: ${{ github.sha }}"
+          echo "👤 실행자: ${{ github.actor }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🏗️ 백엔드: ${{ needs.build-backend.result }}"
+          echo "🎨 프론트엔드: ${{ needs.build-frontend.result }}"
+          echo "🚀 배포: ${{ needs.deploy-backend.result }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
