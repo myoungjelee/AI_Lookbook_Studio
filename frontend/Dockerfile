@@ -6,21 +6,40 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 
-# package.json 복사 및 의존성 설치
+# 안정 버전 package.json 생성
 COPY package*.json ./
 COPY .npmrc ./
 
-# 호환 버전으로 수정 (Docker 내에서만)
-RUN sed -i 's/"vite": ".*"/"vite": "^5.4.0"/' package.json && \
-    sed -i 's/"react": ".*"/"react": "^18.2.0"/' package.json && \
-    sed -i 's/"react-dom": ".*"/"react-dom": "^18.2.0"/' package.json
+# 안정 버전으로 강제 설정
+RUN cat > package.json << 'EOF'
+{
+  "name": "ai-virtual-try-on-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "html2canvas": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.4.8"
+  }
+}
+EOF
 
 RUN npm install --legacy-peer-deps
 
 # 소스 복사 및 빌드
 COPY . .
-# cross-env 우회하고 직접 빌드
-RUN NODE_ENV=production npx vite build
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine AS production
