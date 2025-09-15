@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from ..models import (
     RecommendationRequest,
     RecommendationFromFittingRequest,
