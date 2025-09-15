@@ -148,4 +148,5 @@ __pycache__/
 frontend/.env.development
 .venv
 .pyc
+test.http
 

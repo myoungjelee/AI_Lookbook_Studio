@@ -43,29 +43,43 @@ def catalog_stats():
     return get_catalog_service().stats()
 
 @router.get("/random")
-def random_products(limit: int = 18, category: str | None = None):
+def random_products(limit: int = 18, category: str | None = None, gender: str | None = None, response: Response = None):
     # Prefer DB-backed products when available, otherwise use catalog JSON
     if db_pos_recommender.available():
         products = list(db_pos_recommender.products)
+        source = "db"
     else:
         svc = get_catalog_service()
         products = svc.get_all()
+        source = "catalog"
 
-    valid_cats = {"top", "pants", "shoes", "accessories"}
+    def norm_slot(s: str) -> str:
+        c = (s or "").strip().lower()
+        if not c:
+            return "unknown"
+        top_kw = ["top","outer","shirt","t-shirt","tee","hood","sweat","sweater","cardigan","jacket","coat","blouson","parka","knit","상의","아우터","셔츠","티","맨투","가디건","자켓","코트","후드","블루종","점퍼","패딩"]
+        pants_kw = ["pant","bottom","denim","jean","slack","skirt","하의","바지","데님","슬랙스","청바지","스커트"]
+        shoes_kw = ["shoe","sneaker","boot","loafer","heel","sand","신발","스니커","운동화","부츠","로퍼","샌들"]
+        if any(k in c for k in top_kw): return "top"
+        if any(k in c for k in pants_kw): return "pants"
+        if any(k in c for k in shoes_kw): return "shoes"
+        return c
+
     if category:
-        catq = (category or "").strip().lower()
-        def slot_of(c: str) -> str:
-            cl = (c or "").strip().lower()
-            if any(k in cl for k in ["top", "상의", "outer", "자켓", "코트", "아우터"]):
-                return "top"
-            if any(k in cl for k in ["pant", "하의", "바지", "denim", "슬랙스"]):
-                return "pants"
-            if any(k in cl for k in ["shoe", "신발", "스니커", "부츠", "로퍼"]):
-                return "shoes"
-            return cl
-        filtered = [p for p in products if slot_of(str(p.get("category") or "")) == slot_of(catq)]
-        if filtered:
-            products = filtered
+        req_slot = norm_slot(category)
+        products = [p for p in products if norm_slot(str(p.get("category") or "")) == req_slot]
+
+    if gender:
+        gq = (gender or "").strip().lower()
+        def norm_gender(s: str) -> str:
+            c = (s or "").strip().lower()
+            if not c: return "unknown"
+            if any(k in c for k in ["male","man","men","m","남","남성","남자"]): return "male"
+            if any(k in c for k in ["female","woman","women","w","여","여성","여자"]): return "female"
+            if any(k in c for k in ["unisex","uni","男女","공용","유니섹스"]): return "unisex"
+            if any(k in c for k in ["kid","kids","child","children","아동","키즈"]): return "kids"
+            return c
+        products = [p for p in products if norm_gender(str(p.get("gender") or "")) == norm_gender(gq)]
 
     import random
     random.shuffle(products)
@@ -81,6 +95,13 @@ def random_products(limit: int = 18, category: str | None = None):
             "category": p.get("category") or "top",
         }
         result.append(item)
+    try:
+        if response is not None:
+            response.headers["X-Rec-Source"] = source
+            if gender:
+                response.headers["X-Rec-Gender"] = (gender or "").lower()
+    except Exception:
+        pass
     return result
 
 

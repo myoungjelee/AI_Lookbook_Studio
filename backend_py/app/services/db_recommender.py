@@ -33,6 +33,52 @@ class DbConfig:
         )
 
 
+def _normalize_slot(raw: Optional[str]) -> str:
+    c = (str(raw or "").strip().lower())
+    if not c:
+        return "unknown"
+    # tops / outer
+    top_kw = [
+        "top", "outer", "shirt", "t-shirt", "tee", "hood", "sweat", "sweater", "cardigan",
+        "jacket", "coat", "blouson", "parka", "knit",
+        "상의", "아우터", "셔츠", "티", "맨투", "가디건", "자켓", "코트", "후드", "블루종", "점퍼", "패딩"
+    ]
+    pants_kw = [
+        "pant", "bottom", "denim", "jean", "slack", "skirt",
+        "하의", "바지", "데님", "슬랙스", "청바지", "스커트"
+    ]
+    shoes_kw = [
+        "shoe", "sneaker", "boot", "loafer", "heel", "sand",
+        "신발", "스니커", "운동화", "부츠", "로퍼", "샌들"
+    ]
+    if any(k in c for k in top_kw):
+        return "top"
+    if any(k in c for k in pants_kw):
+        return "pants"
+    if any(k in c for k in shoes_kw):
+        return "shoes"
+    return c  # leave as-is if unknown, will be normalized at filter time
+
+
+def _normalize_gender(raw: Optional[str]) -> str:
+    g = (str(raw or "").strip().lower())
+    if not g:
+        return "unknown"
+    male_kw = ["male", "man", "men", "m", "남", "남성", "남자"]
+    female_kw = ["female", "woman", "women", "w", "여", "여성", "여자"]
+    unisex_kw = ["unisex", "uni", "男女", "공용", "공용/유니섹스", "유니섹스"]
+    kids_kw = ["kid", "kids", "child", "children", "아동", "키즈"]
+    if any(k in g for k in male_kw):
+        return "male"
+    if any(k in g for k in female_kw):
+        return "female"
+    if any(k in g for k in unisex_kw):
+        return "unisex"
+    if any(k in g for k in kids_kw):
+        return "kids"
+    return g
+
+
 class DbPosRecommender:
     """
     DB-backed recommender. Loads products and embeddings into memory (NumPy) and
@@ -95,21 +141,25 @@ class DbPosRecommender:
         for r in rows:
             title = r.get("Product_N") or r.get("Product_Desc") or ""
             brand = r.get("Product_B")
-            gender = r.get("Product_G")
+            gender_raw = r.get("Product_G")
             tags: List[str] = []
             if brand:
                 tags.append(str(brand))
-            if gender:
-                tags.append(str(gender))
+            if gender_raw:
+                tags.append(str(gender_raw))
             image_url = r.get("Product_img_U") or r.get("Image_P") or None
             product_url = r.get("Product_U")
+            category_raw = r.get("Category")
+            norm_cat = _normalize_slot(category_raw)
+            gender_norm = _normalize_gender(gender_raw)
             self.products.append(
                 {
                     "id": str(r.get("pos")),
                     "title": str(title),
                     "price": int(r.get("Product_P") or 0),
                     "tags": tags,
-                    "category": str(r.get("Category") or "top"),
+                    "category": norm_cat,
+                    "gender": gender_norm,
                     "imageUrl": image_url,
                     "productUrl": product_url,
                 }

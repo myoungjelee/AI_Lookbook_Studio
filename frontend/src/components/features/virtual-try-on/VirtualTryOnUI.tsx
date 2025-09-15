@@ -237,6 +237,12 @@ export const VirtualTryOnUI: React.FC = () => {
         }
     }, [addToast, setTopImage, setPantsImage, setShoesImage, setTopLabel, setPantsLabel, setShoesLabel]);
 
+    // Helper wrapper: force slot without relying on category text
+    const addToSlotForced = useCallback((item: RecommendationItem, slot: 'top'|'pants'|'shoes') => {
+        // Reuse existing logic by overriding category for mapping
+        return addCatalogItemToSlot({ ...(item as any), category: slot } as any);
+    }, [addCatalogItemToSlot]);
+
     return (
         <div className="flex flex-col items-center p-4 sm:p-6 lg:p-8 bg-gray-50">
             <div className="w-full">
@@ -489,7 +495,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         <h3 className="text-lg font-semibold text-gray-800 mb-2">상의</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.top.map(item => (
-                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addCatalogItemToSlot(item)} padding="sm">
+                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'top')} padding="sm">
                                                     <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedTopId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
@@ -502,7 +508,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         <h3 className="text-lg font-semibold text-gray-800 mb-2">하의</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.pants.map(item => (
-                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addCatalogItemToSlot(item)} padding="sm">
+                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'pants')} padding="sm">
                                                     <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedPantsId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
@@ -515,7 +521,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         <h3 className="text-lg font-semibold text-gray-800 mb-2">신발</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.shoes.map(item => (
-                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addCatalogItemToSlot(item)} padding="sm">
+                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'shoes')} padding="sm">
                                                     <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedShoesId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
