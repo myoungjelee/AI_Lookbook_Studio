@@ -6,11 +6,7 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 
-# 안정 버전 package.json 생성
-COPY package*.json ./
-COPY .npmrc ./
-
-# 안정 버전으로 강제 설정
+# 작동하는 package.json 생성 (vite 포함!)
 RUN cat > package.json << 'EOF'
 {
   "name": "ai-virtual-try-on-frontend",
@@ -35,11 +31,11 @@ RUN cat > package.json << 'EOF'
 }
 EOF
 
-RUN npm install --legacy-peer-deps
+RUN npm install
 
 # 소스 복사 및 빌드
 COPY . .
-RUN npm run build
+RUN npx vite build
 
 # Production stage
 FROM nginx:alpine AS production

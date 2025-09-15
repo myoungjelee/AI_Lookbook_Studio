@@ -38,42 +38,32 @@ jobs:
             ${{ env.REGISTRY }}/backend-fastapi:latest
             ${{ env.REGISTRY }}/backend-fastapi:${{ github.sha }}
 
-  # ⚛️ 프론트엔드 빌드 (안정화)
+  # ⚛️ 프론트엔드 빌드 (완전 수정)
   build-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Node.js 20 필수!
+      # Node 20 필수
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
-      # 안정 버전으로 빌드
-      - name: Install and Build Frontend (Stable Versions)
-        env:
-          NODE_ENV: production
-          VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
+      # 작동하는 package.json 생성 (vite 포함)
+      - name: Create Working Package.json
         run: |
           cd frontend
-          
-          # 완전히 깨끗한 시작
           rm -rf node_modules package-lock.json dist/ .vite
           
-          # 안정 버전으로 강제 변경
           cat > package.json << 'EOF'
           {
             "name": "ai-virtual-try-on-frontend",
             "private": true,
             "version": "1.0.0",
-            "description": "Frontend React application for AI Virtual Try-On",
             "type": "module",
             "scripts": {
-              "dev": "vite",
               "build": "vite build"
             },
             "dependencies": {
@@ -82,33 +72,24 @@ jobs:
               "html2canvas": "^1.4.1"
             },
             "devDependencies": {
-              "@testing-library/jest-dom": "^6.4.5",
-              "@testing-library/react": "^15.0.0",
               "@types/react": "^18.2.43",
               "@types/react-dom": "^18.2.17",
-              "@typescript-eslint/eslint-plugin": "^6.14.0",
-              "@typescript-eslint/parser": "^6.14.0",
               "@vitejs/plugin-react": "^4.2.1",
-              "autoprefixer": "^10.4.16",
-              "eslint": "^8.55.0",
-              "eslint-plugin-react-hooks": "^4.6.0",
-              "eslint-plugin-react-refresh": "^0.4.5",
-              "jsdom": "^23.0.1",
-              "postcss": "^8.4.32",
-              "tailwindcss": "^3.3.6",
-              "terser": "^5.43.1",
               "typescript": "^5.2.2",
-              "vite": "^5.4.8",
-              "vitest": "^1.0.4"
+              "vite": "^5.4.8"
             }
           }
           EOF
-          
-          # 안정적인 설치 및 빌드
-          npm install --legacy-peer-deps
-          npm run build
-          
-          # 빌드 확인
+
+      # 확실한 설치 및 빌드
+      - name: Install and Build Frontend
+        env:
+          NODE_ENV: production
+          VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
+        run: |
+          cd frontend
+          npm install
+          npx vite build
           ls -la dist/
           echo "✅ 프론트엔드 빌드 성공"
 
@@ -150,8 +131,9 @@ jobs:
     needs: build-backend
     runs-on: ubuntu-latest
     steps:
-      - name: Login to Azure (Service Principal)
-        uses: azure/login@v1
+      # 개별 시크릿으로 Azure 로그인
+      - name: Login to Azure (Individual Secrets)
+        uses: azure/login@v2
         with:
           creds: |
             {
