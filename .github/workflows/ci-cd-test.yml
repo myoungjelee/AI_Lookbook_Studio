@@ -53,10 +53,18 @@ jobs:
       - name: Install and Build Frontend
         env:
           VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
+          NPM_CONFIG_FUND: 'false'
+          NPM_CONFIG_AUDIT: 'false'
         run: |
+          set -e
           cd frontend
           rm -rf node_modules dist .vite
-          if [ -f package-lock.json ]; then npm ci; else npm install --include=dev; fi
+          # npm ci 시도 → 실패 시 lockfile 제거 후 dev 포함 설치로 폴백
+          if [ -f package-lock.json ]; then
+            npm ci || (echo "npm ci failed; regenerating lockfile" && rm -f package-lock.json && npm install --include=dev)
+          else
+            npm install --include=dev
+          fi
           npm run build
           ls -la dist/
 
