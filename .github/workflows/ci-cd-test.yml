@@ -43,12 +43,11 @@ jobs:
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
 
-    - name: 🐍 Setup Python
+    - name: 🐍 Setup Python (No Pip Cache)
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-        cache-dependency-path: backend_py/requirements.txt
+        # pip 캐시 제거로 안정성 확보
 
     - name: 🔧 Frontend Quality Check
       run: |
@@ -77,7 +76,8 @@ jobs:
     - name: 🔧 Backend Quality Check
       run: |
         cd backend_py
-        echo "🔍 Installing Python dependencies..."
+        echo "🔍 Installing Python dependencies (no cache)..."
+        python -m pip install --upgrade pip
         pip install --no-cache-dir -r requirements.txt
         
         echo "🔍 Python syntax check..."
