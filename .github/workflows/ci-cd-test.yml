@@ -19,6 +19,10 @@ on:
         description: 'Skip Tests (Emergency Deploy)'
         type: boolean
         default: false
+      debug_mode:
+        description: 'Enable Debug Logging'
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
@@ -47,7 +51,6 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        # pip 캐시 제거로 안정성 확보
 
     - name: 🔧 Frontend Quality Check
       run: |
@@ -100,7 +103,21 @@ jobs:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
-    - name: 🔐 Login to Azure
+    - name: 🐞 Debug Azure Credentials (Optional)
+      if: github.event.inputs.debug_mode == 'true'
+      run: |
+        echo "🔍 Debugging Azure credentials (safe info only)..."
+        echo "Client ID length: ${#AZURE_CLIENT_ID}"
+        echo "Tenant ID length: ${#AZURE_TENANT_ID}"  
+        echo "Subscription ID length: ${#AZURE_SUBSCRIPTION_ID}"
+        echo "Client Secret length: ${#AZURE_CLIENT_SECRET}"
+      env:
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: 🔐 Login to Azure (Fixed)
       uses: azure/login@v1
       with:
         creds: |
@@ -110,6 +127,12 @@ jobs:
             "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
+
+    - name: ✅ Verify Azure Login
+      run: |
+        echo "🔍 Verifying Azure authentication..."
+        az account show --query "{SubscriptionId:id, TenantId:tenantId, User:user.name}"
+        echo "✅ Azure login successful"
 
     - name: 🔐 Login to Azure Container Registry
       uses: azure/docker-login@v1
@@ -302,7 +325,7 @@ jobs:
         echo "Check the logs above for details"
         exit 1
 
-  # ========== 자동 롤백 (헬스체크 실패 시) ==========
+  # ========== 자동 롤백 (수정됨) ==========
   auto-rollback:
     needs: health-check
     if: failure()
@@ -311,7 +334,7 @@ jobs:
     environment: test
 
     steps:
-    - name: 🔐 Login to Azure (for rollback)
+    - name: 🔐 Login to Azure (for rollback - Fixed)
       uses: azure/login@v1
       with:
         creds: |
@@ -321,6 +344,12 @@ jobs:
             "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
+
+    - name: ✅ Verify Azure Login for Rollback
+      run: |
+        echo "🔍 Verifying Azure authentication for rollback..."
+        az account show --query "{SubscriptionId:id, TenantId:tenantId, User:user.name}"
+        echo "✅ Azure login successful for rollback"
 
     - name: 🔄 Rollback Backend (if needed)
       if: needs.deploy-backend.result == 'success'
