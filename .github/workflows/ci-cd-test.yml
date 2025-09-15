@@ -57,7 +57,7 @@ env:
   AZURE_RESOURCE_GROUP_TEST: ${{ secrets.AZURE_RESOURCE_GROUP }}
 
 jobs:
-  # ========== 트리거 조건 체크 ==========
+  # ========== 트리거 조건 체크 (수정됨) ==========
   trigger-validation:
     runs-on: ubuntu-latest
     name: 🔍 Validate Trigger Conditions
@@ -72,7 +72,7 @@ jobs:
       with:
         fetch-depth: 2  # 변경사항 비교를 위해 이전 커밋도 가져옴
 
-    - name: 🔍 Analyze Trigger Conditions
+    - name: 🔍 Analyze Trigger Conditions (Enhanced)
       id: conditions
       run: |
         echo "🔍 Analyzing trigger conditions..."
@@ -82,39 +82,76 @@ jobs:
           REASON="Manual execution by ${{ github.actor }}"
           BACKEND_DEPLOY="${{ github.event.inputs.deploy_backend }}"
           FRONTEND_DEPLOY="${{ github.event.inputs.deploy_frontend }}"
+          echo "🔧 Manual trigger detected"
         elif [ "${{ github.event_name }}" = "schedule" ]; then
           REASON="Scheduled nightly build"
           BACKEND_DEPLOY="true"
           FRONTEND_DEPLOY="true"
+          echo "⏰ Scheduled trigger detected"
         elif [ "${{ github.event_name }}" = "pull_request" ]; then
           REASON="Pull request validation"
           BACKEND_DEPLOY="false"  # PR에서는 배포하지 않음
           FRONTEND_DEPLOY="false"
+          echo "🔍 PR trigger detected - validation only"
         else
           REASON="Code push to develop_deploy_pipeline"
+          echo "📝 Push trigger detected - analyzing changed files..."
           
           # 변경된 파일 분석
           git diff --name-only HEAD~ HEAD > changed_files.txt || echo "No previous commit to compare"
           
+          echo "📋 Changed files:"
+          cat changed_files.txt
+          echo "================================"
+          
+          # 기본값 설정
+          BACKEND_DEPLOY="false"
+          FRONTEND_DEPLOY="false"
+          
+          # 백엔드 관련 변경 감지
           if grep -E "^backend_py/" changed_files.txt >/dev/null 2>&1; then
-            echo "🐍 Backend changes detected"
+            echo "🐍 Backend code changes detected"
             BACKEND_DEPLOY="true"
-          else
-            BACKEND_DEPLOY="false"
           fi
           
+          # 프론트엔드 관련 변경 감지
           if grep -E "^frontend/" changed_files.txt >/dev/null 2>&1; then
-            echo "🎨 Frontend changes detected"
+            echo "🎨 Frontend code changes detected"
             FRONTEND_DEPLOY="true"
-          else
-            FRONTEND_DEPLOY="false"
           fi
           
-          # 공통 파일 변경시 모든 서비스 배포
-          if grep -E "(docker-compose|Dockerfile|package\.json|requirements\.txt)" changed_files.txt >/dev/null 2>&1; then
-            echo "📦 Infrastructure changes detected - deploying all services"
+          # 워크플로우 파일 변경 감지 (중요!)
+          if grep -E "^\.github/workflows/" changed_files.txt >/dev/null 2>&1; then
+            echo "🔧 GitHub Actions workflow changes detected - deploying all services"
             BACKEND_DEPLOY="true"
             FRONTEND_DEPLOY="true"
+          fi
+          
+          # 인프라/설정 파일 변경 감지 (확장됨)
+          if grep -E "(docker-compose|Dockerfile|package\.json|requirements\.txt|\.env|env-.*\.sh|validate-.*\.sh)" changed_files.txt >/dev/null 2>&1; then
+            echo "📦 Infrastructure/Config changes detected - deploying all services"
+            BACKEND_DEPLOY="true"
+            FRONTEND_DEPLOY="true"
+          fi
+          
+          # 루트 레벨 설정 파일 변경 감지
+          if grep -E "^(tsconfig|vite\.config|tailwind\.config|postcss\.config|eslint|\.gitignore)" changed_files.txt >/dev/null 2>&1; then
+            echo "⚙️ Root config changes detected - deploying frontend"
+            FRONTEND_DEPLOY="true"
+          fi
+          
+          # docs, README 등은 배포하지 않음 (기존 로직 유지)
+          if ! grep -E "\.(md|txt|yml|yaml)$" changed_files.txt | grep -v -E "(package\.json|requirements\.txt|docker-compose|workflows)" >/dev/null 2>&1; then
+            echo "📝 Only documentation changes detected - no deployment needed"
+          fi
+          
+          # 강제 배포 조건 (첫 번째 커밋이나 브랜치 생성 시)
+          if [ ! -s changed_files.txt ]; then
+            echo "🚀 No previous commit found - this might be first commit or new branch"
+            echo "🚀 Forcing full deployment for safety"
+            BACKEND_DEPLOY="true"
+            FRONTEND_DEPLOY="true"
+            REASON="First commit or new branch - full deployment"
           fi
         fi
         
@@ -122,10 +159,14 @@ jobs:
         echo "should_deploy_frontend=${FRONTEND_DEPLOY}" >> $GITHUB_OUTPUT
         echo "deployment_reason=${REASON}" >> $GITHUB_OUTPUT
         
-        echo "📋 Deployment Decision:"
+        echo "================================"
+        echo "📋 Final Deployment Decision:"
         echo "- Reason: ${REASON}"
         echo "- Deploy Backend: ${BACKEND_DEPLOY}"
         echo "- Deploy Frontend: ${FRONTEND_DEPLOY}"
+        echo "- Event: ${{ github.event_name }}"
+        echo "- Actor: ${{ github.actor }}"
+        echo "================================"
 
   # ========== 품질 게이트 ==========
   quality-gate:
