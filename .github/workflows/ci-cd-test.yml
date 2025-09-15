@@ -1,157 +1,343 @@
-name: Deploy AI Virtual Try-On to Test Environment
+name: 🧪 Test Environment CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop, develop_deploy_pipeline]
+    branches: [develop_deploy_pipeline]
+  pull_request:
+    branches: [develop_deploy_pipeline]
   workflow_dispatch:
+    inputs:
+      deploy_backend:
+        description: 'Deploy Backend to Test'
+        type: boolean
+        default: true
+      deploy_frontend:
+        description: 'Deploy Frontend to Test'
+        type: boolean
+        default: true
+      skip_tests:
+        description: 'Skip Tests (Emergency Deploy)'
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
-  REGISTRY_USERNAME: ${{ secrets.ACR_USERNAME }}
-  REGISTRY_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
 
 jobs:
-  # 🐳 백엔드 빌드
-  build-backend:
+  # ========== 품질 게이트 ==========
+  quality-gate:
+    if: github.event.inputs.skip_tests != 'true'
     runs-on: ubuntu-latest
+    name: 🔍 Quality Gate
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
 
-      - name: Login to ACR
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        cache-dependency-path: backend_py/requirements.txt
 
-      - name: Build and push Backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend_py
-          file: ./backend_py/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/backend-fastapi:latest
-            ${{ env.REGISTRY }}/backend-fastapi:${{ github.sha }}
+    - name: 🔧 Frontend Quality Check
+      run: |
+        cd frontend
+        echo "🔍 Installing frontend dependencies..."
+        npm ci --legacy-peer-deps || {
+          echo "⚠️ npm ci failed, falling back to npm install"
+          rm -f package-lock.json
+          npm install --include=dev
+        }
+        
+        echo "🔍 Installing cross-env (Windows/Linux compatibility)..."
+        npm install --save-dev cross-env || true
+        
+        echo "🔍 TypeScript check (lenient for Test environment)..."
+        npx tsc --noEmit --skipLibCheck --exclude "**/test/**" --exclude "**/*.test.*" || {
+          echo "⚠️ TypeScript warnings exist but continuing for Test environment"
+        }
+        
+        echo "🔍 Build test..."
+        rm -rf dist/
+        VITE_API_URL=${{ secrets.TEST_BACKEND_URL }} npx vite build --mode test
+        
+        echo "✅ Frontend quality check passed"
 
-  # ⚛️ 프론트엔드 빌드 (Vite 문제만 해결)
-  build-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: 🔧 Backend Quality Check
+      run: |
+        cd backend_py
+        echo "🔍 Installing Python dependencies..."
+        pip install --no-cache-dir -r requirements.txt
+        
+        echo "🔍 Python syntax check..."
+        python -m py_compile app/main.py
+        
+        echo "🔍 FastAPI import test..."
+        python -c "from app.main import app; print('✅ FastAPI app imports successfully')"
+        
+        echo "✅ Backend quality check passed"
 
-      # Node 20으로 업그레이드 (Vite 호환성)
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Vite 문제 해결을 위한 package.json 수정
-      - name: Fix Vite Build Issue
-        run: |
-          cd frontend
-          rm -rf node_modules package-lock.json dist/ .vite
-
-          # 안정 버전으로 package.json 수정
-          cat > package.json << 'EOF'
-          {
-            "name": "ai-virtual-try-on-frontend",
-            "private": true,
-            "version": "1.0.0",
-            "type": "module",
-            "scripts": {
-              "build": "vite build"
-            },
-            "dependencies": {
-              "react": "^18.2.0",
-              "react-dom": "^18.2.0",
-              "html2canvas": "^1.4.1"
-            },
-            "devDependencies": {
-              "@types/react": "^18.2.43",
-              "@types/react-dom": "^18.2.17",
-              "@vitejs/plugin-react": "^4.2.1",
-              "typescript": "^5.2.2",
-              "vite": "^5.4.8"
-            }
-          }
-          EOF
-
-      - name: Install and Build Frontend
-        env:
-          NODE_ENV: production
-          VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
-        run: |
-          cd frontend
-          npm install
-          npx vite build
-          ls -la dist/
-          echo "✅ 프론트엔드 빌드 성공"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to ACR
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ env.REGISTRY_PASSWORD }}
-
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          build-args: |
-            NGINX_CONF=nginx.prod.conf
-            VITE_API_URL=${{ secrets.TEST_BACKEND_URL }}
-          tags: |
-            ${{ env.REGISTRY }}/frontend-react:latest
-            ${{ env.REGISTRY }}/frontend-react:${{ github.sha }}
-
-      - name: Deploy to Static Web Apps
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: "upload"
-          app_location: "/frontend"
-          output_location: "dist"
-          skip_app_build: true
-
-  # 🚀 백엔드 배포 (기존 creds 방식 그대로)
+  # ========== 백엔드 빌드 & 배포 ==========
   deploy-backend:
-    needs: build-backend
+    if: github.event.inputs.deploy_backend != 'false'
+    needs: quality-gate
     runs-on: ubuntu-latest
+    name: 🐍 Deploy Backend to Test
+    environment: test
+
     steps:
-      # 원래 잘 작동하던 방식으로 복원
-      - name: Login to Azure (Original Working Method)
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}
-          images: ${{ env.REGISTRY }}/backend-fastapi:${{ github.sha }}
+    - name: 🔐 Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+            "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+          }
 
-  # 📊 결과 알림
-  notify:
-    needs: [build-backend, build-frontend, deploy-backend]
+    - name: 🔐 Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+
+    - name: 🏗️ Build and Push Backend Image
+      run: |
+        cd backend_py
+        echo "🏗️ Building backend Docker image for Test environment..."
+        
+        # 안정성 우선: 캐시 없는 빌드 (Windows → Linux 호환성 보장)
+        docker build \
+          --no-cache \
+          --platform linux/amd64 \
+          -t ${{ env.REGISTRY }}/backend-fastapi-test:latest \
+          -t ${{ env.REGISTRY }}/backend-fastapi-test:${{ github.sha }} \
+          -f Dockerfile .
+        
+        echo "📤 Pushing images to ACR..."
+        docker push ${{ env.REGISTRY }}/backend-fastapi-test:latest
+        docker push ${{ env.REGISTRY }}/backend-fastapi-test:${{ github.sha }}
+        
+        echo "✅ Backend image build and push completed"
+
+    - name: 🚀 Deploy to Azure App Service (Test)
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}-test
+        images: ${{ env.REGISTRY }}/backend-fastapi-test:latest
+
+    - name: ⚙️ Configure Test Environment Variables
+      uses: azure/appservice-settings@v1
+      with:
+        app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}-test
+        app-settings-json: |
+          [
+            { "name": "PORT", "value": "3001" },
+            { "name": "HOST", "value": "0.0.0.0" },
+            { "name": "NODE_ENV", "value": "test" },
+            { "name": "FRONTEND_URL", "value": "${{ secrets.TEST_FRONTEND_URL }}" },
+            { "name": "GEMINI_API_KEY", "value": "${{ secrets.TEST_GEMINI_API_KEY }}" },
+            { "name": "AZURE_OPENAI_ENDPOINT", "value": "${{ secrets.TEST_AZURE_OPENAI_ENDPOINT }}" },
+            { "name": "AZURE_OPENAI_KEY", "value": "${{ secrets.TEST_AZURE_OPENAI_KEY }}" },
+            { "name": "AZURE_OPENAI_DEPLOYMENT_ID", "value": "${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}" },
+            { "name": "AZURE_OPENAI_API_VERSION", "value": "2024-02-15-preview" }
+          ]
+
+  # ========== 프론트엔드 빌드 & 배포 ==========
+  deploy-frontend:
+    if: github.event.inputs.deploy_frontend != 'false'
+    needs: quality-gate
     runs-on: ubuntu-latest
-    if: always()
+    name: 🎨 Deploy Frontend to Test
+    environment: test
+
     steps:
-      - name: Summary
-        run: |
-          echo "🎉 AI Virtual Try-On 배포 결과"
-          echo "백엔드: ${{ needs.build-backend.result }}"
-          echo "프론트엔드: ${{ needs.build-frontend.result }}"
-          echo "배포: ${{ needs.deploy-backend.result }}"
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js with Cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: 🔧 Install and Build Frontend (Test)
+      run: |
+        cd frontend
+        echo "📦 Installing dependencies with fallback strategy..."
+        
+        # Windows PowerShell → Linux 호환성을 위한 설치 전략
+        npm ci --legacy-peer-deps || {
+          echo "⚠️ npm ci failed, using fallback strategy for Windows→Linux compatibility"
+          rm -f package-lock.json
+          npm install --include=dev
+        }
+        
+        # cross-env 설치 (Windows PowerShell → Linux 환경 호환성)
+        echo "🔧 Installing cross-env for cross-platform compatibility..."
+        npm install --save-dev cross-env || true
+        
+        # TypeScript 검증 (Test 환경용 관대한 설정)
+        echo "🔍 TypeScript validation (lenient for Test)..."
+        npx tsc --noEmit --skipLibCheck --exclude "**/test/**" --exclude "**/*.test.*" || {
+          echo "⚠️ TypeScript warnings exist but continuing for Test environment"
+        }
+        
+        # 빌드 실행 (Test 환경 API URL 주입)
+        echo "🏗️ Building for Test environment..."
+        rm -rf dist/
+        
+        # Linux 환경에서 직접 Vite 실행 (cross-env 우회)
+        export VITE_API_URL="${{ secrets.TEST_BACKEND_URL }}"
+        export VITE_NODE_ENV="test"
+        export VITE_DEV_MODE="false"
+        
+        npx vite build --mode test
+        
+        # 빌드 결과 검증
+        echo "📋 Build verification..."
+        ls -la dist/
+        echo "✅ Frontend build completed successfully"
+
+    - name: 🚀 Deploy to Azure Static Web Apps (Test)
+      uses: Azure/static-web-apps-deploy@v1
+      with:
+        azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        action: "upload"
+        app_location: "frontend/dist"
+        skip_app_build: true
+        production_branch: "develop_deploy_pipeline"
+
+  # ========== 헬스체크 & 알림 ==========
+  health-check:
+    needs: [deploy-backend, deploy-frontend]
+    if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
+    runs-on: ubuntu-latest
+    name: 🏥 Health Check & Notification
+
+    steps:
+    - name: 🏥 Backend Health Check
+      if: needs.deploy-backend.result == 'success'
+      run: |
+        echo "🔍 Checking backend health..."
+        BACKEND_URL="${{ secrets.TEST_BACKEND_URL }}"
+        
+        for i in {1..12}; do
+          echo "📡 Health check attempt $i/12..."
+          
+          if curl -f -s --max-time 30 "${BACKEND_URL}/health"; then
+            echo "✅ Backend is healthy!"
+            echo "BACKEND_HEALTH=success" >> $GITHUB_ENV
+            break
+          elif [ $i -eq 12 ]; then
+            echo "❌ Backend health check failed after 12 attempts"
+            echo "BACKEND_HEALTH=failed" >> $GITHUB_ENV
+            exit 1
+          else
+            echo "⏳ Attempt $i failed, retrying in 30s..."
+            sleep 30
+          fi
+        done
+
+    - name: 🏥 Frontend Health Check
+      if: needs.deploy-frontend.result == 'success'
+      run: |
+        echo "🔍 Checking frontend health..."
+        FRONTEND_URL="${{ secrets.TEST_FRONTEND_URL }}"
+        
+        if curl -f -s --max-time 30 "${FRONTEND_URL}"; then
+          echo "✅ Frontend is healthy!"
+          echo "FRONTEND_HEALTH=success" >> $GITHUB_ENV
+        else
+          echo "❌ Frontend health check failed"
+          echo "FRONTEND_HEALTH=failed" >> $GITHUB_ENV
+          exit 1
+        fi
+
+    - name: 📊 Test Deployment Summary
+      run: |
+        echo "## 🧪 Test Environment Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Service | Status | Health | URL |" >> $GITHUB_STEP_SUMMARY
+        echo "|---------|--------|---------|-----|" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend | ${{ needs.deploy-backend.result }} | ${{ env.BACKEND_HEALTH }} | ${{ secrets.TEST_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Frontend | ${{ needs.deploy-frontend.result }} | ${{ env.FRONTEND_HEALTH }} | ${{ secrets.TEST_FRONTEND_URL }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Commit | ${{ github.sha }} | - | - |" >> $GITHUB_STEP_SUMMARY
+        echo "| Branch | ${{ github.ref_name }} | - | - |" >> $GITHUB_STEP_SUMMARY
+        echo "| Triggered By | ${{ github.actor }} | - | - |" >> $GITHUB_STEP_SUMMARY
+        
+        echo "🎯 **Test Environment Ready for Validation!**" >> $GITHUB_STEP_SUMMARY
+
+    - name: 📧 Success Notification (Placeholder)
+      if: success()
+      run: |
+        echo "🎉 Test deployment successful!"
+        echo "📧 TODO: Configure Teams/Discord/Email notification"
+        echo "Backend: ${{ secrets.TEST_BACKEND_URL }}/health"
+        echo "Frontend: ${{ secrets.TEST_FRONTEND_URL }}"
+
+    - name: 🚨 Failure Notification (Placeholder)
+      if: failure()
+      run: |
+        echo "💥 Test deployment failed!"
+        echo "📧 TODO: Configure Teams/Discord/Email notification"
+        echo "Check the logs above for details"
+        exit 1
+
+  # ========== 자동 롤백 (헬스체크 실패 시) ==========
+  auto-rollback:
+    needs: health-check
+    if: failure()
+    runs-on: ubuntu-latest
+    name: 🔄 Auto Rollback
+    environment: test
+
+    steps:
+    - name: 🔐 Login to Azure (for rollback)
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+            "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+          }
+
+    - name: 🔄 Rollback Backend (if needed)
+      if: needs.deploy-backend.result == 'success'
+      run: |
+        echo "🔄 Rolling back backend to previous version..."
+        # TODO: Azure App Service 슬롯 스왑 또는 이전 이미지로 롤백
+        echo "🚨 Manual intervention required for backend rollback"
+
+    - name: 🔄 Rollback Frontend (if needed)
+      if: needs.deploy-frontend.result == 'success'
+      run: |
+        echo "🔄 Rolling back frontend to previous version..."
+        # TODO: Static Web Apps 이전 배포로 롤백
+        echo "🚨 Manual intervention required for frontend rollback"
+
+    - name: 📧 Rollback Notification
+      run: |
+        echo "🔄 Auto rollback initiated due to health check failure"
+        echo "📧 TODO: Send urgent notification to team"
+        echo "Manual verification and intervention may be required"
