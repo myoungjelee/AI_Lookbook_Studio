@@ -1,3 +1,0 @@
-@base = http://localhost:3001
-
-GET {{base}}/api/recommend/random?limit=6
