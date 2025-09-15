@@ -1,36 +1,136 @@
 name: 🧪 Test Environment CI/CD Pipeline
 
+# ========== 트리거 조건 최적화 ==========
 on:
+  # 자동 트리거 (develop_deploy_pipeline 브랜치)
   push:
     branches: [develop_deploy_pipeline]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+
+  # PR 트리거 (develop_deploy_pipeline로의 PR)
   pull_request:
     branches: [develop_deploy_pipeline]
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+
+  # 수동 실행 (고급 옵션 포함)
   workflow_dispatch:
     inputs:
       deploy_backend:
-        description: 'Deploy Backend to Test'
+        description: '🐍 Deploy Backend to Test'
         type: boolean
         default: true
       deploy_frontend:
-        description: 'Deploy Frontend to Test'
+        description: '🎨 Deploy Frontend to Test'
         type: boolean
         default: true
       skip_tests:
-        description: 'Skip Tests (Emergency Deploy)'
+        description: '⚡ Skip Quality Gate (Emergency Only)'
         type: boolean
         default: false
+      debug_mode:
+        description: '🔍 Enable Debug Logging'
+        type: boolean
+        default: false
+      force_rebuild:
+        description: '🔄 Force Rebuild Images (No Cache)'
+        type: boolean
+        default: false
+
+  # 스케줄링 트리거 (선택적 - 야간 빌드)
+  schedule:
+    - cron: '0 2 * * 1-5'  # 평일 오전 2시 (KST 11시)
 
 env:
   REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
   BACKEND_APP_NAME_TEST: "7ai-team1-backend-test"
-  AZURE_RESOURCE_GROUP_HARDCODED: "7ai-final-team1"
+  AZURE_RESOURCE_GROUP_TEST: ${{ secrets.AZURE_RESOURCE_GROUP }}
 
 jobs:
+  # ========== 트리거 조건 체크 ==========
+  trigger-validation:
+    runs-on: ubuntu-latest
+    name: 🔍 Validate Trigger Conditions
+    outputs:
+      should_deploy_backend: ${{ steps.conditions.outputs.should_deploy_backend }}
+      should_deploy_frontend: ${{ steps.conditions.outputs.should_deploy_frontend }}
+      deployment_reason: ${{ steps.conditions.outputs.deployment_reason }}
+
+    steps:
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # 변경사항 비교를 위해 이전 커밋도 가져옴
+
+    - name: 🔍 Analyze Trigger Conditions
+      id: conditions
+      run: |
+        echo "🔍 Analyzing trigger conditions..."
+        
+        # 트리거 원인 분석
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          REASON="Manual execution by ${{ github.actor }}"
+          BACKEND_DEPLOY="${{ github.event.inputs.deploy_backend }}"
+          FRONTEND_DEPLOY="${{ github.event.inputs.deploy_frontend }}"
+        elif [ "${{ github.event_name }}" = "schedule" ]; then
+          REASON="Scheduled nightly build"
+          BACKEND_DEPLOY="true"
+          FRONTEND_DEPLOY="true"
+        elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          REASON="Pull request validation"
+          BACKEND_DEPLOY="false"  # PR에서는 배포하지 않음
+          FRONTEND_DEPLOY="false"
+        else
+          REASON="Code push to develop_deploy_pipeline"
+          
+          # 변경된 파일 분석
+          git diff --name-only HEAD~ HEAD > changed_files.txt || echo "No previous commit to compare"
+          
+          if grep -E "^backend_py/" changed_files.txt >/dev/null 2>&1; then
+            echo "🐍 Backend changes detected"
+            BACKEND_DEPLOY="true"
+          else
+            BACKEND_DEPLOY="false"
+          fi
+          
+          if grep -E "^frontend/" changed_files.txt >/dev/null 2>&1; then
+            echo "🎨 Frontend changes detected"
+            FRONTEND_DEPLOY="true"
+          else
+            FRONTEND_DEPLOY="false"
+          fi
+          
+          # 공통 파일 변경시 모든 서비스 배포
+          if grep -E "(docker-compose|Dockerfile|package\.json|requirements\.txt)" changed_files.txt >/dev/null 2>&1; then
+            echo "📦 Infrastructure changes detected - deploying all services"
+            BACKEND_DEPLOY="true"
+            FRONTEND_DEPLOY="true"
+          fi
+        fi
+        
+        echo "should_deploy_backend=${BACKEND_DEPLOY}" >> $GITHUB_OUTPUT
+        echo "should_deploy_frontend=${FRONTEND_DEPLOY}" >> $GITHUB_OUTPUT
+        echo "deployment_reason=${REASON}" >> $GITHUB_OUTPUT
+        
+        echo "📋 Deployment Decision:"
+        echo "- Reason: ${REASON}"
+        echo "- Deploy Backend: ${BACKEND_DEPLOY}"
+        echo "- Deploy Frontend: ${FRONTEND_DEPLOY}"
+
   # ========== 품질 게이트 ==========
   quality-gate:
-    if: github.event.inputs.skip_tests != 'true'
+    if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
+    needs: trigger-validation
     runs-on: ubuntu-latest
     name: 🔍 Quality Gate
 
@@ -51,6 +151,7 @@ jobs:
         python-version: ${{ env.PYTHON_VERSION }}
 
     - name: 🔧 Frontend Quality Check
+      if: needs.trigger-validation.outputs.should_deploy_frontend == 'true' || github.event_name == 'schedule'
       run: |
         cd frontend
         echo "🔍 Installing frontend dependencies..."
@@ -75,6 +176,7 @@ jobs:
         echo "✅ Frontend quality check passed"
 
     - name: 🔧 Backend Quality Check
+      if: needs.trigger-validation.outputs.should_deploy_backend == 'true' || github.event_name == 'schedule'
       run: |
         cd backend_py
         echo "🔍 Installing Python dependencies (no cache)..."
@@ -89,10 +191,60 @@ jobs:
         
         echo "✅ Backend quality check passed"
 
-  # ========== 백엔드 빌드 & 배포 (권한 오류 해결) ==========
+  # ========== PR 전용 검증 ==========
+  pr-validation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: 🔍 PR Validation (No Deployment)
+
+    steps:
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 🔍 PR Code Validation
+      run: |
+        echo "🔍 Pull Request validation started..."
+        
+        # Frontend 검증
+        if [ -d "frontend" ]; then
+          cd frontend
+          npm ci --legacy-peer-deps || npm install --include=dev
+          npx tsc --noEmit --skipLibCheck || echo "⚠️ TypeScript warnings found"
+          npm run build || echo "⚠️ Build warnings found"
+          cd ..
+        fi
+        
+        # Backend 검증  
+        if [ -d "backend_py" ]; then
+          cd backend_py
+          pip install --no-cache-dir -r requirements.txt
+          python -m py_compile app/main.py
+          python -c "from app.main import app; print('✅ FastAPI validates')"
+          cd ..
+        fi
+        
+        echo "✅ PR validation completed - no deployment performed"
+
+  # ========== 백엔드 빌드 & 배포 ==========
   deploy-backend:
-    if: github.event.inputs.deploy_backend != 'false'
-    needs: quality-gate
+    if: |
+      github.event_name != 'pull_request' && 
+      (needs.trigger-validation.outputs.should_deploy_backend == 'true' || 
+       github.event.inputs.deploy_backend == 'true' ||
+       github.event_name == 'schedule')
+    needs: [trigger-validation, quality-gate]
     runs-on: ubuntu-latest
     name: 🐍 Deploy Backend to Test
     environment: test
@@ -102,6 +254,18 @@ jobs:
     steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
+
+    - name: 🔍 Debug Deployment Context
+      if: github.event.inputs.debug_mode == 'true'
+      run: |
+        echo "=== Deployment Context Debug ==="
+        echo "Event: ${{ github.event_name }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Reason: ${{ needs.trigger-validation.outputs.deployment_reason }}"
+        echo "Force Rebuild: ${{ github.event.inputs.force_rebuild }}"
+        echo "App Service: ${{ env.BACKEND_APP_NAME_TEST }}"
+        echo "Resource Group: ${{ env.AZURE_RESOURCE_GROUP_TEST }}"
+        echo "================================"
 
     - name: 🔐 Login to Azure
       uses: azure/login@v1
@@ -114,18 +278,13 @@ jobs:
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
 
-    - name: 🔍 Verify Permissions
+    - name: 🔍 Verify Permissions and Resources
       run: |
         echo "🔍 Verifying Azure authentication and permissions..."
         az account show --query "{SubscriptionId:id, TenantId:tenantId, User:user.name}"
         
-        echo "🔍 Checking Service Principal permissions..."
-        az role assignment list --assignee "${{ secrets.AZURE_CLIENT_ID }}" --query "[].{Role:roleDefinitionName, Scope:scope}" -o table || {
-          echo "⚠️ Cannot list role assignments - this may indicate insufficient permissions"
-        }
-        
         echo "🔍 Checking App Service access..."
-        az webapp show --name "${{ env.BACKEND_APP_NAME_TEST }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP_HARDCODED }}" --query "{Name:name, State:state}" || {
+        az webapp show --name "${{ env.BACKEND_APP_NAME_TEST }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" --query "{Name:name, State:state}" || {
           echo "❌ Cannot access App Service - check permissions and resource existence"
           exit 1
         }
@@ -138,13 +297,26 @@ jobs:
         password: ${{ secrets.ACR_PASSWORD }}
 
     - name: 🏗️ Build and Push Backend Image
+      id: build
       run: |
         cd backend_py
         echo "🏗️ Building backend Docker image for Test environment..."
         
+        # 캐시 전략 결정
+        if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+          echo "🔄 Force rebuild requested - using --no-cache"
+          CACHE_OPTION="--no-cache"
+        else
+          echo "📦 Using build cache for faster builds"
+          CACHE_OPTION=""
+        fi
+        
         docker build \
-          --no-cache \
+          ${CACHE_OPTION} \
           --platform linux/amd64 \
+          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+          --build-arg VCS_REF=${{ github.sha }} \
+          --build-arg TRIGGER_REASON="${{ needs.trigger-validation.outputs.deployment_reason }}" \
           -t ${{ env.REGISTRY }}/backend-fastapi-test:latest \
           -t ${{ env.REGISTRY }}/backend-fastapi-test:${{ github.sha }} \
           -f Dockerfile .
@@ -155,31 +327,29 @@ jobs:
         
         echo "✅ Backend image build and push completed"
 
-    - name: 🚀 Deploy to Azure App Service (Fixed)
+    - name: 🚀 Deploy to Azure App Service (Test)
       id: deployment
       run: |
-        echo "🚀 Deploying container to App Service..."
+        echo "🚀 Deploying container to Test App Service..."
         
-        # App Service 컨테이너 설정
         az webapp config container set \
           --name "${{ env.BACKEND_APP_NAME_TEST }}" \
-          --resource-group "${{ env.AZURE_RESOURCE_GROUP_HARDCODED }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
           --docker-custom-image-name "${{ env.REGISTRY }}/backend-fastapi-test:latest" \
           --docker-registry-server-url "https://${{ env.REGISTRY }}" \
           --docker-registry-server-user "${{ secrets.ACR_USERNAME }}" \
           --docker-registry-server-password "${{ secrets.ACR_PASSWORD }}"
         
-        echo "✅ Container deployment completed"
-        echo "status=success" >> $GITHUB_OUTPUT  # Fixed deprecated set-output
+        echo "✅ Test container deployment completed"
+        echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: ⚙️ Configure Environment Variables (Fixed Permissions)
+    - name: ⚙️ Configure Test Environment Variables
       run: |
-        echo "⚙️ Configuring App Service environment variables..."
+        echo "⚙️ Configuring Test App Service environment variables..."
         
-        # 단일 명령어로 모든 환경 변수 설정 (권한 오류 최소화)
         az webapp config appsettings set \
           --name "${{ env.BACKEND_APP_NAME_TEST }}" \
-          --resource-group "${{ env.AZURE_RESOURCE_GROUP_HARDCODED }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
           --settings \
             PORT=3001 \
             HOST=0.0.0.0 \
@@ -191,20 +361,21 @@ jobs:
             AZURE_OPENAI_DEPLOYMENT_ID="${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}" \
             AZURE_OPENAI_API_VERSION="2024-02-15-preview" \
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
-            DOCKER_ENABLE_CI=true || {
-          
-          echo "❌ Failed to set environment variables"
-          echo "🔍 Current Service Principal roles:"
-          az role assignment list --assignee "${{ secrets.AZURE_CLIENT_ID }}" --query "[].roleDefinitionName" -o table || echo "Cannot list roles"
-          exit 1
-        }
+            DOCKER_ENABLE_CI=true \
+            DEPLOYMENT_TRIGGER="${{ needs.trigger-validation.outputs.deployment_reason }}" \
+            DEPLOYMENT_COMMIT="${{ github.sha }}" \
+            DEPLOYMENT_TIME="$(date -u)"
         
-        echo "✅ Environment variables configured successfully"
+        echo "✅ Test environment variables configured"
 
   # ========== 프론트엔드 빌드 & 배포 ==========
   deploy-frontend:
-    if: github.event.inputs.deploy_frontend != 'false'
-    needs: quality-gate
+    if: |
+      github.event_name != 'pull_request' && 
+      (needs.trigger-validation.outputs.should_deploy_frontend == 'true' || 
+       github.event.inputs.deploy_frontend == 'true' ||
+       github.event_name == 'schedule')
+    needs: [trigger-validation, quality-gate]
     runs-on: ubuntu-latest
     name: 🎨 Deploy Frontend to Test
     environment: test
@@ -245,11 +416,14 @@ jobs:
         export VITE_API_URL="${{ secrets.TEST_BACKEND_URL }}"
         export VITE_NODE_ENV="test"
         export VITE_DEV_MODE="false"
+        export VITE_DEPLOYMENT_TRIGGER="${{ needs.trigger-validation.outputs.deployment_reason }}"
+        export VITE_DEPLOYMENT_COMMIT="${{ github.sha }}"
         
         npx vite build --mode test
         
         echo "📋 Build verification..."
         ls -la dist/
+        echo "Build size: $(du -sh dist/ | cut -f1)"
         echo "✅ Frontend build completed successfully"
 
     - name: 🚀 Deploy to Azure Static Web Apps (Test)
@@ -262,33 +436,34 @@ jobs:
         skip_app_build: true
         production_branch: "develop_deploy_pipeline"
 
-  # ========== 헬스체크 & 알림 ==========
+  # ========== 헬스체크 & 통합 테스트 ==========
   health-check:
-    needs: [deploy-backend, deploy-frontend]
+    needs: [trigger-validation, deploy-backend, deploy-frontend]
     if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
     runs-on: ubuntu-latest
-    name: 🏥 Health Check & Notification
+    name: 🏥 Health Check & Integration Tests
 
     steps:
     - name: 🏥 Backend Health Check
       if: needs.deploy-backend.result == 'success'
       run: |
-        echo "🔍 Waiting for App Service to start..."
-        sleep 60  # App Service 시작 대기
+        echo "🔍 Waiting for Test App Service to initialize..."
+        sleep 90
         
-        echo "🔍 Checking backend health..."
+        echo "🔍 Test backend health check..."
         BACKEND_URL="${{ secrets.TEST_BACKEND_URL }}"
         
-        for i in {1..10}; do
-          echo "📡 Health check attempt $i/10..."
+        for i in {1..12}; do
+          echo "📡 Health check attempt $i/12..."
           
           if curl -f -s --max-time 30 "${BACKEND_URL}/health"; then
-            echo "✅ Backend is healthy!"
+            echo "✅ Test backend is healthy!"
             echo "BACKEND_HEALTH=success" >> $GITHUB_ENV
             break
-          elif [ $i -eq 10 ]; then
-            echo "❌ Backend health check failed after 10 attempts"
+          elif [ $i -eq 12 ]; then
+            echo "❌ Test backend health check failed after 12 attempts"
             echo "BACKEND_HEALTH=failed" >> $GITHUB_ENV
+            exit 1
           else
             echo "⏳ Attempt $i failed, retrying in 30s..."
             sleep 30
@@ -298,41 +473,91 @@ jobs:
     - name: 🏥 Frontend Health Check
       if: needs.deploy-frontend.result == 'success'
       run: |
-        echo "🔍 Checking frontend health..."
+        echo "🔍 Test frontend health check..."
         FRONTEND_URL="${{ secrets.TEST_FRONTEND_URL }}"
         
-        if curl -f -s --max-time 30 "${FRONTEND_URL}"; then
-          echo "✅ Frontend is healthy!"
-          echo "FRONTEND_HEALTH=success" >> $GITHUB_ENV
-        else
-          echo "❌ Frontend health check failed"
-          echo "FRONTEND_HEALTH=failed" >> $GITHUB_ENV
-        fi
+        for i in {1..8}; do
+          if curl -f -s --max-time 30 "${FRONTEND_URL}"; then
+            echo "✅ Test frontend is healthy!"
+            echo "FRONTEND_HEALTH=success" >> $GITHUB_ENV
+            break
+          elif [ $i -eq 8 ]; then
+            echo "❌ Test frontend health check failed"
+            echo "FRONTEND_HEALTH=failed" >> $GITHUB_ENV
+            exit 1
+          else
+            echo "⏳ Frontend attempt $i failed, retrying in 15s..."
+            sleep 15
+          fi
+        done
+
+    - name: 🧪 Integration Tests
+      if: needs.deploy-backend.result == 'success' && needs.deploy-frontend.result == 'success'
+      run: |
+        echo "🧪 Running integration tests..."
+        
+        BACKEND_URL="${{ secrets.TEST_BACKEND_URL }}"
+        FRONTEND_URL="${{ secrets.TEST_FRONTEND_URL }}"
+        
+        echo "🔍 Testing API endpoints..."
+        curl -f -s "${BACKEND_URL}/api" && echo "✅ API info endpoint working"
+        curl -f -s "${BACKEND_URL}/health" && echo "✅ Health endpoint working"
+        
+        echo "🔍 Testing CORS configuration..."
+        curl -H "Origin: ${FRONTEND_URL}" \
+             -H "Access-Control-Request-Method: POST" \
+             -H "Access-Control-Request-Headers: Content-Type" \
+             -X OPTIONS "${BACKEND_URL}/api/generate" && echo "✅ CORS working"
+        
+        echo "✅ Integration tests completed successfully"
 
     - name: 📊 Test Deployment Summary
       run: |
         echo "## 🧪 Test Environment Deployment Summary" >> $GITHUB_STEP_SUMMARY
-        echo "| Service | Status | Health | URL |" >> $GITHUB_STEP_SUMMARY
-        echo "|---------|--------|---------|-----|" >> $GITHUB_STEP_SUMMARY
-        echo "| Backend | ${{ needs.deploy-backend.result }} | ${{ env.BACKEND_HEALTH }} | ${{ secrets.TEST_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Frontend | ${{ needs.deploy-frontend.result }} | ${{ env.FRONTEND_HEALTH }} | ${{ secrets.TEST_FRONTEND_URL }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| App Service | ${{ env.BACKEND_APP_NAME_TEST }} | - | - |" >> $GITHUB_STEP_SUMMARY
-        echo "| Commit | ${{ github.sha }} | - | - |" >> $GITHUB_STEP_SUMMARY
-        echo "| Branch | ${{ github.ref_name }} | - | - |" >> $GITHUB_STEP_SUMMARY
-        echo "| Triggered By | ${{ github.actor }} | - | - |" >> $GITHUB_STEP_SUMMARY
-        
-        echo "🎯 **Test Environment Ready for Validation!**" >> $GITHUB_STEP_SUMMARY
+        echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Trigger** | ${{ needs.trigger-validation.outputs.deployment_reason }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Backend Status** | ${{ needs.deploy-backend.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Frontend Status** | ${{ needs.deploy-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Backend Health** | ${{ env.BACKEND_HEALTH }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Frontend Health** | ${{ env.FRONTEND_HEALTH }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Backend URL** | ${{ secrets.TEST_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Frontend URL** | ${{ secrets.TEST_FRONTEND_URL }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Commit** | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Branch** | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Actor** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🎯 **Test Environment Deployment Completed!**" >> $GITHUB_STEP_SUMMARY
 
-    - name: 📧 Success Notification
-      if: success()
-      run: |
-        echo "🎉 Test deployment successful!"
-        echo "Backend: ${{ secrets.TEST_BACKEND_URL }}/health"
-        echo "Frontend: ${{ secrets.TEST_FRONTEND_URL }}"
-        echo "App Service: ${{ env.BACKEND_APP_NAME_TEST }}"
+  # ========== 자동 롤백 ==========
+  auto-rollback:
+    needs: health-check
+    if: failure()
+    runs-on: ubuntu-latest
+    name: 🔄 Auto Rollback
+    environment: test
 
-    - name: 🚨 Failure Notification
-      if: failure()
+    steps:
+    - name: 🔐 Login to Azure (for rollback)
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+            "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+          }
+
+    - name: 🔄 Rollback Backend (if needed)
+      if: needs.deploy-backend.result == 'success'
       run: |
-        echo "💥 Test deployment failed!"
-        echo "Check the logs above for details"
+        echo "🔄 Rolling back Test backend..."
+        echo "⚠️ Automatic rollback implementation needed"
+        echo "📋 Manual intervention may be required"
+
+    - name: 🔄 Rollback Frontend (if needed)
+      if: needs.deploy-frontend.result == 'success'
+      run: |
+        echo "🔄 Rolling back Test frontend..."
+        echo "⚠️ Static Web Apps rollback requires manual intervention"

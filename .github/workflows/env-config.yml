@@ -1,0 +1,75 @@
+# 환경별 Secrets 매핑 구조 설계
+# 이 파일은 문서화 목적이며, 실제 secrets는 GitHub Repository Settings에서 관리
+
+environments:
+  # ========== 공통 환경 변수 ==========
+  shared:
+    # Azure 인증 (모든 환경 공통)
+    azure_auth:
+      client_id: AZURE_CLIENT_ID
+      client_secret: AZURE_CLIENT_SECRET
+      subscription_id: AZURE_SUBSCRIPTION_ID
+      tenant_id: AZURE_TENANT_ID
+
+    # Container Registry (모든 환경 공통)
+    container_registry:
+      login_server: ACR_LOGIN_SERVER
+      name: ACR_NAME
+      username: ACR_USERNAME
+      password: ACR_PASSWORD
+
+    # Azure 리소스 (모든 환경 공통)
+    azure_resources:
+      resource_group: AZURE_RESOURCE_GROUP
+      key_vault_name: AZURE_KEY_VAULT_NAME
+      key_vault_url: AZURE_KEY_VAULT_URL
+
+  # ========== Test 환경 ==========
+  test:
+    # App Service 이름 (하드코딩 또는 조합)
+    backend_app_name: "7ai-team1-backend-test"  # BACKEND_WEBAPP_NAME + "-test"
+    frontend_app_name: "wonderful-island-0c20d9b00"  # SWA 고유명
+
+    # 서비스 URLs
+    urls:
+      backend_url: TEST_BACKEND_URL
+      frontend_url: TEST_FRONTEND_URL
+      api_url: FRONTEND_API_URL  # 개발시 프록시용
+
+    # AI 서비스 APIs
+    ai_services:
+      gemini_api_key: TEST_GEMINI_API_KEY
+      azure_openai:
+        endpoint: TEST_AZURE_OPENAI_ENDPOINT
+        key: TEST_AZURE_OPENAI_KEY
+        deployment_id: TEST_AZURE_OPENAI_DEPLOYMENT_ID
+        api_version: "2024-02-15-preview"
+
+    # 배포 토큰
+    deployment:
+      static_web_apps_token: AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_ISLAND_0C20D9B00
+
+  # ========== Production 환경 ==========
+  production:
+    # App Service 이름 (직접 참조)
+    backend_app_name: BACKEND_WEBAPP_NAME
+    frontend_app_name: FRONTEND_STATICAPP_NAME
+
+    # 서비스 URLs
+    urls:
+      frontend_api_url: FRONTEND_API_URL_PROD
+      # backend_url과 frontend_url은 app_name에서 자동 생성
+
+    # AI 서비스 APIs
+    ai_services:
+      gemini_api_key: GEMINI_API_KEY  # Production용 별도 키 필요
+      azure_openai:
+        endpoint: AZURE_OPENAI_ENDPOINT
+        key: AZURE_OPENAI_KEY
+        deployment_id: AZURE_OPENAI_DEPLOYMENT_ID
+        api_version: "2024-02-15-preview"
+
+    # 배포 토큰
+    deployment:
+      static_web_apps_token: AZURE_STATIC_WEB_APPS_API_TOKEN
+      webapp_publish_profile: AZURE_WEBAPP_PUBLISH_PROFILE
