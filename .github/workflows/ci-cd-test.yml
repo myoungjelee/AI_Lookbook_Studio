@@ -28,11 +28,9 @@ env:
   REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
-  # 실제 App Service 이름을 환경변수로 설정
-  BACKEND_APP_NAME_TEST: "7ai-team1-backend-test"
 
 jobs:
-  # ========== 품질 게이트 (동일) ==========
+  # ========== 품질 게이트 ==========
   quality-gate:
     if: github.event.inputs.skip_tests != 'true'
     runs-on: ubuntu-latest
@@ -93,7 +91,7 @@ jobs:
         
         echo "✅ Backend quality check passed"
 
-  # ========== 백엔드 빌드 & 배포 (수정됨) ==========
+  # ========== 백엔드 빌드 & 배포 ==========
   deploy-backend:
     if: github.event.inputs.deploy_backend != 'false'
     needs: quality-gate
@@ -105,15 +103,21 @@ jobs:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
-    - name: 🔍 Debug App Service Configuration
+    - name: 🐞 Debug Azure Credentials (Optional)
+      if: github.event.inputs.debug_mode == 'true'
       run: |
-        echo "=== App Service Debug Info ==="
-        echo "Target App Service: ${{ env.BACKEND_APP_NAME_TEST }}"
-        echo "Resource Group: ${{ secrets.AZURE_RESOURCE_GROUP }}"
-        echo "Secret BACKEND_WEBAPP_NAME: ${{ secrets.BACKEND_WEBAPP_NAME }}"
-        echo "Registry: ${{ env.REGISTRY }}"
+        echo "🔍 Debugging Azure credentials (safe info only)..."
+        echo "Client ID length: ${#AZURE_CLIENT_ID}"
+        echo "Tenant ID length: ${#AZURE_TENANT_ID}"  
+        echo "Subscription ID length: ${#AZURE_SUBSCRIPTION_ID}"
+        echo "Client Secret length: ${#AZURE_CLIENT_SECRET}"
+      env:
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    - name: 🔐 Login to Azure
+    - name: 🔐 Login to Azure (Fixed)
       uses: azure/login@v1
       with:
         creds: |
@@ -124,19 +128,11 @@ jobs:
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
 
-    - name: ✅ Verify Azure Login & Resources
+    - name: ✅ Verify Azure Login
       run: |
         echo "🔍 Verifying Azure authentication..."
         az account show --query "{SubscriptionId:id, TenantId:tenantId, User:user.name}"
-        
-        echo "🔍 Checking if App Service exists..."
-        az webapp show --name "${{ env.BACKEND_APP_NAME_TEST }}" --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" --query "{Name:name, State:state, Location:location}" || {
-          echo "❌ App Service not found! Available App Services:"
-          az webapp list --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" --query "[].{Name:name, State:state}" -o table
-          exit 1
-        }
-        
-        echo "✅ Azure resources verified successfully"
+        echo "✅ Azure login successful"
 
     - name: 🔐 Login to Azure Container Registry
       uses: azure/docker-login@v1
@@ -150,7 +146,7 @@ jobs:
         cd backend_py
         echo "🏗️ Building backend Docker image for Test environment..."
         
-        # 안정성 우선: 캐시 없는 빌드
+        # 안정성 우선: 캐시 없는 빌드 (Windows → Linux 호환성 보장)
         docker build \
           --no-cache \
           --platform linux/amd64 \
@@ -164,16 +160,16 @@ jobs:
         
         echo "✅ Backend image build and push completed"
 
-    - name: 🚀 Deploy to Azure App Service (Test - Fixed)
+    - name: 🚀 Deploy to Azure App Service (Test)
       uses: azure/webapps-deploy@v2
       with:
-        app-name: ${{ env.BACKEND_APP_NAME_TEST }}  # 환경변수 사용
+        app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}-test
         images: ${{ env.REGISTRY }}/backend-fastapi-test:latest
 
     - name: ⚙️ Configure Test Environment Variables
       uses: azure/appservice-settings@v1
       with:
-        app-name: ${{ env.BACKEND_APP_NAME_TEST }}  # 환경변수 사용
+        app-name: ${{ secrets.BACKEND_WEBAPP_NAME }}-test
         app-settings-json: |
           [
             { "name": "PORT", "value": "3001" },
@@ -187,7 +183,7 @@ jobs:
             { "name": "AZURE_OPENAI_API_VERSION", "value": "2024-02-15-preview" }
           ]
 
-  # ========== 프론트엔드 빌드 & 배포 (동일) ==========
+  # ========== 프론트엔드 빌드 & 배포 ==========
   deploy-frontend:
     if: github.event.inputs.deploy_frontend != 'false'
     needs: quality-gate
@@ -211,29 +207,35 @@ jobs:
         cd frontend
         echo "📦 Installing dependencies with fallback strategy..."
         
+        # Windows PowerShell → Linux 호환성을 위한 설치 전략
         npm ci --legacy-peer-deps || {
           echo "⚠️ npm ci failed, using fallback strategy for Windows→Linux compatibility"
           rm -f package-lock.json
           npm install --include=dev
         }
         
+        # cross-env 설치 (Windows PowerShell → Linux 환경 호환성)
         echo "🔧 Installing cross-env for cross-platform compatibility..."
         npm install --save-dev cross-env || true
         
+        # TypeScript 검증 (Test 환경용 관대한 설정)
         echo "🔍 TypeScript validation (lenient for Test)..."
         npx tsc --noEmit --skipLibCheck --exclude "**/test/**" --exclude "**/*.test.*" || {
           echo "⚠️ TypeScript warnings exist but continuing for Test environment"
         }
         
+        # 빌드 실행 (Test 환경 API URL 주입)
         echo "🏗️ Building for Test environment..."
         rm -rf dist/
         
+        # Linux 환경에서 직접 Vite 실행 (cross-env 우회)
         export VITE_API_URL="${{ secrets.TEST_BACKEND_URL }}"
         export VITE_NODE_ENV="test"
         export VITE_DEV_MODE="false"
         
         npx vite build --mode test
         
+        # 빌드 결과 검증
         echo "📋 Build verification..."
         ls -la dist/
         echo "✅ Frontend build completed successfully"
@@ -248,7 +250,7 @@ jobs:
         skip_app_build: true
         production_branch: "develop_deploy_pipeline"
 
-  # ========== 헬스체크 & 알림 (동일) ==========
+  # ========== 헬스체크 & 알림 ==========
   health-check:
     needs: [deploy-backend, deploy-frontend]
     if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
@@ -301,25 +303,25 @@ jobs:
         echo "|---------|--------|---------|-----|" >> $GITHUB_STEP_SUMMARY
         echo "| Backend | ${{ needs.deploy-backend.result }} | ${{ env.BACKEND_HEALTH }} | ${{ secrets.TEST_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Frontend | ${{ needs.deploy-frontend.result }} | ${{ env.FRONTEND_HEALTH }} | ${{ secrets.TEST_FRONTEND_URL }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| App Service | ${{ env.BACKEND_APP_NAME_TEST }} | - | - |" >> $GITHUB_STEP_SUMMARY
         echo "| Commit | ${{ github.sha }} | - | - |" >> $GITHUB_STEP_SUMMARY
         echo "| Branch | ${{ github.ref_name }} | - | - |" >> $GITHUB_STEP_SUMMARY
         echo "| Triggered By | ${{ github.actor }} | - | - |" >> $GITHUB_STEP_SUMMARY
         
         echo "🎯 **Test Environment Ready for Validation!**" >> $GITHUB_STEP_SUMMARY
 
-    - name: 📧 Success Notification
+    - name: 📧 Success Notification (Placeholder)
       if: success()
       run: |
         echo "🎉 Test deployment successful!"
+        echo "📧 TODO: Configure Teams/Discord/Email notification"
         echo "Backend: ${{ secrets.TEST_BACKEND_URL }}/health"
         echo "Frontend: ${{ secrets.TEST_FRONTEND_URL }}"
-        echo "App Service: ${{ env.BACKEND_APP_NAME_TEST }}"
 
-    - name: 🚨 Failure Notification
+    - name: 🚨 Failure Notification (Placeholder)
       if: failure()
       run: |
         echo "💥 Test deployment failed!"
+        echo "📧 TODO: Configure Teams/Discord/Email notification"
         echo "Check the logs above for details"
         exit 1
 
@@ -332,7 +334,7 @@ jobs:
     environment: test
 
     steps:
-    - name: 🔐 Login to Azure (for rollback)
+    - name: 🔐 Login to Azure (for rollback - Fixed)
       uses: azure/login@v1
       with:
         creds: |
@@ -343,15 +345,28 @@ jobs:
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
 
+    - name: ✅ Verify Azure Login for Rollback
+      run: |
+        echo "🔍 Verifying Azure authentication for rollback..."
+        az account show --query "{SubscriptionId:id, TenantId:tenantId, User:user.name}"
+        echo "✅ Azure login successful for rollback"
+
     - name: 🔄 Rollback Backend (if needed)
       if: needs.deploy-backend.result == 'success'
       run: |
         echo "🔄 Rolling back backend to previous version..."
-        echo "App Service: ${{ env.BACKEND_APP_NAME_TEST }}"
-        # TODO: 실제 롤백 로직 구현
+        # TODO: Azure App Service 슬롯 스왑 또는 이전 이미지로 롤백
         echo "🚨 Manual intervention required for backend rollback"
+
+    - name: 🔄 Rollback Frontend (if needed)
+      if: needs.deploy-frontend.result == 'success'
+      run: |
+        echo "🔄 Rolling back frontend to previous version..."
+        # TODO: Static Web Apps 이전 배포로 롤백
+        echo "🚨 Manual intervention required for frontend rollback"
 
     - name: 📧 Rollback Notification
       run: |
         echo "🔄 Auto rollback initiated due to health check failure"
+        echo "📧 TODO: Send urgent notification to team"
         echo "Manual verification and intervention may be required"
