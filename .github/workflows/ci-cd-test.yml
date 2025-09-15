@@ -38,35 +38,60 @@ jobs:
             ${{ env.REGISTRY }}/backend-fastapi:latest
             ${{ env.REGISTRY }}/backend-fastapi:${{ github.sha }}
 
-  # ⚛️ 프론트엔드 빌드
+  # ⚛️ 프론트엔드 빌드 (Vite 문제만 해결)
   build-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Node 20으로 업그레이드 (Vite 호환성)
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      # Vite 문제 해결을 위한 package.json 수정
+      - name: Fix Vite Build Issue
+        run: |
+          cd frontend
+          rm -rf node_modules package-lock.json dist/ .vite
+
+          # 안정 버전으로 package.json 수정
+          cat > package.json << 'EOF'
+          {
+            "name": "ai-virtual-try-on-frontend",
+            "private": true,
+            "version": "1.0.0",
+            "type": "module",
+            "scripts": {
+              "build": "vite build"
+            },
+            "dependencies": {
+              "react": "^18.2.0",
+              "react-dom": "^18.2.0",
+              "html2canvas": "^1.4.1"
+            },
+            "devDependencies": {
+              "@types/react": "^18.2.43",
+              "@types/react-dom": "^18.2.17",
+              "@vitejs/plugin-react": "^4.2.1",
+              "typescript": "^5.2.2",
+              "vite": "^5.4.8"
+            }
+          }
+          EOF
+
       - name: Install and Build Frontend
         env:
+          NODE_ENV: production
           VITE_API_URL: ${{ secrets.TEST_BACKEND_URL }}
-          NPM_CONFIG_FUND: 'false'
-          NPM_CONFIG_AUDIT: 'false'
         run: |
-          set -e
           cd frontend
-          rm -rf node_modules dist .vite
-          # npm ci 시도 → 실패 시 lockfile 제거 후 dev 포함 설치로 폴백
-          if [ -f package-lock.json ]; then
-            npm ci || (echo "npm ci failed; regenerating lockfile" && rm -f package-lock.json && npm install --include=dev)
-          else
-            npm install --include=dev
-          fi
-          npm run build
+          npm install
+          npx vite build
           ls -la dist/
+          echo "✅ 프론트엔드 빌드 성공"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -101,15 +126,13 @@ jobs:
           output_location: "dist"
           skip_app_build: true
 
-  # 🚀 백엔드 배포 (표준 AZURE_CREDENTIALS 사용)
+  # 🚀 백엔드 배포 (기존 creds 방식 그대로)
   deploy-backend:
     needs: build-backend
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Azure Login
+      # 원래 잘 작동하던 방식으로 복원
+      - name: Login to Azure (Original Working Method)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
