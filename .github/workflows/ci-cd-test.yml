@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_backend:
-        description: 'Deploy Backend to Test'
+        description: 'Deploy Backend to Test' 
         type: boolean
         default: true
       deploy_frontend:
