@@ -2,7 +2,7 @@ name: 🧪 Test Environment CI/CD Pipeline
 
 # ========== 트리거 조건 최적화 ==========
 on:
-  # 자동 트리거 (develop_deploy_pipeline 브랜치)
+  # 자동 트리거 (develop_deploy_pipeline 브랜치) 
   push:
     branches: [develop_deploy_pipeline]
     paths-ignore:
