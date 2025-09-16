@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Card, Button, useToast, toast } from '../../ui';
 import type { RecommendationItem } from '../../../types';
 import { apiClient } from '../../../services/api.service';
@@ -143,7 +143,7 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     <div className="bg-white font-sans">
       <header className="sticky top-0 bg-white z-10 shadow-sm">
         <div className="overflow-x-auto whitespace-nowrap">
-          <nav className="flex items-center space-x-4 p-3 text-sm font-medium">
+          <nav className="flex items-center justify-center space-x-4 p-3 text-sm font-medium">
             {[
               { id: 'content', label: '콘텐츠' },
               { id: 'recommend', label: '추천' },
@@ -194,3 +194,4 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     </div>
   );
 };
+
