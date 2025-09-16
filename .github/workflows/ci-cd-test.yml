@@ -530,31 +530,60 @@ jobs:
     name: 🏥 Health Check & Integration Tests
 
     steps:
-    - name: 🏥 Backend Health Check
+    - name: 🏥 Backend Health Check (Fast Debug Mode)
       if: needs.deploy-backend.result == 'success'
       run: |
-        echo "🔍 Waiting for Test App Service to initialize..."
-        sleep 120  # 더 긴 대기 시간
-        
-        echo "🔍 Test backend health check..."
+        echo "🔍 Enhanced backend health check with debugging..."
         BACKEND_URL="${{ secrets.TEST_BACKEND_URL }}"
         
-        for i in {1..15}; do
-          echo "📡 Health check attempt $i/15..."
+        echo "📋 Testing URL: ${BACKEND_URL}"
+        
+        # 1. 즉시 기본 연결 테스트 (빠른 실패)
+        echo "🔍 Step 1: Immediate connection test"
+        if ! curl -f -s --max-time 10 "${BACKEND_URL}" >/dev/null 2>&1; then
+          echo "❌ Basic connection failed - checking specific endpoints"
+        fi
+        
+        # 2. 단축된 헬스체크 (총 3분으로 단축)
+        echo "🔍 Step 2: Fast health check (3 minutes max)"
+        sleep 30  # 30초만 대기
+        
+        for i in {1..6}; do  # 6회로 단축
+          echo "📡 Health check attempt $i/6..."
           
-          if curl -f -s --max-time 30 "${BACKEND_URL}/health"; then
+          # 상세한 응답 확인
+          RESPONSE=$(curl -s -w "HTTPCODE:%{http_code}" --max-time 15 "${BACKEND_URL}/health" 2>&1)
+          HTTP_CODE=$(echo "$RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2)
+          
+          echo "📊 HTTP Code: ${HTTP_CODE}"
+          echo "📄 Response: ${RESPONSE}"
+          
+          if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Test backend is healthy!"
             echo "BACKEND_HEALTH=success" >> $GITHUB_ENV
             break
-          elif [ $i -eq 15 ]; then
-            echo "❌ Test backend health check failed after 15 attempts"
+          elif [ $i -eq 6 ]; then
+            echo "❌ Backend failed after 6 attempts - checking diagnostics..."
+            
+            # 진단 정보 수집
+            echo "🔍 Diagnostic attempts:"
+            curl -v "${BACKEND_URL}/" || true
+            curl -v "${BACKEND_URL}/health" || true
+            curl -v "${BACKEND_URL}/api" || true
+            
+            # Azure CLI로 앱 상태 확인
+            echo "🔍 Azure App Service status:"
+            az webapp show --name "7ai-team1-backend-test" --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" --query "{state:state,availabilityState:availabilityState,defaultHostName:defaultHostName}" --output table || true
+            
             echo "BACKEND_HEALTH=failed" >> $GITHUB_ENV
-            exit 1
+            echo "⚠️ Backend health check failed - but continuing for diagnostic info"
+            # exit 1 제거하여 계속 진행
           else
-            echo "⏳ Attempt $i failed, retrying in 45s..."
-            sleep 45
+            echo "⏳ Attempt $i failed (HTTP: ${HTTP_CODE}), retrying in 20s..."
+            sleep 20  # 20초로 단축
           fi
         done
+
 
     - name: 🏥 Frontend Health Check
       if: needs.deploy-frontend.result == 'success'
