@@ -522,7 +522,7 @@ jobs:
         skip_app_build: true
         production_branch: "develop_deploy_pipeline"
 
-  # ========== 헬스체크 & 통합 테스트 ==========
+  # ========== 헬스체크 & 통합 테스트 ========== 
   health-check:
     needs: [trigger-validation, deploy-backend, deploy-frontend]
     if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
