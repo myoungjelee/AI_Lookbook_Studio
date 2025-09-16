@@ -47,7 +47,7 @@ on:
 
   # 스케줄링 트리거 (선택적 - 야간 빌드)
   schedule:
-    - cron: '0 2 * * 1-5'  # 평일 오전 2시 (KST 11시)
+    - cron: '0 2 * * 1-5'  # 평일 오전 2시 (UTC, KST 11시에 해당)  # 2 AM UTC (which is 11 AM KST on weekdays)
 
 env:
   REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
