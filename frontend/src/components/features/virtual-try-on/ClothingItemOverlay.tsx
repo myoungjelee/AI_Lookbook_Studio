@@ -16,7 +16,6 @@ export const ClothingItemOverlay: React.FC<ClothingItemOverlayProps> = ({
   onLike,
   onBuy,
   onRemove,
-  itemTitle,
   isLiked
 }) => {
   if (!isVisible) return null;

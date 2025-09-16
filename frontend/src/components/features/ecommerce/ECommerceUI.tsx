@@ -117,7 +117,6 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   const gridItems = items.slice(8);
   
   // 사이드바 상태
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<{
     outer?: RecommendationItem;
     top?: RecommendationItem;
@@ -137,6 +136,7 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   const handleGoToFitting = () => {
     const items = Object.values(selectedItems).filter(Boolean);
     if (items.length > 0) {
+      // 기존 옷들은 유지하고, 새로 선택한 아이템들만 추가
       localStorage.setItem('pendingVirtualFittingItems', JSON.stringify(items));
     }
     
@@ -177,7 +177,6 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   };
 
   // 아이템 카운트 계산
-  const itemCount = Object.values(selectedItems).filter(Boolean).length;
 
   return (
     <div className="bg-white font-sans">

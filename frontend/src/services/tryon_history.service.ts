@@ -54,6 +54,7 @@ function write<T>(key: string, arr: T[]) {
 }
 
 function notify() {
+  console.log("🔔 tryOnHistory notify 호출됨, listeners 수:", listeners.size);
   listeners.forEach((l) => {
     try {
       l();
@@ -74,28 +75,31 @@ export const tryOnHistory = {
       return;
     }
 
-    // 중복 체크: 같은 상품이 이미 히스토리에 있는지 확인
+    // 중복 체크: 같은 상품이 이미 히스토리에 있는지 확인 (슬롯 무관)
     const existingList = read<TryOnInputHistoryItem>(KEY_INPUTS);
     const isDuplicate = existingList.some((existing) => {
-      // 상품 ID가 있고, 같은 슬롯에 같은 상품이 이미 있는지 체크
-      if (item.topProductId && existing.topProductId === item.topProductId)
-        return true;
-      if (
-        item.pantsProductId &&
-        existing.pantsProductId === item.pantsProductId
-      )
-        return true;
-      if (
-        item.shoesProductId &&
-        existing.shoesProductId === item.shoesProductId
-      )
-        return true;
-      if (
-        item.outerProductId &&
-        existing.outerProductId === item.outerProductId
-      )
-        return true;
-      return false;
+      // 상품 ID가 있는 경우에만 중복 체크
+      const itemProductIds = [
+        item.topProductId,
+        item.pantsProductId,
+        item.shoesProductId,
+        item.outerProductId,
+      ].filter(Boolean);
+
+      const existingProductIds = [
+        existing.topProductId,
+        existing.pantsProductId,
+        existing.shoesProductId,
+        existing.outerProductId,
+      ].filter(Boolean);
+
+      // 상품 ID가 없으면 중복 체크 안함 (업로드 이미지 등)
+      if (itemProductIds.length === 0) {
+        return false;
+      }
+
+      // 같은 상품 ID가 하나라도 있으면 중복
+      return itemProductIds.some((id) => existingProductIds.includes(id));
     });
 
     if (isDuplicate) {

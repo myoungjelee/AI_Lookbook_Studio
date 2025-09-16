@@ -21,9 +21,8 @@ export const StickySidebar: React.FC<StickySidebarProps> = ({
 }) => {
   const itemCount = Object.values(selectedItems).filter(Boolean).length;
   const [isVisible, setIsVisible] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  const [hideTimer, setHideTimer] = useState<NodeJS.Timeout | null>(null);
+  const [hideTimer, setHideTimer] = useState<number | null>(null);
 
   // 통합된 타이머 관리 함수
   const scheduleHide = (delay: number) => {
@@ -57,14 +56,12 @@ export const StickySidebar: React.FC<StickySidebarProps> = ({
         clearTimeout(hideTimer);
         setHideTimer(null);
       }
-      setIsHovered(true);
       setIsVisible(true);
     }
   };
 
   const handleMouseLeave = () => {
     if (!isPinned) {
-      setIsHovered(false);
       scheduleHide(500); // 0.5초 후 사라지게
     }
   };
@@ -76,14 +73,12 @@ export const StickySidebar: React.FC<StickySidebarProps> = ({
         clearTimeout(hideTimer);
         setHideTimer(null);
       }
-      setIsHovered(true);
       setIsVisible(true);
     }
   };
 
   const handleTouchEnd = () => {
     if (!isPinned) {
-      setIsHovered(false);
       scheduleHide(1000); // 터치의 경우 1초 후 사라지게 (더 여유있게)
     }
   };

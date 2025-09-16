@@ -102,7 +102,7 @@ export const VirtualTryOnUI: React.FC = () => {
         return () => { unsub(); window.removeEventListener('storage', onStorage); };
     }, []);
 
-    // localStorage에서 이미지 복원
+    // localStorage에서 이미지 복원 (압축된 이미지 데이터)
     useEffect(() => {
         const restoreImages = () => {
             try {
@@ -148,10 +148,101 @@ export const VirtualTryOnUI: React.FC = () => {
         restoreImages();
     }, []); // 컴포넌트 마운트 시 한 번만 실행
 
-    // 상태를 localStorage에 저장
+    // localStorage 용량 관리 함수
+    const manageLocalStorageSize = () => {
+        try {
+            // localStorage 사용량 확인
+            let totalSize = 0;
+            for (let key in localStorage) {
+                if (localStorage.hasOwnProperty(key)) {
+                    totalSize += localStorage[key].length;
+                }
+            }
+            
+            // 5MB 제한 (5 * 1024 * 1024 = 5242880)
+            const maxSize = 5 * 1024 * 1024;
+            
+            if (totalSize > maxSize) {
+                console.log('localStorage 용량 초과, 오래된 데이터 삭제 중...');
+                
+                // virtualTryOn 현재 슬롯 이미지들만 수집 (히스토리 제외)
+                const virtualTryOnKeys = Object.keys(localStorage).filter(key => 
+                    key.startsWith('virtualTryOn_') && (
+                        key.includes('Image') || 
+                        key.includes('Label') || 
+                        key.includes('Source') ||
+                        key.includes('selected') ||
+                        key.includes('originalItems')
+                    )
+                );
+                
+                // 키별로 타임스탬프 추출 (파일명이나 저장 시간 기준)
+                const keysWithTime = virtualTryOnKeys.map(key => {
+                    let timestamp = 0;
+                    try {
+                        const data = localStorage.getItem(key);
+                        if (data) {
+                            const parsed = JSON.parse(data);
+                            // ts 필드가 있으면 사용, 없으면 파일명에서 추출
+                            if (parsed.ts) {
+                                timestamp = parsed.ts;
+                            } else if (parsed.file && parsed.file.name) {
+                                // 파일명에서 숫자 추출
+                                const match = parsed.file.name.match(/\d+/);
+                                if (match) timestamp = parseInt(match[0]);
+                            }
+                        }
+                    } catch (e) {
+                        // JSON 파싱 실패시 현재 시간 사용
+                        timestamp = Date.now();
+                    }
+                    return { key, timestamp };
+                });
+                
+                // 오래된 순으로 정렬
+                keysWithTime.sort((a, b) => a.timestamp - b.timestamp);
+                
+                // 용량이 줄어들 때까지 오래된 것부터 삭제
+                let deletedCount = 0;
+                for (const { key } of keysWithTime) {
+                    localStorage.removeItem(key);
+                    deletedCount++;
+                    
+                    // 다시 용량 확인
+                    let newTotalSize = 0;
+                    for (let k in localStorage) {
+                        if (localStorage.hasOwnProperty(k)) {
+                            newTotalSize += localStorage[k].length;
+                        }
+                    }
+                    
+                    if (newTotalSize < maxSize * 0.8) { // 80% 이하로 줄이면 중단
+                        break;
+                    }
+                }
+                
+                console.log(`${deletedCount}개 항목 삭제 완료`);
+            }
+        } catch (error) {
+            console.error('localStorage 용량 관리 실패:', error);
+        }
+    };
+
+    // 상태를 localStorage에 저장 (기존 방식 + 용량 관리)
     useEffect(() => {
         if (personImage) {
-            localStorage.setItem('virtualTryOn_personImage', JSON.stringify(personImage));
+            try {
+                localStorage.setItem('virtualTryOn_personImage', JSON.stringify(personImage));
+                manageLocalStorageSize(); // 용량 관리
+            } catch (error) {
+                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
+                manageLocalStorageSize(); // 오래된 데이터 삭제
+                try {
+                    localStorage.setItem('virtualTryOn_personImage', JSON.stringify(personImage));
+                } catch (retryError) {
+                    console.error('이미지 저장 실패:', retryError);
+                }
+            }
         } else {
             localStorage.removeItem('virtualTryOn_personImage');
         }
@@ -159,7 +250,18 @@ export const VirtualTryOnUI: React.FC = () => {
 
     useEffect(() => {
         if (topImage) {
-            localStorage.setItem('virtualTryOn_topImage', JSON.stringify(topImage));
+            try {
+                localStorage.setItem('virtualTryOn_topImage', JSON.stringify(topImage));
+                manageLocalStorageSize();
+            } catch (error) {
+                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
+                manageLocalStorageSize();
+                try {
+                    localStorage.setItem('virtualTryOn_topImage', JSON.stringify(topImage));
+                } catch (retryError) {
+                    console.error('이미지 저장 실패:', retryError);
+                }
+            }
         } else {
             localStorage.removeItem('virtualTryOn_topImage');
         }
@@ -167,7 +269,18 @@ export const VirtualTryOnUI: React.FC = () => {
 
     useEffect(() => {
         if (pantsImage) {
-            localStorage.setItem('virtualTryOn_pantsImage', JSON.stringify(pantsImage));
+            try {
+                localStorage.setItem('virtualTryOn_pantsImage', JSON.stringify(pantsImage));
+                manageLocalStorageSize();
+            } catch (error) {
+                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
+                manageLocalStorageSize();
+                try {
+                    localStorage.setItem('virtualTryOn_pantsImage', JSON.stringify(pantsImage));
+                } catch (retryError) {
+                    console.error('이미지 저장 실패:', retryError);
+                }
+            }
         } else {
             localStorage.removeItem('virtualTryOn_pantsImage');
         }
@@ -175,7 +288,18 @@ export const VirtualTryOnUI: React.FC = () => {
 
     useEffect(() => {
         if (shoesImage) {
-            localStorage.setItem('virtualTryOn_shoesImage', JSON.stringify(shoesImage));
+            try {
+                localStorage.setItem('virtualTryOn_shoesImage', JSON.stringify(shoesImage));
+                manageLocalStorageSize();
+            } catch (error) {
+                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
+                manageLocalStorageSize();
+                try {
+                    localStorage.setItem('virtualTryOn_shoesImage', JSON.stringify(shoesImage));
+                } catch (retryError) {
+                    console.error('이미지 저장 실패:', retryError);
+                }
+            }
         } else {
             localStorage.removeItem('virtualTryOn_shoesImage');
         }
@@ -183,7 +307,18 @@ export const VirtualTryOnUI: React.FC = () => {
 
     useEffect(() => {
         if (outerImage) {
-            localStorage.setItem('virtualTryOn_outerImage', JSON.stringify(outerImage));
+            try {
+                localStorage.setItem('virtualTryOn_outerImage', JSON.stringify(outerImage));
+                manageLocalStorageSize();
+            } catch (error) {
+                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
+                manageLocalStorageSize();
+                try {
+                    localStorage.setItem('virtualTryOn_outerImage', JSON.stringify(outerImage));
+                } catch (retryError) {
+                    console.error('이미지 저장 실패:', retryError);
+                }
+            }
         } else {
             localStorage.removeItem('virtualTryOn_outerImage');
         }
@@ -547,25 +682,24 @@ export const VirtualTryOnUI: React.FC = () => {
             if (productId) {
                 // 원본 상품 데이터 사용
                 const originalItem = originalItems[slot];
-                const item: RecommendationItem = originalItem ? {
-                    ...originalItem,
-                    id: productId,
-                    imageUrl: slot === 'outer' ? (outerImage?.previewUrl || originalItem.imageUrl) :
-                             slot === 'top' ? (topImage?.previewUrl || originalItem.imageUrl) :
-                             slot === 'pants' ? (pantsImage?.previewUrl || originalItem.imageUrl) :
-                             (shoesImage?.previewUrl || originalItem.imageUrl),
-                } : {
-                    id: productId,
-                    title: label,
-                    price: 0,
-                    imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
-                             slot === 'top' ? (topImage?.previewUrl || '') :
-                             slot === 'pants' ? (pantsImage?.previewUrl || '') :
-                             (shoesImage?.previewUrl || ''),
-                    category: slot,
-                    tags: [],
-                    timestamp: Date.now()
-                };
+                       const item: RecommendationItem = originalItem ? {
+                           ...originalItem,
+                           id: productId,
+                           imageUrl: slot === 'outer' ? (outerImage?.previewUrl || originalItem.imageUrl) :
+                                    slot === 'top' ? (topImage?.previewUrl || originalItem.imageUrl) :
+                                    slot === 'pants' ? (pantsImage?.previewUrl || originalItem.imageUrl) :
+                                    (shoesImage?.previewUrl || originalItem.imageUrl),
+                       } : {
+                           id: productId,
+                           title: label,
+                           price: 0,
+                           imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
+                                    slot === 'top' ? (topImage?.previewUrl || '') :
+                                    slot === 'pants' ? (pantsImage?.previewUrl || '') :
+                                    (shoesImage?.previewUrl || ''),
+                           category: slot,
+                           tags: []
+                       };
                 
                 const wasAdded = likesService.toggle(item);
                 if (wasAdded) {
@@ -574,19 +708,18 @@ export const VirtualTryOnUI: React.FC = () => {
                     addToast(toast.success('좋아요가 취소되었습니다', label, { duration: 1500 }));
                 }
             } else {
-                // 업로드된 이미지도 토글 (고정 ID 사용)
-                const item: RecommendationItem = {
-                    id: `uploaded-${slot}`,
-                    title: label,
-                    price: 0,
-                    imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
-                             slot === 'top' ? (topImage?.previewUrl || '') :
-                             slot === 'pants' ? (pantsImage?.previewUrl || '') :
-                             (shoesImage?.previewUrl || ''),
-                    category: slot,
-                    tags: [],
-                    timestamp: Date.now()
-                };
+                       // 업로드된 이미지도 토글 (고정 ID 사용)
+                       const item: RecommendationItem = {
+                           id: `uploaded-${slot}`,
+                           title: label,
+                           price: 0,
+                           imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
+                                    slot === 'top' ? (topImage?.previewUrl || '') :
+                                    slot === 'pants' ? (pantsImage?.previewUrl || '') :
+                                    (shoesImage?.previewUrl || ''),
+                           category: slot,
+                           tags: []
+                       };
                 
                 const wasAdded = likesService.toggle(item);
                 if (wasAdded) {
