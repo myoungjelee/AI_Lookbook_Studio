@@ -18,9 +18,8 @@
         "jsx": "react-jsx",
         /* Linting */
         "strict": true,
-        // 테스트 파일 관련 오류 무시
-        "noUnusedLocals": false,
-        "noUnusedParameters": false,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
         /* Path mapping */
         "baseUrl": ".",
@@ -32,12 +31,6 @@
     },
     "include": [
         "src"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        "**/*.test.*",
-        "**/test/**"
     ],
     "references": [
         {

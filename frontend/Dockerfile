@@ -1,53 +1,54 @@
+# Frontend Dockerfile for AI Virtual Try-On application
+
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:18-alpine AS builder
+
 WORKDIR /app
 
-# 환경변수 설정
-ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
+# Copy package files
+COPY package*.json ./
 
-# 작동하는 package.json 생성 (vite 포함!)
-RUN cat > package.json << 'EOF'
-{
-  "name": "ai-virtual-try-on-frontend",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "build": "vite build"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "html2canvas": "^1.4.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.2.2",
-    "vite": "^5.4.8"
-  }
-}
-EOF
+# Install dependencies
+RUN npm ci
 
-RUN npm install
-
-# 소스 복사 및 빌드
+# Copy source code
 COPY . .
-RUN npx vite build
 
-# Production stage
+# Build the application
+RUN npm run build:prod
+
+# Production stage - Use nginx to serve static files
 FROM nginx:alpine AS production
-ARG NGINX_CONF=nginx.prod.conf
-COPY ${NGINX_CONF} /etc/nginx/nginx.conf
+
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copy built application from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# 보안 설정
+# Create non-root user
 RUN addgroup -g 1001 -S frontend && \
-    adduser -S frontend -u 1001 -G frontend && \
-    chown -R frontend:frontend /usr/share/nginx/html
+    adduser -S frontend -u 1001 -G frontend
+
+# Set permissions
+RUN chown -R frontend:frontend /usr/share/nginx/html && \
+    chown -R frontend:frontend /var/cache/nginx && \
+    chown -R frontend:frontend /var/log/nginx && \
+    chown -R frontend:frontend /etc/nginx/conf.d
+
+# Create nginx pid directory
+RUN mkdir -p /var/run/nginx && \
+    chown -R frontend:frontend /var/run/nginx
+
+# Switch to non-root user
 USER frontend
 
+# Expose port
 EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
+
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]

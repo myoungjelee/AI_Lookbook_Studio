@@ -60,6 +60,7 @@ class ApiClient {
         this.timeout = config.timeout;
         this.retries = config.retries;
 
+
         // Add default error handling interceptor
         this.addResponseInterceptor({
             onResponseError: async (error: ApiError) => {
@@ -101,9 +102,8 @@ class ApiClient {
         data?: any,
         options: Partial<RequestConfig> = {}
     ): Promise<T> {
-        let url = `${this.baseUrl}${endpoint}`;
+        const url = `${this.baseUrl}${endpoint}`;
         const loadingKey = this.getLoadingKey(method, endpoint);
-        let fallbackTried = false;
 
         let config: RequestConfig = {
             method: method.toUpperCase(),
@@ -180,20 +180,6 @@ class ApiClient {
                         0,
                         'NETWORK_ERROR'
                     );
-
-                // One-time DNS/NETWORK fallback to same-origin or localhost:3001
-                const isNetworkError = lastError.code === 'NETWORK_ERROR';
-                const isAbsolute = /^https?:\/\//i.test(this.baseUrl);
-                if (isNetworkError && !fallbackTried && isAbsolute) {
-                    fallbackTried = true;
-                    const sameOrigin = (typeof window !== 'undefined' ? window.location.origin : '') || '';
-                    const fallbackBase = sameOrigin || 'http://localhost:3001';
-                    url = `${fallbackBase}${endpoint}`;
-                    config.url = url;
-                    // immediate retry with fallback URL without counting toward attempts
-                    attempt = Math.min(attempt, this.retries - 1);
-                    continue;
-                }
 
                 // Apply response error interceptors
                 for (const interceptor of this.responseInterceptors) {

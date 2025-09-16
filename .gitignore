@@ -13,21 +13,10 @@ out/
 
 # Environment variables (중요: API 키 보안)
 .env
-*.env
 .env.local
-.env.dev
-.env.prod
-.env.development
-.env.staging
-.env.production
-frontend/.env.local
-frontend/.env.development
-frontend/.env.production
-backend_py/.env.local
-backend_py/.env.dev
-backend_py/.env.prod
-.env*
-!.env.example
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Runtime data
 pids
@@ -80,6 +69,9 @@ jspm_packages/
 
 # Yarn Integrity file
 .yarn-integrity
+
+# dotenv environment variables file
+.env.test
 
 # parcel-bundler cache
 .cache
@@ -149,18 +141,11 @@ __pycache__/
 .Python
 *.pyc
 *.so
+
+# Ignore additional environment files (security)
+.env.development
+.env.production
+frontend/.env.development
 .venv
 .pyc
 
-/venv/
-/backend_py/venv/
-
-# AI Service Keys
-**/gemini_key*
-**/azure_key*
-**/openai_key*
-
-# Sensitive data
-secrets/
-keys/
-credentials/
