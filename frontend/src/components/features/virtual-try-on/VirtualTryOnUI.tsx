@@ -1,32 +1,59 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { ImageUploader } from './ImageUploader';
-import { ResultDisplay } from './ResultDisplay';
-import { CombineButton } from './CombineButton';
-import { RecommendationDisplay } from '../recommendations/RecommendationDisplay';
-import { Header } from '../layout/Header';
-import { virtualTryOnService } from '../../../services/virtualTryOn.service';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../../services/api.service';
-import type { UploadedImage, ApiFile, ClothingItems, RecommendationOptions, RecommendationItem } from '../../../types';
-import { Card, Input, Button, useToast, toast } from '../../ui';
-import { likesService } from '../../../services/likes.service';
 import { imageProxy } from '../../../services/imageProxy.service';
-import { ModelPicker } from './ModelPicker';
+import { likesService } from '../../../services/likes.service';
 import { tryOnHistory } from '../../../services/tryon_history.service';
-import { TryOnHistory } from './TryOnHistory';
+import { virtualTryOnService } from '../../../services/virtualTryOn.service';
+import type { ApiFile, ClothingItems, RecommendationItem, RecommendationOptions, UploadedImage } from '../../../types';
+import { Button, Card, Input, toast, useToast } from '../../ui';
+import { Header } from '../layout/Header';
+import { RecommendationDisplay } from '../recommendations/RecommendationDisplay';
 import { StyleTipsCard } from '../tips/StyleTipsCard';
-import { ComparePanel } from './ComparePanel';
-import { shareOrDownloadResult } from '../../../utils/shareImage';
+import { ClothingItemOverlay } from './ClothingItemOverlay';
+import { CombineButton } from './CombineButton';
+import { ImageUploader } from './ImageUploader';
+import { ModelPicker } from './ModelPicker';
+import { ResultDisplay } from './ResultDisplay';
 import { SnsShareDialog } from './SnsShareDialog';
+import { TryOnHistory } from './TryOnHistory';
 
 export const VirtualTryOnUI: React.FC = () => {
+    // 상태를 localStorage에서 복원
     const [personImage, setPersonImage] = useState<UploadedImage | null>(null);
     const [topImage, setTopImage] = useState<UploadedImage | null>(null);
     const [pantsImage, setPantsImage] = useState<UploadedImage | null>(null);
     const [shoesImage, setShoesImage] = useState<UploadedImage | null>(null);
-    const [personSource, setPersonSource] = useState<'model' | 'upload' | 'unknown'>('unknown');
-    const [topLabel, setTopLabel] = useState<string | undefined>(undefined);
-    const [pantsLabel, setPantsLabel] = useState<string | undefined>(undefined);
-    const [shoesLabel, setShoesLabel] = useState<string | undefined>(undefined);
+    const [outerImage, setOuterImage] = useState<UploadedImage | null>(null);
+    const [personSource, setPersonSource] = useState<'model' | 'upload' | 'unknown'>(() => {
+        try {
+            const saved = localStorage.getItem('virtualTryOn_personSource');
+            return (saved as 'model' | 'upload' | 'unknown') || 'unknown';
+        } catch { return 'unknown'; }
+    });
+    const [topLabel, setTopLabel] = useState<string | undefined>(() => {
+        try {
+            const saved = localStorage.getItem('virtualTryOn_topLabel');
+            return saved || undefined;
+        } catch { return undefined; }
+    });
+    const [pantsLabel, setPantsLabel] = useState<string | undefined>(() => {
+        try {
+            const saved = localStorage.getItem('virtualTryOn_pantsLabel');
+            return saved || undefined;
+        } catch { return undefined; }
+    });
+    const [shoesLabel, setShoesLabel] = useState<string | undefined>(() => {
+        try {
+            const saved = localStorage.getItem('virtualTryOn_shoesLabel');
+            return saved || undefined;
+        } catch { return undefined; }
+    });
+    const [outerLabel, setOuterLabel] = useState<string | undefined>(() => {
+        try {
+            const saved = localStorage.getItem('virtualTryOn_outerLabel');
+            return saved || undefined;
+        } catch { return undefined; }
+    });
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
     const [recommendations, setRecommendations] = useState<any>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -39,6 +66,18 @@ export const VirtualTryOnUI: React.FC = () => {
     const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
     const [selectedPantsId, setSelectedPantsId] = useState<string | null>(null);
     const [selectedShoesId, setSelectedShoesId] = useState<string | null>(null);
+    const [selectedOuterId, setSelectedOuterId] = useState<string | null>(null);
+    
+    // 호버 오버레이 상태
+    const [hoveredSlot, setHoveredSlot] = useState<'outer' | 'top' | 'pants' | 'shoes' | null>(null);
+    
+    // 원본 상품 데이터 저장
+    const [originalItems, setOriginalItems] = useState<{
+        outer?: RecommendationItem;
+        top?: RecommendationItem;
+        pants?: RecommendationItem;
+        shoes?: RecommendationItem;
+    }>({});
 
     // Reflect history evaluations (scores) for current generated image
     const [historyTick, setHistoryTick] = useState<number>(0);
@@ -63,27 +102,261 @@ export const VirtualTryOnUI: React.FC = () => {
         return () => { unsub(); window.removeEventListener('storage', onStorage); };
     }, []);
 
+    // localStorage에서 이미지 복원
+    useEffect(() => {
+        const restoreImages = () => {
+            try {
+                // personImage 복원
+                const savedPersonImage = localStorage.getItem('virtualTryOn_personImage');
+                if (savedPersonImage) {
+                    const personData = JSON.parse(savedPersonImage);
+                    setPersonImage(personData);
+                }
+
+                // topImage 복원
+                const savedTopImage = localStorage.getItem('virtualTryOn_topImage');
+                if (savedTopImage) {
+                    const topData = JSON.parse(savedTopImage);
+                    setTopImage(topData);
+                }
+
+                // pantsImage 복원
+                const savedPantsImage = localStorage.getItem('virtualTryOn_pantsImage');
+                if (savedPantsImage) {
+                    const pantsData = JSON.parse(savedPantsImage);
+                    setPantsImage(pantsData);
+                }
+
+                // shoesImage 복원
+                const savedShoesImage = localStorage.getItem('virtualTryOn_shoesImage');
+                if (savedShoesImage) {
+                    const shoesData = JSON.parse(savedShoesImage);
+                    setShoesImage(shoesData);
+                }
+
+                // outerImage 복원
+                const savedOuterImage = localStorage.getItem('virtualTryOn_outerImage');
+                if (savedOuterImage) {
+                    const outerData = JSON.parse(savedOuterImage);
+                    setOuterImage(outerData);
+                }
+            } catch (error) {
+                console.error('이미지 복원 실패:', error);
+            }
+        };
+
+        restoreImages();
+    }, []); // 컴포넌트 마운트 시 한 번만 실행
+
+    // 상태를 localStorage에 저장
+    useEffect(() => {
+        if (personImage) {
+            localStorage.setItem('virtualTryOn_personImage', JSON.stringify(personImage));
+        } else {
+            localStorage.removeItem('virtualTryOn_personImage');
+        }
+    }, [personImage]);
+
+    useEffect(() => {
+        if (topImage) {
+            localStorage.setItem('virtualTryOn_topImage', JSON.stringify(topImage));
+        } else {
+            localStorage.removeItem('virtualTryOn_topImage');
+        }
+    }, [topImage]);
+
+    useEffect(() => {
+        if (pantsImage) {
+            localStorage.setItem('virtualTryOn_pantsImage', JSON.stringify(pantsImage));
+        } else {
+            localStorage.removeItem('virtualTryOn_pantsImage');
+        }
+    }, [pantsImage]);
+
+    useEffect(() => {
+        if (shoesImage) {
+            localStorage.setItem('virtualTryOn_shoesImage', JSON.stringify(shoesImage));
+        } else {
+            localStorage.removeItem('virtualTryOn_shoesImage');
+        }
+    }, [shoesImage]);
+
+    useEffect(() => {
+        if (outerImage) {
+            localStorage.setItem('virtualTryOn_outerImage', JSON.stringify(outerImage));
+        } else {
+            localStorage.removeItem('virtualTryOn_outerImage');
+        }
+    }, [outerImage]);
+
+    useEffect(() => {
+        localStorage.setItem('virtualTryOn_personSource', personSource);
+    }, [personSource]);
+
+    useEffect(() => {
+        if (topLabel) {
+            localStorage.setItem('virtualTryOn_topLabel', topLabel);
+        } else {
+            localStorage.removeItem('virtualTryOn_topLabel');
+        }
+    }, [topLabel]);
+
+    useEffect(() => {
+        if (pantsLabel) {
+            localStorage.setItem('virtualTryOn_pantsLabel', pantsLabel);
+        } else {
+            localStorage.removeItem('virtualTryOn_pantsLabel');
+        }
+    }, [pantsLabel]);
+
+    useEffect(() => {
+        if (shoesLabel) {
+            localStorage.setItem('virtualTryOn_shoesLabel', shoesLabel);
+        } else {
+            localStorage.removeItem('virtualTryOn_shoesLabel');
+        }
+    }, [shoesLabel]);
+
+    useEffect(() => {
+        if (outerLabel) {
+            localStorage.setItem('virtualTryOn_outerLabel', outerLabel);
+        } else {
+            localStorage.removeItem('virtualTryOn_outerLabel');
+        }
+    }, [outerLabel]);
+
+    // 상품 카드에서 전달된 상품을 자동으로 칸에 넣기
+    const hasProcessedRef = useRef(false);
+    
+    useEffect(() => {
+        console.log('🔥 useEffect 실행됨! hasProcessedRef.current:', hasProcessedRef.current);
+        
+        const handlePendingItem = async () => {
+            // 이미 처리했으면 건너뜀
+            if (hasProcessedRef.current) {
+                console.log('이미 처리했으므로 건너뜀');
+                return;
+            }
+            
+            console.log('🔥 handlePendingItem 시작');
+            
+            try {
+                // 여러 아이템 처리 (새로운 방식)
+                const pendingItemsStr = localStorage.getItem('pendingVirtualFittingItems');
+                if (pendingItemsStr) {
+                    console.log('여러 아이템 처리 시작');
+                    const pendingItems = JSON.parse(pendingItemsStr);
+                    hasProcessedRef.current = true;
+
+                    for (const item of pendingItems) {
+                        await addCatalogItemToSlot(item);
+                    }
+
+                    addToast(toast.success(`${pendingItems.length}개 아이템을 자동으로 담았어요`, undefined, { duration: 2000 }));
+                    localStorage.removeItem('pendingVirtualFittingItems');
+                    return;
+                }
+
+                // 단일 아이템 처리 (기존 방식)
+                const pendingItemStr = localStorage.getItem('pendingVirtualFittingItem');
+                console.log('localStorage에서 읽은 데이터:', pendingItemStr);
+                if (!pendingItemStr) {
+                    console.log('pendingVirtualFittingItem이 없음');
+                    return;
+                }
+
+                const pendingItem = JSON.parse(pendingItemStr);
+                console.log('전달된 상품 정보:', pendingItem);
+
+                // 5분 이내의 상품만 처리 (오래된 데이터 방지)
+                if (Date.now() - pendingItem.timestamp > 5 * 60 * 1000) {
+                    console.log('상품이 너무 오래됨, 제거');
+                    localStorage.removeItem('pendingVirtualFittingItem');
+                    return;
+                }
+
+                // 카테고리에 따라 적절한 칸에 넣기 (title과 tags도 함께 체크)
+                const cat = (pendingItem.category || '').toLowerCase();
+                const title = (pendingItem.title || '').toLowerCase();
+                const tags = (pendingItem.tags || []).join(' ').toLowerCase();
+                const allText = `${cat} ${title} ${tags}`;
+                
+                console.log('카테고리:', cat);
+                console.log('제목:', title);
+                console.log('태그:', tags);
+                console.log('전체 텍스트:', allText);
+                
+                // 백엔드와 동일한 카테고리 매핑 로직 사용
+                const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
+                    (cat === 'outer') ? 'outer'
+                    : (cat === 'top') ? 'top'
+                    : (cat === 'pants') ? 'pants'
+                    : (cat === 'shoes') ? 'shoes'
+                    : null;
+
+                console.log('결정된 슬롯:', slot);
+                if (!slot) {
+                    console.log('카테고리를 인식할 수 없음:', cat);
+                    localStorage.removeItem('pendingVirtualFittingItem');
+                    return;
+                }
+
+                if (!pendingItem.imageUrl) {
+                    console.log('이미지 URL이 없음');
+                    localStorage.removeItem('pendingVirtualFittingItem');
+                    return;
+                }
+
+                // 처리 시작 플래그 설정
+                hasProcessedRef.current = true;
+
+                console.log('이미지 변환 시작');
+                // 이미지를 UploadedImage 형식으로 변환
+                const uploadedImage = await imageProxy.toUploadedImage(pendingItem.imageUrl, pendingItem.title);
+                console.log('이미지 변환 완료:', uploadedImage);
+                
+                // addCatalogItemToSlot을 사용해서 원본 데이터도 함께 저장
+                console.log('addCatalogItemToSlot 호출 시작, 슬롯:', slot);
+                await addCatalogItemToSlot(pendingItem);
+
+                addToast(toast.success(`자동으로 담았어요: ${pendingItem.title}`, undefined, { duration: 2000 }));
+                
+                // 처리 완료 후 localStorage에서 제거
+                localStorage.removeItem('pendingVirtualFittingItem');
+                console.log('상품이 자동으로 칸에 들어갔습니다:', slot);
+
+            } catch (error) {
+                console.error('자동 상품 추가 실패:', error);
+                localStorage.removeItem('pendingVirtualFittingItem');
+                hasProcessedRef.current = false; // 실패 시 플래그 리셋
+            }
+        };
+
+        handlePendingItem();
+    }, []); // 의존성 배열을 빈 배열로 변경
+
     // Recommendation filter options
     const [minPrice, setMinPrice] = useState<string>('');
     const [maxPrice, setMaxPrice] = useState<string>('');
     const [excludeTagsInput, setExcludeTagsInput] = useState<string>('');
 
     // Random items to show before recommendations are available
-    const [randomItemsByCat, setRandomItemsByCat] = useState<{ top: RecommendationItem[]; pants: RecommendationItem[]; shoes: RecommendationItem[] }>({ top: [], pants: [], shoes: [] });
+    const [randomItemsByCat, setRandomItemsByCat] = useState<{ top: RecommendationItem[]; pants: RecommendationItem[]; shoes: RecommendationItem[]; outer: RecommendationItem[] }>({ top: [], pants: [], shoes: [], outer: [] });
     const [isLoadingRandom, setIsLoadingRandom] = useState<boolean>(false);
     const fetchRandom = useCallback(async (limit: number = 12) => {
         try {
             setIsLoadingRandom(true);
-            const per = Math.max(1, Math.floor(limit / 3));
-            const [tops, pants, shoes] = await Promise.all([
+            const per = Math.max(1, Math.floor(limit / 4)); // 4개 카테고리로 나누기
+            const [tops, pants, shoes, outers] = await Promise.all([
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=top`).catch(() => [] as RecommendationItem[]),
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=pants`).catch(() => [] as RecommendationItem[]),
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=shoes`).catch(() => [] as RecommendationItem[]),
+                apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=outer`).catch(() => [] as RecommendationItem[]),
             ]);
-            setRandomItemsByCat({ top: tops, pants, shoes });
+            setRandomItemsByCat({ top: tops, pants, shoes, outer: outers });
         } catch (e) {
             // ignore silently
-            setRandomItemsByCat({ top: [], pants: [], shoes: [] });
+            setRandomItemsByCat({ top: [], pants: [], shoes: [], outer: [] });
         } finally {
             setIsLoadingRandom(false);
         }
@@ -102,15 +375,17 @@ export const VirtualTryOnUI: React.FC = () => {
     const toDataUrl = (img: UploadedImage | null | undefined) => img ? `data:${img.mimeType};base64,${img.base64}` : undefined;
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
     const recordInput = (
-        overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; }>,
-        labels?: Partial<{ top: string; pants: string; shoes: string }>,
+        overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
+        labels?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         mode: 'delta' | 'snapshot' = 'delta',
         sourceOverride?: 'model' | 'upload' | 'unknown',
+        productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
     ) => {
         const p = mode === 'delta' ? (overrides?.person ?? null) : (overrides && 'person' in overrides ? overrides.person : personImage);
         const t = mode === 'delta' ? (overrides?.top ?? null) : (overrides && 'top' in overrides ? overrides.top : topImage);
         const pa = mode === 'delta' ? (overrides?.pants ?? null) : (overrides && 'pants' in overrides ? overrides.pants : pantsImage);
         const s = mode === 'delta' ? (overrides?.shoes ?? null) : (overrides && 'shoes' in overrides ? overrides.shoes : shoesImage);
+        const o = mode === 'delta' ? (overrides?.outer ?? null) : (overrides && 'outer' in overrides ? overrides.outer : outerImage);
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
         if (src === 'model' && overrides && 'person' in overrides) return;
@@ -121,10 +396,16 @@ export const VirtualTryOnUI: React.FC = () => {
             topLabel: labels?.top ?? (mode === 'delta' ? undefined : topLabel),
             pantsLabel: labels?.pants ?? (mode === 'delta' ? undefined : pantsLabel),
             shoesLabel: labels?.shoes ?? (mode === 'delta' ? undefined : shoesLabel),
+            outerLabel: labels?.outer ?? (mode === 'delta' ? undefined : outerLabel),
             personImage: toDataUrl(p || null),
             topImage: toDataUrl(t || null),
             pantsImage: toDataUrl(pa || null),
             shoesImage: toDataUrl(s || null),
+            outerImage: toDataUrl(o || null),
+            topProductId: productIds?.top,
+            pantsProductId: productIds?.pants,
+            shoesProductId: productIds?.shoes,
+            outerProductId: productIds?.outer,
         });
     };
 
@@ -206,21 +487,20 @@ export const VirtualTryOnUI: React.FC = () => {
         }
     }, [personImage, topImage, pantsImage, shoesImage, minPrice, maxPrice, excludeTagsInput]);
 
-    // Helper to trigger combine programmatically (used by quick-add from likes)
-    const combineNow = useCallback(async () => {
-        await handleCombineClick();
-    }, [handleCombineClick]);
 
-    const canCombine = (!!personImage && (topImage || pantsImage || shoesImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
+    const canCombine = (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
 
     // Helper: add a catalog/recommendation item into proper slot
     const addCatalogItemToSlot = useCallback(async (item: RecommendationItem) => {
         const cat = (item.category || '').toLowerCase();
-        const slot: 'top' | 'pants' | 'shoes' | null =
-            cat.includes('top') ? 'top'
-            : cat.includes('pant') ? 'pants'
-            : cat.includes('shoe') ? 'shoes'
-            : (cat === '상의' ? 'top' : (cat === '하의' ? 'pants' : (cat === '신발' ? 'shoes' : null)));
+        
+        // 백엔드와 동일한 카테고리 매핑 로직 사용
+        const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
+            (cat === 'outer') ? 'outer'
+            : (cat === 'top') ? 'top'
+            : (cat === 'pants') ? 'pants'
+            : (cat === 'shoes') ? 'shoes'
+            : null;
         if (!slot) return;
         if (!item.imageUrl) {
             addToast(toast.error('이미지 URL이 없어 담을 수 없어요'));
@@ -228,20 +508,115 @@ export const VirtualTryOnUI: React.FC = () => {
         }
         try {
             const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
-            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta'); }
-            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta'); }
-            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta'); }
+            
+            // 원본 상품 데이터 저장
+            setOriginalItems(prev => ({
+                ...prev,
+                [slot]: item
+            }));
+            
+            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }); }
+            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }); }
+            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }); }
+            if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }); }
             addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
         } catch (e: any) {
             addToast(toast.error('가져오기에 실패했어요', e?.message));
         }
-    }, [addToast, setTopImage, setPantsImage, setShoesImage, setTopLabel, setPantsLabel, setShoesLabel]);
+    }, [addToast, setTopImage, setPantsImage, setShoesImage, setOuterImage, setTopLabel, setPantsLabel, setShoesLabel, setOuterLabel, setSelectedOuterId, setOriginalItems]);
 
     // Helper wrapper: force slot without relying on category text
-    const addToSlotForced = useCallback((item: RecommendationItem, slot: 'top'|'pants'|'shoes') => {
+    const addToSlotForced = useCallback((item: RecommendationItem, slot: 'top'|'pants'|'shoes'|'outer') => {
         // Reuse existing logic by overriding category for mapping
         return addCatalogItemToSlot({ ...(item as any), category: slot } as any);
     }, [addCatalogItemToSlot]);
+
+    // 의류 아이템 오버레이 핸들러
+    const handleClothingLike = useCallback((slot: 'outer' | 'top' | 'pants' | 'shoes') => {
+        const label = slot === 'outer' ? outerLabel : 
+                     slot === 'top' ? topLabel : 
+                     slot === 'pants' ? pantsLabel : shoesLabel;
+        
+        if (label) {
+            const productId = slot === 'outer' ? selectedOuterId :
+                             slot === 'top' ? selectedTopId :
+                             slot === 'pants' ? selectedPantsId :
+                             selectedShoesId;
+            
+            // 상품 ID가 있으면 (카탈로그에서 가져온 상품) 토글
+            if (productId) {
+                // 원본 상품 데이터 사용
+                const originalItem = originalItems[slot];
+                const item: RecommendationItem = originalItem ? {
+                    ...originalItem,
+                    id: productId,
+                    imageUrl: slot === 'outer' ? (outerImage?.previewUrl || originalItem.imageUrl) :
+                             slot === 'top' ? (topImage?.previewUrl || originalItem.imageUrl) :
+                             slot === 'pants' ? (pantsImage?.previewUrl || originalItem.imageUrl) :
+                             (shoesImage?.previewUrl || originalItem.imageUrl),
+                } : {
+                    id: productId,
+                    title: label,
+                    price: 0,
+                    imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
+                             slot === 'top' ? (topImage?.previewUrl || '') :
+                             slot === 'pants' ? (pantsImage?.previewUrl || '') :
+                             (shoesImage?.previewUrl || ''),
+                    category: slot,
+                    tags: [],
+                    timestamp: Date.now()
+                };
+                
+                const wasAdded = likesService.toggle(item);
+                if (wasAdded) {
+                    addToast(toast.success('좋아요에 추가되었습니다', label, { duration: 1500 }));
+                } else {
+                    addToast(toast.success('좋아요가 취소되었습니다', label, { duration: 1500 }));
+                }
+            } else {
+                // 업로드된 이미지도 토글 (고정 ID 사용)
+                const item: RecommendationItem = {
+                    id: `uploaded-${slot}`,
+                    title: label,
+                    price: 0,
+                    imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
+                             slot === 'top' ? (topImage?.previewUrl || '') :
+                             slot === 'pants' ? (pantsImage?.previewUrl || '') :
+                             (shoesImage?.previewUrl || ''),
+                    category: slot,
+                    tags: [],
+                    timestamp: Date.now()
+                };
+                
+                const wasAdded = likesService.toggle(item);
+                if (wasAdded) {
+                    addToast(toast.success('좋아요에 추가되었습니다', label, { duration: 1500 }));
+                } else {
+                    addToast(toast.success('좋아요가 취소되었습니다', label, { duration: 1500 }));
+                }
+            }
+        }
+    }, [outerLabel, topLabel, pantsLabel, shoesLabel, outerImage, topImage, pantsImage, shoesImage, selectedOuterId, selectedTopId, selectedPantsId, selectedShoesId, originalItems, addToast]);
+
+    const handleClothingBuy = useCallback((slot: 'outer' | 'top' | 'pants' | 'shoes') => {
+        const label = slot === 'outer' ? outerLabel : 
+                     slot === 'top' ? topLabel : 
+                     slot === 'pants' ? pantsLabel : shoesLabel;
+        
+        if (label) {
+            // 원본 상품 데이터에서 URL 가져오기
+            const originalItem = originalItems[slot];
+            if (originalItem?.productUrl) {
+                // 실제 상품 URL이 있으면 해당 페이지로 이동
+                window.open(originalItem.productUrl, '_blank');
+                addToast(toast.success('상품 페이지로 이동', originalItem.title, { duration: 2000 }));
+            } else {
+                // 업로드된 이미지이거나 URL이 없으면 쇼핑 페이지로 이동
+                window.open('https://www.musinsa.com', '_blank');
+                addToast(toast.info('쇼핑 페이지로 이동', '무신사에서 비슷한 상품을 찾아보세요', { duration: 2000 }));
+            }
+        }
+    }, [outerLabel, topLabel, pantsLabel, shoesLabel, originalItems, addToast]);
 
     return (
         <div className="flex flex-col items-center p-4 sm:p-6 lg:p-8 bg-gray-50">
@@ -251,18 +626,9 @@ export const VirtualTryOnUI: React.FC = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-10 items-start">
                         {/* Input Section */}
                         <div className="lg:col-span-8 order-1 bg-white p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 xl:gap-7">
-                                <div className="md:col-span-1">
-                                    <div>
-                                        <ModelPicker
-                                            direction="vertical"
-                                            selectedId={personSource === 'model' ? (selectedModelId || undefined) : undefined}
-                                            onSelectModel={(id) => setSelectedModelId(id)}
-                                            onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 xl:gap-7">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* 왼쪽 영역: Person + AI Sample */}
+                                <div className="md:col-span-1 space-y-2 border-r border-gray-200 pr-4">
                                     <ImageUploader
                                         id="person-image"
                                         title="Person"
@@ -271,30 +637,136 @@ export const VirtualTryOnUI: React.FC = () => {
                                         externalImage={personImage}
                                         active={!!personImage && personSource === 'upload'}
                                     />
-                                    <ImageUploader
-                                        id="top-image"
-                                        title="Top"
-                                        description="Upload a photo of a top."
-                                        onImageUpload={(img) => { setTopImage(img); setTopLabel(img ? '업로드' : undefined); recordInput({ top: img }, { top: img ? '업로드' : undefined }, 'delta'); }}
-                                        externalImage={topImage}
-                                        active={!!topImage}
+                                    <ModelPicker
+                                        direction="vertical"
+                                        selectedId={personSource === 'model' ? (selectedModelId || undefined) : undefined}
+                                        onSelectModel={(id) => setSelectedModelId(id)}
+                                        onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }}
                                     />
-                                    <ImageUploader
-                                        id="pants-image"
-                                        title="Pants"
-                                        description="Upload a photo of pants."
-                                        onImageUpload={(img) => { setPantsImage(img); setPantsLabel(img ? '업로드' : undefined); recordInput({ pants: img }, { pants: img ? '업로드' : undefined }, 'delta'); }}
-                                        externalImage={pantsImage}
-                                        active={!!pantsImage}
-                                    />
-                                    <ImageUploader
-                                        id="shoes-image"
-                                        title="Shoes"
-                                        description="Upload a photo of shoes."
-                                        onImageUpload={(img) => { setShoesImage(img); setShoesLabel(img ? '업로드' : undefined); recordInput({ shoes: img }, { shoes: img ? '업로드' : undefined }, 'delta'); }}
-                                        externalImage={shoesImage}
-                                        active={!!shoesImage}
-                                    />
+                                </div>
+                                
+                                {/* 오른쪽 영역: 의류 4개 */}
+                                <div className="md:col-span-2 pl-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="text-sm font-medium text-gray-700">의류 아이템</h3>
+                                        <Button 
+                                            size="sm" 
+                                            variant="outline" 
+                                            onClick={() => {
+                                                setOuterImage(null);
+                                                setTopImage(null);
+                                                setPantsImage(null);
+                                                setShoesImage(null);
+                                                setOuterLabel(undefined);
+                                                setTopLabel(undefined);
+                                                setPantsLabel(undefined);
+                                                setShoesLabel(undefined);
+                                                setSelectedOuterId(null);
+                                                setSelectedTopId(null);
+                                                setSelectedPantsId(null);
+                                                setSelectedShoesId(null);
+                                                setOriginalItems({});
+                                                addToast(toast.success('모든 의류가 비워졌습니다', undefined, { duration: 1500 }));
+                                            }}
+                                            disabled={!outerImage && !topImage && !pantsImage && !shoesImage}
+                                        >
+                                            전체 비우기
+                                        </Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div 
+                                            onMouseEnter={() => outerImage && setHoveredSlot('outer')}
+                                            onMouseLeave={() => setHoveredSlot(null)}
+                                        >
+                                            <ImageUploader
+                                                id="outer-image"
+                                                title="Outer"
+                                                description="Upload a photo of outerwear."
+                                                onImageUpload={(img) => { setOuterImage(img); setOuterLabel(img ? '업로드' : undefined); recordInput({ outer: img }, { outer: img ? '업로드' : undefined }, 'delta'); }}
+                                                externalImage={outerImage}
+                                                active={!!outerImage}
+                                                overlay={
+                                                    <ClothingItemOverlay
+                                                        isVisible={hoveredSlot === 'outer'}
+                                                        onLike={() => handleClothingLike('outer')}
+                                                        onBuy={() => handleClothingBuy('outer')}
+                                                        onRemove={() => { setOuterImage(null); setOuterLabel(undefined); setSelectedOuterId(null); }}
+                                                        itemTitle={outerLabel || 'Outer'}
+                                                        isLiked={selectedOuterId ? likesService.isLiked(selectedOuterId) : likesService.isLiked('uploaded-outer')}
+                                                    />
+                                                }
+                                            />
+                                        </div>
+                                        <div 
+                                            onMouseEnter={() => topImage && setHoveredSlot('top')}
+                                            onMouseLeave={() => setHoveredSlot(null)}
+                                        >
+                                            <ImageUploader
+                                                id="top-image"
+                                                title="Top"
+                                                description="Upload a photo of a top."
+                                                onImageUpload={(img) => { setTopImage(img); setTopLabel(img ? '업로드' : undefined); recordInput({ top: img }, { top: img ? '업로드' : undefined }, 'delta'); }}
+                                                externalImage={topImage}
+                                                active={!!topImage}
+                                                overlay={
+                                                    <ClothingItemOverlay
+                                                        isVisible={hoveredSlot === 'top'}
+                                                        onLike={() => handleClothingLike('top')}
+                                                        onBuy={() => handleClothingBuy('top')}
+                                                        onRemove={() => { setTopImage(null); setTopLabel(undefined); setSelectedTopId(null); }}
+                                                        itemTitle={topLabel || 'Top'}
+                                                        isLiked={selectedTopId ? likesService.isLiked(selectedTopId) : likesService.isLiked('uploaded-top')}
+                                                    />
+                                                }
+                                            />
+                                        </div>
+                                        <div 
+                                            onMouseEnter={() => pantsImage && setHoveredSlot('pants')}
+                                            onMouseLeave={() => setHoveredSlot(null)}
+                                        >
+                                            <ImageUploader
+                                                id="pants-image"
+                                                title="Pants"
+                                                description="Upload a photo of pants."
+                                                onImageUpload={(img) => { setPantsImage(img); setPantsLabel(img ? '업로드' : undefined); recordInput({ pants: img }, { pants: img ? '업로드' : undefined }, 'delta'); }}
+                                                externalImage={pantsImage}
+                                                active={!!pantsImage}
+                                                overlay={
+                                                    <ClothingItemOverlay
+                                                        isVisible={hoveredSlot === 'pants'}
+                                                        onLike={() => handleClothingLike('pants')}
+                                                        onBuy={() => handleClothingBuy('pants')}
+                                                        onRemove={() => { setPantsImage(null); setPantsLabel(undefined); setSelectedPantsId(null); }}
+                                                        itemTitle={pantsLabel || 'Pants'}
+                                                        isLiked={selectedPantsId ? likesService.isLiked(selectedPantsId) : likesService.isLiked('uploaded-pants')}
+                                                    />
+                                                }
+                                            />
+                                        </div>
+                                        <div 
+                                            onMouseEnter={() => shoesImage && setHoveredSlot('shoes')}
+                                            onMouseLeave={() => setHoveredSlot(null)}
+                                        >
+                                            <ImageUploader
+                                                id="shoes-image"
+                                                title="Shoes"
+                                                description="Upload a photo of shoes."
+                                                onImageUpload={(img) => { setShoesImage(img); setShoesLabel(img ? '업로드' : undefined); recordInput({ shoes: img }, { shoes: img ? '업로드' : undefined }, 'delta'); }}
+                                                externalImage={shoesImage}
+                                                active={!!shoesImage}
+                                                overlay={
+                                                    <ClothingItemOverlay
+                                                        isVisible={hoveredSlot === 'shoes'}
+                                                        onLike={() => handleClothingLike('shoes')}
+                                                        onBuy={() => handleClothingBuy('shoes')}
+                                                        onRemove={() => { setShoesImage(null); setShoesLabel(undefined); setSelectedShoesId(null); }}
+                                                        itemTitle={shoesLabel || 'Shoes'}
+                                                        isLiked={selectedShoesId ? likesService.isLiked(selectedShoesId) : likesService.isLiked('uploaded-shoes')}
+                                                    />
+                                                }
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -361,10 +833,11 @@ export const VirtualTryOnUI: React.FC = () => {
                                     <div className="overflow-x-auto whitespace-nowrap flex gap-4 pb-1">
                                         {likedItems.map(item => {
                                             const cat = (item.category || '').toLowerCase();
-                                            const slot: 'top' | 'pants' | 'shoes' | null =
+                                            const slot: 'top' | 'pants' | 'shoes' | 'outer' | null =
                                                 cat.includes('top') || cat.includes('상의') ? 'top'
                                                 : (cat.includes('pant') || cat.includes('하의') || cat.includes('바지')) ? 'pants'
                                                 : (cat.includes('shoe') || cat.includes('신발')) ? 'shoes'
+                                                : (cat.includes('outer') || cat.includes('아우터') || cat.includes('자켓') || cat.includes('코트')) ? 'outer'
                                                 : null;
                                             if (!slot) return null;
                                             const onAdd = async () => {
@@ -374,9 +847,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 }
                                                 try {
                                                     const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
-                                                    if (slot === 'top') { setTopImage(up); setTopLabel(item.title); recordInput({ top: up }, { top: item.title }, 'delta'); }
-                                                    if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); recordInput({ pants: up }, { pants: item.title }, 'delta'); }
-                                                    if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); recordInput({ shoes: up }, { shoes: item.title }, 'delta'); }
+                                                    if (slot === 'top') { setTopImage(up); setTopLabel(item.title); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }); }
+                                                    if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }); }
+                                                    if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }); }
+                                                    if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }); }
                                                     addToast(toast.success('피팅에 담겼습니다', `${item.title} → ${slot}`, { duration: 2000 }));
                                                     if (personImage) {
                                                         void 0; // generation only via Try It On
@@ -449,33 +923,6 @@ export const VirtualTryOnUI: React.FC = () => {
                             ) : recommendations ? (
                                 <RecommendationDisplay
                                     recommendations={recommendations}
-                                    onItemClick={async (item) => {
-                                        const cat = (item.category || '').toLowerCase();
-                                        const slot: 'top' | 'pants' | 'shoes' | null =
-                                            cat.includes('top') ? 'top'
-                                            : cat.includes('pant') ? 'pants'
-                                            : cat.includes('shoe') ? 'shoes'
-                                            : (cat === '상의' ? 'top' : (cat === '하의' ? 'pants' : (cat === '신발' ? 'shoes' : null)));
-                                        if (!slot) return;
-                                        if (!item.imageUrl) {
-                                            addToast(toast.error('이미지 URL이 없어 담을 수 없어요'));
-                                            return;
-                                        }
-                                        try {
-                                            const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
-                                            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); recordInput({ top: up }, { top: item.title }, 'delta'); }
-                                            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); recordInput({ pants: up }, { pants: item.title }, 'delta'); }
-                                            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); recordInput({ shoes: up }, { shoes: item.title }, 'delta'); }
-                                            addToast(toast.success(`담기 완료: ${item.title}`, undefined, { duration: 1600 }));
-                                            if (personImage) {
-                                                void 0; // generation only via Try It On
-                                            } else {
-                                                addToast(toast.info('먼저 모델을 선택해주세요', undefined, { duration: 1400 }));
-                                            }
-                                        } catch (e: any) {
-                                            addToast(toast.error('가져오기에 실패했어요', e?.message));
-                                        }
-                                    }}
                                 />
                             ) : null}
                         </div>
@@ -510,6 +957,19 @@ export const VirtualTryOnUI: React.FC = () => {
                                             {randomItemsByCat.pants.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'pants')} padding="sm">
                                                     <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedPantsId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
+                                                        {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
+                                                    </div>
+                                                    <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">아우터</h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            {randomItemsByCat.outer.map(item => (
+                                                <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'outer')} padding="sm">
+                                                    <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedOuterId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
                                                     <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>

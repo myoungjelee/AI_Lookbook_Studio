@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime
+
 from fastapi import APIRouter, Response
+
 from ..models import (
-    RecommendationRequest,
-    RecommendationFromFittingRequest,
-    RecommendationResponse,
     CategoryRecommendations,
+    RecommendationFromFittingRequest,
     RecommendationItem,
+    RecommendationRequest,
+    RecommendationResponse,
 )
+from ..services.azure_openai_service import azure_openai_service
 from ..services.catalog import get_catalog_service
 from ..services.db_recommender import db_pos_recommender
 from ..services.llm_ranker import llm_ranker
-from ..services.azure_openai_service import azure_openai_service
-
 
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 
@@ -59,12 +60,20 @@ def random_products(limit: int = 18, category: str | None = None, gender: str | 
         c = (s or "").strip().lower()
         if not c:
             return "unknown"
-        top_kw = ["top","outer","shirt","t-shirt","tee","hood","sweat","sweater","cardigan","jacket","coat","blouson","parka","knit","상의","아우터","셔츠","티","맨투","가디건","자켓","코트","후드","블루종","점퍼","패딩"]
-        pants_kw = ["pant","bottom","denim","jean","slack","skirt","하의","바지","데님","슬랙스","청바지","스커트"]
-        shoes_kw = ["shoe","sneaker","boot","loafer","heel","sand","신발","스니커","운동화","부츠","로퍼","샌들"]
-        if any(k in c for k in top_kw): return "top"
-        if any(k in c for k in pants_kw): return "pants"
-        if any(k in c for k in shoes_kw): return "shoes"
+        
+        # DB 카테고리 매핑만 사용
+        if c in ["man_outer", "woman_outer"]:
+            return "outer"
+        elif c in ["man_top", "woman_top"]:
+            return "top"
+        elif c in ["man_bottom", "woman_bottom"]:
+            return "pants"
+        elif c in ["man_shoes", "woman_shoes"]:
+            return "shoes"
+        elif c == "woman_dress_skirt":
+            return "pants"  # 드레스/스커트는 하의로 분류
+        
+        # 알 수 없는 카테고리는 그대로 반환
         return c
 
     if category:

@@ -157,11 +157,30 @@ def map_row(row: Dict[str, str], idx: int, tags_delim: str, forced_category: Opt
 
 def read_csv_file(path: Path, tags_delim: str, forced_category: Optional[str] = None) -> List[Dict]:
     items: List[Dict] = []
+    
+    # 파일명에서 카테고리 추출 (forced_category가 없을 때)
+    file_category = None
+    if not forced_category:
+        filename = path.name.lower()
+        if "man_outer" in filename or "woman_outer" in filename:
+            file_category = "outer"
+        elif "man_top" in filename or "woman_top" in filename:
+            file_category = "top"
+        elif "man_bottom" in filename or "woman_bottom" in filename:
+            file_category = "pants"
+        elif "woman_dress_skirt" in filename:
+            file_category = "pants"  # 드레스/스커트는 하의로 분류
+        elif "man_shoes" in filename or "woman_shoes" in filename:
+            file_category = "shoes"
+    
+    # 파일명 기반 카테고리가 있으면 사용, 없으면 forced_category 사용
+    effective_category = file_category or forced_category
+    
     with path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for i, row in enumerate(reader, start=1):
             try:
-                items.append(map_row(row, i, tags_delim, forced_category))
+                items.append(map_row(row, i, tags_delim, effective_category))
             except Exception as e:
                 print(f"[WARN] {path.name} #{i} 변환 실패: {e}")
     return items
@@ -173,7 +192,7 @@ def main():
     ap.add_argument("--output", "-o", default=str(DEFAULT_OUTPUT), help="출력 JSON 경로 (기본: data/catalog.json)")
     ap.add_argument("--tags-delim", default=",", help="tags 컬럼 구분자 (기본: ,)")
     ap.add_argument("--merge-existing", action="store_true", help="출력 파일이 존재하면 기존 JSON과 병합(id 중복 시 신규 우선)")
-    ap.add_argument("--force-category", choices=["top", "pants", "shoes"], help="모든 입력 레코드의 카테고리를 강제 지정(top/pants/shoes)")
+    ap.add_argument("--force-category", choices=["top", "pants", "shoes", "outer"], help="모든 입력 레코드의 카테고리를 강제 지정(top/pants/shoes/outer)")
     args = ap.parse_args()
 
     inputs: List[Path] = []
