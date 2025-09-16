@@ -397,15 +397,26 @@ jobs:
             NODE_ENV=test \
             FRONTEND_URL="${{ secrets.TEST_FRONTEND_URL }}" \
             GEMINI_API_KEY="${{ secrets.TEST_GEMINI_API_KEY }}" \
+            GEMINI_MODEL="gemini-2.5-flash-image-preview" \
+            GEMINI_FIXED_PROMPT="Wear these clothes naturally. If the image contains clothing with a person form or face integrated, extract the clothings design (pattern, texture, silhouette) ONLY, and apply it naturally onto a new, AI-generated model. Do not change the original models face/identity/skin tone IF the original model IS the focus. If no person is in the original image, or if the clothing is the sole focus, generate an AI model wearing the clothes naturally. Preserve natural fit, proportions, lighting, and shadows." \
+            GEMINI_TEMPERATURE=0.2 \
             AZURE_OPENAI_ENDPOINT="${{ secrets.TEST_AZURE_OPENAI_ENDPOINT }}" \
             AZURE_OPENAI_KEY="${{ secrets.TEST_AZURE_OPENAI_KEY }}" \
             AZURE_OPENAI_DEPLOYMENT_ID="${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}" \
-            AZURE_OPENAI_API_VERSION="2024-02-15-preview" \
+            AZURE_OPENAI_API_VERSION="2024-12-01-preview" \
+            DB_HOST="${{ secrets.TEST_DB_HOST }}" \
+            DB_USER="${{ secrets.TEST_DB_USER }}" \
+            DB_PASSWORD="${{ secrets.TEST_DB_PASSWORD }}" \
+            DB_NAME="${{ secrets.TEST_DB_NAME }}" \
+            DB_PORT=5432 \
+            DB_SSLMODE=require \
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
             DOCKER_ENABLE_CI=true \
             DEPLOYMENT_TRIGGER="${{ needs.trigger-validation.outputs.deployment_reason }}" \
             DEPLOYMENT_COMMIT="${{ github.sha }}" \
-            DEPLOYMENT_TIME="$(date -u)"
+            DEPLOYMENT_TIME="$(date -u)" \
+            IMAGE_NAME="${{ steps.docker-build.outputs.image_name }}" \
+            IMAGE_TAG="${{ steps.docker-build.outputs.image_tag }}"
         
         echo "✅ Test environment variables configured"
 
