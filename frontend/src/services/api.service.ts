@@ -190,8 +190,7 @@ class ApiClient {
                     const fallbackBase = sameOrigin || 'http://localhost:3001';
                     url = `${fallbackBase}${endpoint}`;
                     config.url = url;
-                    // immediate retry with fallback URL without counting toward attempts
-                    attempt = Math.min(attempt, this.retries - 1);
+                    // immediate retry with fallback URL
                     continue;
                 }
 
