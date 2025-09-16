@@ -377,10 +377,48 @@ jobs:
         echo "✅ Test container deployment completed"
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: ⚙️ Configure Test Environment Variables (수정됨)
+    - name: ⚙️ Configure Test Environment Variables (Enhanced Debug)
       run: |
-        echo "⚙️ Configuring Test App Service environment variables..."
+        echo "⚙️ Configuring Test App Service environment variables with validation..."
         
+        # 환경 변수 유효성 검사
+        echo "🔍 Validating critical secrets..."
+        
+        if [ -z "${{ secrets.TEST_GEMINI_API_KEY }}" ] || [ "${{ secrets.TEST_GEMINI_API_KEY }}" = "-" ]; then
+          echo "❌ ERROR: TEST_GEMINI_API_KEY is missing or empty!"
+          echo "🔧 Using production GEMINI_API_KEY as fallback"
+          GEMINI_KEY="${{ secrets.GEMINI_API_KEY }}"
+        else
+          echo "✅ TEST_GEMINI_API_KEY is configured"
+          GEMINI_KEY="${{ secrets.TEST_GEMINI_API_KEY }}"
+        fi
+        
+        # 데이터베이스 설정 (없으면 production 값 사용)
+        DB_HOST_VALUE="${{ secrets.TEST_DB_HOST }}"
+        if [ -z "$DB_HOST_VALUE" ]; then
+          echo "⚠️ TEST_DB_HOST not found, using production DB"
+          DB_HOST_VALUE="ai-final-team1-db.postgres.database.azure.com"
+        fi
+        
+        DB_USER_VALUE="${{ secrets.TEST_DB_USER }}"
+        if [ -z "$DB_USER_VALUE" ]; then
+          echo "⚠️ TEST_DB_USER not found, using default"
+          DB_USER_VALUE="adminDB"
+        fi
+        
+        DB_PASSWORD_VALUE="${{ secrets.TEST_DB_PASSWORD }}"
+        if [ -z "$DB_PASSWORD_VALUE" ]; then
+          echo "⚠️ TEST_DB_PASSWORD not found, using production value"
+          DB_PASSWORD_VALUE="qwer123!"
+        fi
+        
+        DB_NAME_VALUE="${{ secrets.TEST_DB_NAME }}"
+        if [ -z "$DB_NAME_VALUE" ]; then
+          echo "⚠️ TEST_DB_NAME not found, using default"
+          DB_NAME_VALUE="postgres"
+        fi
+        
+        echo "🚀 Applying environment variables..."
         az webapp config appsettings set \
           --name "${{ env.BACKEND_APP_NAME_TEST }}" \
           --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
@@ -389,29 +427,32 @@ jobs:
             HOST=0.0.0.0 \
             NODE_ENV=test \
             FRONTEND_URL="${{ secrets.TEST_FRONTEND_URL }}" \
-            GEMINI_API_KEY="${{ secrets.TEST_GEMINI_API_KEY }}" \
+            GEMINI_API_KEY="${GEMINI_KEY}" \
             GEMINI_MODEL="gemini-2.5-flash-image-preview" \
-            GEMINI_FIXED_PROMPT="Wear these clothes naturally. If the image contains clothing with a person form or face integrated, extract the clothings design (pattern, texture, silhouette) ONLY, and apply it naturally onto a new, AI-generated model. Do not change the original models face/identity/skin tone IF the original model IS the focus. If no person is in the original image, or if the clothing is the sole focus, generate an AI model wearing the clothes naturally. Preserve natural fit, proportions, lighting, and shadows." \
             GEMINI_TEMPERATURE=0.2 \
             AZURE_OPENAI_ENDPOINT="${{ secrets.TEST_AZURE_OPENAI_ENDPOINT }}" \
             AZURE_OPENAI_KEY="${{ secrets.TEST_AZURE_OPENAI_KEY }}" \
             AZURE_OPENAI_DEPLOYMENT_ID="${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}" \
             AZURE_OPENAI_API_VERSION="2024-12-01-preview" \
-            DB_HOST="${{ secrets.TEST_DB_HOST }}" \
-            DB_USER="${{ secrets.TEST_DB_USER }}" \
-            DB_PASSWORD="${{ secrets.TEST_DB_PASSWORD }}" \
-            DB_NAME="${{ secrets.TEST_DB_NAME }}" \
+            DB_HOST="${DB_HOST_VALUE}" \
+            DB_USER="${DB_USER_VALUE}" \
+            DB_PASSWORD="${DB_PASSWORD_VALUE}" \
+            DB_NAME="${DB_NAME_VALUE}" \
             DB_PORT=5432 \
             DB_SSLMODE=require \
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
             DOCKER_ENABLE_CI=true \
-            DEPLOYMENT_TRIGGER="${{ needs.trigger-validation.outputs.deployment_reason }}" \
-            DEPLOYMENT_COMMIT="${{ github.sha }}" \
-            DEPLOYMENT_TIME="$(date -u)" \
-            IMAGE_NAME="${{ steps.build.outputs.image_name }}" \
-            IMAGE_TAG="${{ steps.build.outputs.image_tag }}"
+            WEBSITES_PORT=3001
         
-        echo "✅ Test environment variables configured"
+        echo "✅ Environment variables configured with fallback values"
+        
+        # 설정된 환경 변수 확인 (민감 정보 제외)
+        echo "🔍 Verifying applied settings..."
+        az webapp config appsettings list \
+          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --query "[?name=='PORT' || name=='NODE_ENV' || name=='WEBSITES_PORT'].{name:name, value:value}" \
+          --output table
 
   # ========== 프론트엔드 빌드 & 배포 ==========
   deploy-frontend:
