@@ -59,16 +59,16 @@ env:
   DIAGNOSTIC_MODE: ${{ github.event.inputs.debug_mode || 'false' }}
 
 jobs:
-# ========== 트리거 조건 체크 ==========
-trigger-validation:
-  runs-on: ubuntu-latest
-  name: 🔍 Validate Trigger Conditions
-  outputs:
-    should_deploy_backend: ${{ steps.conditions.outputs.should_deploy_backend }}
-    should_deploy_frontend: ${{ steps.conditions.outputs.should_deploy_frontend }}
-    deployment_reason: ${{ steps.conditions.outputs.deployment_reason }}
+  # ========== 트리거 조건 체크 ==========
+  trigger-validation:
+    runs-on: ubuntu-latest
+    name: 🔍 Validate Trigger Conditions
+    outputs:
+      should_deploy_backend: ${{ steps.conditions.outputs.should_deploy_backend }}
+      should_deploy_frontend: ${{ steps.conditions.outputs.should_deploy_frontend }}
+      deployment_reason: ${{ steps.conditions.outputs.deployment_reason }}
 
-  steps:
+    steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
       with:
@@ -155,14 +155,14 @@ trigger-validation:
         echo "- Actor: ${{ github.actor }}"
         echo "================================"
 
-# ========== 품질 게이트 ==========
-quality-gate:
-  if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
-  needs: trigger-validation
-  runs-on: ubuntu-latest
-  name: 🔍 Quality Gate
+  # ========== 품질 게이트 ==========
+  quality-gate:
+    if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
+    needs: trigger-validation
+    runs-on: ubuntu-latest
+    name: 🔍 Quality Gate
 
-  steps:
+    steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -219,13 +219,13 @@ quality-gate:
         
         echo "✅ Backend quality check passed"
 
-# ========== PR 전용 검증 ==========
-pr-validation:
-  if: github.event_name == 'pull_request'
-  runs-on: ubuntu-latest
-  name: 🔍 PR Validation (No Deployment)
+  # ========== PR 전용 검증 ==========
+  pr-validation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: 🔍 PR Validation (No Deployment)
 
-  steps:
+    steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -263,23 +263,23 @@ pr-validation:
         
         echo "✅ PR validation completed - no deployment performed"
 
-# ========== 백엔드 빌드 & 배포 (수정됨) ==========
-deploy-backend:
-  if: |
-    github.event_name != 'pull_request' && 
-    (needs.trigger-validation.outputs.should_deploy_backend == 'true' || 
-     github.event.inputs.deploy_backend == 'true' ||
-     github.event_name == 'schedule')
-  needs: [trigger-validation, quality-gate]
-  runs-on: ubuntu-latest
-  name: 🐍 Deploy Backend to Test
-  environment: test
-  outputs:
-    deployment_status: ${{ steps.deployment.outputs.status }}
-    image_name: ${{ steps.build.outputs.image_name }}
-    image_tag: ${{ steps.build.outputs.image_tag }}
+  # ========== 백엔드 빌드 & 배포 (수정됨) ==========
+  deploy-backend:
+    if: |
+      github.event_name != 'pull_request' && 
+      (needs.trigger-validation.outputs.should_deploy_backend == 'true' || 
+       github.event.inputs.deploy_backend == 'true' ||
+       github.event_name == 'schedule')
+    needs: [trigger-validation, quality-gate]
+    runs-on: ubuntu-latest
+    name: 🐍 Deploy Backend to Test
+    environment: test
+    outputs:
+      deployment_status: ${{ steps.deployment.outputs.status }}
+      image_name: ${{ steps.build.outputs.image_name }}
+      image_tag: ${{ steps.build.outputs.image_tag }}
 
-  steps:
+    steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -572,19 +572,19 @@ deploy-backend:
         echo "BACKEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
         echo "BACKEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
 
-# ========== 프론트엔드 빌드 & 배포 ==========
-deploy-frontend:
-  if: |
-    github.event_name != 'pull_request' && 
-    (needs.trigger-validation.outputs.should_deploy_frontend == 'true' || 
-     github.event.inputs.deploy_frontend == 'true' ||
-     github.event_name == 'schedule')
-  needs: [trigger-validation, quality-gate]
-  runs-on: ubuntu-latest
-  name: 🎨 Deploy Frontend to Test
-  environment: test
+  # ========== 프론트엔드 빌드 & 배포 ==========
+  deploy-frontend:
+    if: |
+      github.event_name != 'pull_request' && 
+      (needs.trigger-validation.outputs.should_deploy_frontend == 'true' || 
+       github.event.inputs.deploy_frontend == 'true' ||
+       github.event_name == 'schedule')
+    needs: [trigger-validation, quality-gate]
+    runs-on: ubuntu-latest
+    name: 🎨 Deploy Frontend to Test
+    environment: test
 
-  steps:
+    steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -689,14 +689,14 @@ deploy-frontend:
         echo "FRONTEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
         echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV        
 
-# ========== 헬스체크 & 통합 테스트 ==========
-health-check:
-  needs: [trigger-validation, deploy-backend, deploy-frontend]
-  if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
-  runs-on: ubuntu-latest
-  name: 🏥 Health Check & Integration Tests
+  # ========== 헬스체크 & 통합 테스트 ==========
+  health-check:
+    needs: [trigger-validation, deploy-backend, deploy-frontend]
+    if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
+    runs-on: ubuntu-latest
+    name: 🏥 Health Check & Integration Tests
 
-  steps:
+    steps:
     - name: 🏥 Backend Health Check (Fast Debug Mode)
       if: needs.deploy-backend.result == 'success'
       run: |
@@ -876,14 +876,14 @@ health-check:
 
 
   # ========== 자동 롤백 (완성) ==========
-auto-rollback:
-  needs: health-check
-  if: failure()
-  runs-on: ubuntu-latest
-  name: 🔄 Auto Rollback (Enhanced)
-  environment: test
+  auto-rollback:
+    needs: health-check
+    if: failure()
+    runs-on: ubuntu-latest
+    name: 🔄 Auto Rollback (Enhanced)
+    environment: test
 
-  steps:
+    steps:
     - name: 🔐 Login to Azure (for rollback)
       uses: azure/login@v1
       with:
@@ -1048,15 +1048,15 @@ auto-rollback:
         echo "🔗 [Check App Service Status](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }}/overview)" >> $GITHUB_STEP_SUMMARY
 
 
-# ========== 배포 실패 종합 보고서 ==========
-collect-failure-logs:
-  needs: [trigger-validation, quality-gate, deploy-backend, deploy-frontend, health-check, auto-rollback]
-  if: failure()
-  runs-on: ubuntu-latest
-  name: 📊 Deployment Failure Analysis
-  environment: test
+  # ========== 배포 실패 종합 보고서 ==========
+  collect-failure-logs:
+    needs: [trigger-validation, quality-gate, deploy-backend, deploy-frontend, health-check, auto-rollback]
+    if: failure()
+    runs-on: ubuntu-latest
+    name: 📊 Deployment Failure Analysis
+    environment: test
 
-  steps:
+    steps:
     - name: 🔐 Login to Azure (for log collection)
       uses: azure/login@v1
       with:
