@@ -55,18 +55,20 @@ env:
   PYTHON_VERSION: '3.11'
   BACKEND_APP_NAME_TEST: "7ai-team1-backend-test"
   AZURE_RESOURCE_GROUP_TEST: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  # 🆕 진단 모드 추가
+  DIAGNOSTIC_MODE: ${{ github.event.inputs.debug_mode || 'false' }}
 
 jobs:
-  # ========== 트리거 조건 체크 ==========
-  trigger-validation:
-    runs-on: ubuntu-latest
-    name: 🔍 Validate Trigger Conditions
-    outputs:
-      should_deploy_backend: ${{ steps.conditions.outputs.should_deploy_backend }}
-      should_deploy_frontend: ${{ steps.conditions.outputs.should_deploy_frontend }}
-      deployment_reason: ${{ steps.conditions.outputs.deployment_reason }}
+# ========== 트리거 조건 체크 ==========
+trigger-validation:
+  runs-on: ubuntu-latest
+  name: 🔍 Validate Trigger Conditions
+  outputs:
+    should_deploy_backend: ${{ steps.conditions.outputs.should_deploy_backend }}
+    should_deploy_frontend: ${{ steps.conditions.outputs.should_deploy_frontend }}
+    deployment_reason: ${{ steps.conditions.outputs.deployment_reason }}
 
-    steps:
+  steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
       with:
@@ -153,14 +155,14 @@ jobs:
         echo "- Actor: ${{ github.actor }}"
         echo "================================"
 
-  # ========== 품질 게이트 ==========
-  quality-gate:
-    if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
-    needs: trigger-validation
-    runs-on: ubuntu-latest
-    name: 🔍 Quality Gate
+# ========== 품질 게이트 ==========
+quality-gate:
+  if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
+  needs: trigger-validation
+  runs-on: ubuntu-latest
+  name: 🔍 Quality Gate
 
-    steps:
+  steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -217,13 +219,13 @@ jobs:
         
         echo "✅ Backend quality check passed"
 
-  # ========== PR 전용 검증 ==========
-  pr-validation:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    name: 🔍 PR Validation (No Deployment)
+# ========== PR 전용 검증 ==========
+pr-validation:
+  if: github.event_name == 'pull_request'
+  runs-on: ubuntu-latest
+  name: 🔍 PR Validation (No Deployment)
 
-    steps:
+  steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -261,23 +263,23 @@ jobs:
         
         echo "✅ PR validation completed - no deployment performed"
 
-  # ========== 백엔드 빌드 & 배포 (수정됨) ==========
-  deploy-backend:
-    if: |
-      github.event_name != 'pull_request' && 
-      (needs.trigger-validation.outputs.should_deploy_backend == 'true' || 
-       github.event.inputs.deploy_backend == 'true' ||
-       github.event_name == 'schedule')
-    needs: [trigger-validation, quality-gate]
-    runs-on: ubuntu-latest
-    name: 🐍 Deploy Backend to Test
-    environment: test
-    outputs:
-      deployment_status: ${{ steps.deployment.outputs.status }}
-      image_name: ${{ steps.build.outputs.image_name }}
-      image_tag: ${{ steps.build.outputs.image_tag }}
+# ========== 백엔드 빌드 & 배포 (수정됨) ==========
+deploy-backend:
+  if: |
+    github.event_name != 'pull_request' && 
+    (needs.trigger-validation.outputs.should_deploy_backend == 'true' || 
+     github.event.inputs.deploy_backend == 'true' ||
+     github.event_name == 'schedule')
+  needs: [trigger-validation, quality-gate]
+  runs-on: ubuntu-latest
+  name: 🐍 Deploy Backend to Test
+  environment: test
+  outputs:
+    deployment_status: ${{ steps.deployment.outputs.status }}
+    image_name: ${{ steps.build.outputs.image_name }}
+    image_tag: ${{ steps.build.outputs.image_tag }}
 
-    steps:
+  steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -520,20 +522,69 @@ jobs:
         
         retry_az "$ENV_CMD"
 
+    # 🆕 여기에 추가 (기존 마지막 스텝 다음)
+    - name: 📋 Collect Backend Deployment Logs (On Failure)
+      if: failure()
+      run: |
+        echo "📋 Collecting detailed failure logs for backend deployment..."
+        
+        # 1. Docker 관련 로그 수집
+        echo "🐳 Docker System Information:"
+        docker system df || true
+        docker images --filter "reference=${{ env.REGISTRY }}/backend-fastapi-test" || true
+        docker system events --since 1h --until now || true
+        
+        # 2. Azure App Service 로그 수집
+        echo "🔍 Azure App Service Diagnostics:"
+        az webapp log download \
+          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --log-file "backend-logs.zip" || true
+        
+        # 3. App Service 상태 정보
+        az webapp show \
+          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --query "{state:state, availabilityState:availabilityState, lastModifiedTimeUtc:lastModifiedTimeUtc, defaultHostName:defaultHostName}" \
+          --output table || true
+        
+        # 4. 컨테이너 설정 확인
+        az webapp config container show \
+          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" || true
+        
+        # 5. 최근 배포 히스토리
+        az webapp deployment list \
+          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --query "[0:5].{id:id, status:status, startTime:startTime, endTime:endTime}" \
+          --output table || true
+        
+        # 6. 환경 변수 확인 (민감 정보 제외)
+        echo "⚙️ Environment Variables (non-sensitive):"
+        az webapp config appsettings list \
+          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --query "[?!contains(name,'KEY') && !contains(name,'PASSWORD') && !contains(name,'SECRET')].{name:name, value:value}" \
+          --output table || true
+        
+        # 7. 실패 정보를 환경 변수로 저장
+        echo "BACKEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
+        echo "BACKEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
 
-  # ========== 프론트엔드 빌드 & 배포 ==========
-  deploy-frontend:
-    if: |
-      github.event_name != 'pull_request' && 
-      (needs.trigger-validation.outputs.should_deploy_frontend == 'true' || 
-       github.event.inputs.deploy_frontend == 'true' ||
-       github.event_name == 'schedule')
-    needs: [trigger-validation, quality-gate]
-    runs-on: ubuntu-latest
-    name: 🎨 Deploy Frontend to Test
-    environment: test
+# ========== 프론트엔드 빌드 & 배포 ==========
+deploy-frontend:
+  if: |
+    github.event_name != 'pull_request' && 
+    (needs.trigger-validation.outputs.should_deploy_frontend == 'true' || 
+     github.event.inputs.deploy_frontend == 'true' ||
+     github.event_name == 'schedule')
+  needs: [trigger-validation, quality-gate]
+  runs-on: ubuntu-latest
+  name: 🎨 Deploy Frontend to Test
+  environment: test
 
-    steps:
+  steps:
     - name: 📦 Checkout Code
       uses: actions/checkout@v4
 
@@ -589,14 +640,63 @@ jobs:
         skip_app_build: true
         production_branch: "develop"
 
-  # ========== 헬스체크 & 통합 테스트 ==========
-  health-check:
-    needs: [trigger-validation, deploy-backend, deploy-frontend]
-    if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
-    runs-on: ubuntu-latest
-    name: 🏥 Health Check & Integration Tests
+    # 🆕 여기에 추가 (기존 마지막 스텝 다음)
+    - name: 📋 Collect Frontend Deployment Logs (On Failure)
+      if: failure()
+      run: |
+        echo "📋 Collecting detailed failure logs for frontend deployment..."
+        
+        # 1. 빌드 아티팩트 정보
+        echo "🏗️ Build Artifacts Information:"
+        if [ -d "frontend/dist" ]; then
+          echo "✅ Dist folder exists"
+          ls -la frontend/dist/ || true
+          echo "📦 Build size: $(du -sh frontend/dist/ | cut -f1)"
+          
+          # 주요 파일들 존재 확인
+          [ -f "frontend/dist/index.html" ] && echo "✅ index.html found" || echo "❌ index.html missing"
+          [ -d "frontend/dist/assets" ] && echo "✅ assets folder found" || echo "❌ assets folder missing"
+        else
+          echo "❌ Dist folder not found"
+        fi
+        
+        # 2. Node.js 환경 정보
+        echo "🟢 Node.js Environment:"
+        node --version || true
+        npm --version || true
+        npm list --depth=0 --prefix frontend || true
+        
+        # 3. Vite 빌드 로그 (이미 출력된 것 재확인)
+        echo "⚡ Vite Build Analysis:"
+        if [ -f "frontend/dist/.vite/manifest.json" ]; then
+          echo "✅ Vite manifest found"
+          cat frontend/dist/.vite/manifest.json || true
+        fi
+        
+        # 4. 빌드 환경 변수 확인
+        echo "🔍 Build Environment Variables:"
+        echo "VITE_API_URL: ${VITE_API_URL:-not set}"
+        echo "VITE_NODE_ENV: ${VITE_NODE_ENV:-not set}"
+        echo "NODE_ENV: ${NODE_ENV:-not set}"
+        
+        # 5. TypeScript 컴파일 재확인
+        echo "📝 TypeScript Check:"
+        cd frontend
+        npx tsc --noEmit --skipLibCheck || echo "⚠️ TypeScript issues detected"
+        cd ..
+        
+        # 6. 실패 정보 저장
+        echo "FRONTEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
+        echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV        
 
-    steps:
+# ========== 헬스체크 & 통합 테스트 ==========
+health-check:
+  needs: [trigger-validation, deploy-backend, deploy-frontend]
+  if: always() && (needs.deploy-backend.result == 'success' || needs.deploy-frontend.result == 'success')
+  runs-on: ubuntu-latest
+  name: 🏥 Health Check & Integration Tests
+
+  steps:
     - name: 🏥 Backend Health Check (Fast Debug Mode)
       if: needs.deploy-backend.result == 'success'
       run: |
@@ -776,14 +876,14 @@ jobs:
 
 
   # ========== 자동 롤백 (완성) ==========
-  auto-rollback:
-    needs: health-check
-    if: failure()
-    runs-on: ubuntu-latest
-    name: 🔄 Auto Rollback (Enhanced)
-    environment: test
+auto-rollback:
+  needs: health-check
+  if: failure()
+  runs-on: ubuntu-latest
+  name: 🔄 Auto Rollback (Enhanced)
+  environment: test
 
-    steps:
+  steps:
     - name: 🔐 Login to Azure (for rollback)
       uses: azure/login@v1
       with:
@@ -946,3 +1046,137 @@ jobs:
         
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "🔗 [Check App Service Status](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }}/overview)" >> $GITHUB_STEP_SUMMARY
+
+
+# ========== 배포 실패 종합 보고서 ==========
+collect-failure-logs:
+  needs: [trigger-validation, quality-gate, deploy-backend, deploy-frontend, health-check, auto-rollback]
+  if: failure()
+  runs-on: ubuntu-latest
+  name: 📊 Deployment Failure Analysis
+  environment: test
+
+  steps:
+    - name: 🔐 Login to Azure (for log collection)
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+            "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+          }
+
+    - name: 📊 Generate Comprehensive Failure Report
+      run: |
+        echo "## 🚨 Deployment Failure Analysis Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 실패한 Job들 분석
+        echo "### 📋 Failed Jobs Analysis" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status | Notes |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        
+        # 각 Job 상태 확인
+        [ "${{ needs.quality-gate.result }}" = "failure" ] && echo "| Quality Gate | ❌ Failed | Code quality issues detected |" >> $GITHUB_STEP_SUMMARY
+        [ "${{ needs.deploy-backend.result }}" = "failure" ] && echo "| Backend Deploy | ❌ Failed | Docker build or Azure deployment failed |" >> $GITHUB_STEP_SUMMARY
+        [ "${{ needs.deploy-frontend.result }}" = "failure" ] && echo "| Frontend Deploy | ❌ Failed | Build or Static Web App deployment failed |" >> $GITHUB_STEP_SUMMARY
+        [ "${{ needs.health-check.result }}" = "failure" ] && echo "| Health Check | ❌ Failed | Service health verification failed |" >> $GITHUB_STEP_SUMMARY
+        [ "${{ needs.auto-rollback.result }}" = "failure" ] && echo "| Auto Rollback | ❌ Failed | Rollback process encountered issues |" >> $GITHUB_STEP_SUMMARY
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 배포 컨텍스트 정보
+        echo "### 🔍 Deployment Context" >> $GITHUB_STEP_SUMMARY
+        echo "- **Trigger:** ${{ needs.trigger-validation.outputs.deployment_reason }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 실패 시점 정보
+        if [ -n "${{ env.BACKEND_FAILURE_TIME }}" ] || [ -n "${{ env.FRONTEND_FAILURE_TIME }}" ]; then
+          echo "### ⏰ Failure Timeline" >> $GITHUB_STEP_SUMMARY
+          [ -n "${{ env.BACKEND_FAILURE_TIME }}" ] && echo "- **Backend Failed:** ${{ env.BACKEND_FAILURE_TIME }}" >> $GITHUB_STEP_SUMMARY
+          [ -n "${{ env.FRONTEND_FAILURE_TIME }}" ] && echo "- **Frontend Failed:** ${{ env.FRONTEND_FAILURE_TIME }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # 추천 액션
+        echo "### 🔧 Recommended Actions" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.deploy-backend.result }}" = "failure" ]; then
+          echo "#### Backend Issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Check Docker build logs above" >> $GITHUB_STEP_SUMMARY
+          echo "- Verify ACR connectivity and permissions" >> $GITHUB_STEP_SUMMARY
+          echo "- Review App Service configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- Check environment variables and secrets" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.deploy-frontend.result }}" = "failure" ]; then
+          echo "#### Frontend Issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Review TypeScript compilation errors" >> $GITHUB_STEP_SUMMARY
+          echo "- Check Vite build configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- Verify Static Web App token validity" >> $GITHUB_STEP_SUMMARY
+          echo "- Review build environment variables" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.health-check.result }}" = "failure" ]; then
+          echo "#### Health Check Issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Service may be running but not responding correctly" >> $GITHUB_STEP_SUMMARY
+          echo "- Check application logs in Azure Portal" >> $GITHUB_STEP_SUMMARY
+          echo "- Verify API endpoints and CORS settings" >> $GITHUB_STEP_SUMMARY
+          echo "- Consider manual health verification" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 유용한 링크들
+        echo "### 🔗 Quick Access Links" >> $GITHUB_STEP_SUMMARY
+        echo "- 🏥 [Backend App Service](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }})" >> $GITHUB_STEP_SUMMARY
+        echo "- 📊 [App Service Logs](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }}/logStream)" >> $GITHUB_STEP_SUMMARY
+        echo "- 🐳 [Container Registry](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.ContainerRegistry/registries)" >> $GITHUB_STEP_SUMMARY
+        echo "- 🎨 [Static Web Apps](https://portal.azure.com/#view/WebsitesExtension/StaticWebAppsLandingBlade)" >> $GITHUB_STEP_SUMMARY
+
+    - name: 🔍 Deep Dive Diagnostics
+      run: |
+        echo "🔍 Performing deep dive diagnostics..."
+        
+        # Azure 리소스 상태 종합 확인
+        echo "🏥 Azure Resources Health Check:"
+        
+        # App Service 상태
+        echo "📱 App Service Status:"
+        az webapp list \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --query "[].{Name:name, State:state, Location:location, DefaultHostName:defaultHostName}" \
+          --output table || true
+        
+        # Container Registry 상태
+        echo "🐳 Container Registry Status:"
+        az acr list \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --query "[].{Name:name, LoginServer:loginServer, Status:status}" \
+          --output table || true
+        
+        # 최근 Activity Log 확인
+        echo "📋 Recent Activity Logs (Last 2 hours):"
+        az monitor activity-log list \
+          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
+          --start-time "$(date -d '2 hours ago' -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --query "[?level=='Error' || level=='Warning'].{Time:eventTimestamp, Level:level, Operation:operationName.localizedValue, Status:status.localizedValue}" \
+          --output table || true
+
+    - name: 📤 Upload Failure Artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: failure-logs-${{ github.sha }}
+        path: |
+          backend-logs.zip
+          *.log
+        retention-days: 30
