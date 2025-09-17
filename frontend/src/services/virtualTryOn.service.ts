@@ -1,9 +1,12 @@
-import { apiClient, ApiError } from './api.service';
+﻿import { apiClient, ApiError } from './api.service';
 import {
     VirtualTryOnRequest,
     VirtualTryOnResponse,
     RecommendationRequest,
-    RecommendationResponse
+    RecommendationResponse,
+    VideoGenerationRequest,
+    VideoGenerationStartResponse,
+    VideoGenerationStatusResponse
 } from '../types';
 
 /**
@@ -139,6 +142,44 @@ export class VirtualTryOnService {
      */
     isLoading(): boolean {
         return this.isGenerating() || this.isLoadingRecommendations();
+    }
+
+    /**
+     * Start Vertex AI video generation based on the current fitting image
+     */
+    async startVideoGeneration(request: VideoGenerationRequest): Promise<VideoGenerationStartResponse> {
+        try {
+            const response = await apiClient.post<VideoGenerationStartResponse>(
+                '/api/try-on/video',
+                request,
+                { timeout: 90000 }
+            );
+            return response;
+        } catch (error) {
+            if (error instanceof ApiError) {
+                throw error;
+            }
+            throw new ApiError('Failed to start video generation', 500, 'VIDEO_GENERATION_FAILED');
+        }
+    }
+
+    /**
+     * Fetch status for video generation job
+     */
+    async fetchVideoStatus(operationName: string): Promise<VideoGenerationStatusResponse> {
+        try {
+            const response = await apiClient.post<VideoGenerationStatusResponse>(
+                '/api/try-on/video/status',
+                { operationName },
+                { timeout: 20000 }
+            );
+            return response;
+        } catch (error) {
+            if (error instanceof ApiError) {
+                throw error;
+            }
+            throw new ApiError('Failed to fetch video generation status', 500, 'VIDEO_STATUS_FAILED');
+        }
     }
 
     /** Evaluate outfits (result images) with LLM */

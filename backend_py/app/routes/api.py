@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+﻿from fastapi import APIRouter
 
 
 router = APIRouter(prefix="/api")
@@ -13,6 +13,6 @@ def api_info():
             "health": "/health",
             "generate": "/api/generate",
             "recommend": "/api/recommend",
+            "tryOnVideo": "/api/try-on/video",
         },
     }
-

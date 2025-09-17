@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../../services/api.service';
 import { imageProxy } from '../../../services/imageProxy.service';
 import { likesService } from '../../../services/likes.service';
@@ -17,9 +17,15 @@ import { ModelPicker } from './ModelPicker';
 import { ResultDisplay } from './ResultDisplay';
 import { SnsShareDialog } from './SnsShareDialog';
 import { TryOnHistory } from './TryOnHistory';
+// Simple feature-flag helper (treats undefined as ON)
+const isFeatureEnabled = (value: unknown): boolean => {
+  if (value === undefined || value === null) return true;
+  const normalized = String(value).trim().toLowerCase();
+  return !(normalized === '0' || normalized === 'false' || normalized === 'off');
+};
 
 export const VirtualTryOnUI: React.FC = () => {
-    // 상태를 localStorage에서 복원
+    // ?곹깭瑜?localStorage?먯꽌 蹂듭썝
     const [personImage, setPersonImage] = useState<UploadedImage | null>(null);
     const [topImage, setTopImage] = useState<UploadedImage | null>(null);
     const [pantsImage, setPantsImage] = useState<UploadedImage | null>(null);
@@ -62,6 +68,15 @@ export const VirtualTryOnUI: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const { addToast } = useToast();
     const [shareOpen, setShareOpen] = useState<boolean>(false);
+// Video generation state
+const [videoPrompt, setVideoPrompt] = useState<string>('Create an 8-second lookbook video for this outfit.');
+const [videoStatus, setVideoStatus] = useState<'idle' | 'starting' | 'polling' | 'completed' | 'error'>('idle');
+const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
+const [videoError, setVideoError] = useState<string | null>(null);
+const [videoUrls, setVideoUrls] = useState<string[]>([]);
+const videoPollTimeoutRef = useRef<number | null>(null);
+const shareFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_SHARE);
+const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_VIDEO);
     // UI highlight states
     const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
     const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
@@ -69,10 +84,10 @@ export const VirtualTryOnUI: React.FC = () => {
     const [selectedShoesId, setSelectedShoesId] = useState<string | null>(null);
     const [selectedOuterId, setSelectedOuterId] = useState<string | null>(null);
     
-    // 호버 오버레이 상태
+    // ?몃쾭 ?ㅻ쾭?덉씠 ?곹깭
     const [hoveredSlot, setHoveredSlot] = useState<'outer' | 'top' | 'pants' | 'shoes' | null>(null);
     
-    // 원본 상품 데이터 저장
+    // ?먮낯 ?곹뭹 ?곗씠?????
     const [originalItems, setOriginalItems] = useState<{
         outer?: RecommendationItem;
         top?: RecommendationItem;
@@ -92,6 +107,78 @@ export const VirtualTryOnUI: React.FC = () => {
         const found = outs.find(o => o.image === generatedImage);
         return (found && typeof found.evaluation?.score === 'number') ? found.evaluation!.score : null;
     }, [generatedImage, historyTick]);
+    // Video: polling helpers and lifecycle
+    const clearVideoPoll = useCallback(() => {
+        if (videoPollTimeoutRef.current !== null) {
+            window.clearTimeout(videoPollTimeoutRef.current);
+            videoPollTimeoutRef.current = null;
+        }
+    }, []);
+
+    const pollVideoStatus = useCallback((operationName: string, attempt: number = 0) => {
+        const execute = async () => {
+            try {
+                const status = await virtualTryOnService.fetchVideoStatus(operationName);
+                if (status.done) {
+                    clearVideoPoll();
+                    setVideoStatus('completed');
+                    setVideoUrls(status.videoUris ?? []);
+                    return;
+                }
+                setVideoStatus('polling');
+                const delay = Math.min(2000 + attempt * 500, 6000);
+                videoPollTimeoutRef.current = window.setTimeout(() => {
+                    pollVideoStatus(operationName, attempt + 1);
+                }, delay);
+            } catch (err) {
+                clearVideoPoll();
+                setVideoStatus('error');
+                setVideoError(err instanceof Error ? err.message : 'Failed to fetch video status.');
+            }
+        };
+        void execute();
+    }, [clearVideoPoll]);
+
+    useEffect(() => () => { clearVideoPoll(); }, [clearVideoPoll]);
+
+    useEffect(() => {
+        if (!generatedImage) {
+            clearVideoPoll();
+            setVideoStatus('idle');
+            setVideoOperationName(null);
+            setVideoError(null);
+            setVideoUrls([]);
+        }
+    }, [generatedImage, clearVideoPoll]);
+
+    const handleStartVideoGeneration = useCallback(async () => {
+        if (!generatedImage) {
+            addToast(toast.info('Generate a try-on image first.', undefined, { duration: 1600 }));
+            return;
+        }
+        const trimmed = videoPrompt.trim();
+        if (!trimmed) {
+            addToast(toast.info('Enter a prompt for the video.', undefined, { duration: 1600 }));
+            return;
+        }
+        clearVideoPoll();
+        setVideoError(null);
+        setVideoUrls([]);
+        setVideoOperationName(null);
+        setVideoStatus('starting');
+        try {
+            const res = await virtualTryOnService.startVideoGeneration({ prompt: trimmed, imageData: generatedImage });
+            const op = res.operationName;
+            setVideoOperationName(op);
+            setVideoStatus('polling');
+            addToast(toast.success('Video generation started. Hang tight!', undefined, { duration: 1800 }));
+            videoPollTimeoutRef.current = window.setTimeout(() => { pollVideoStatus(op); }, 1500);
+        } catch (err) {
+            clearVideoPoll();
+            setVideoError(err instanceof Error ? err.message : 'Video generation failed. Please try again later.');
+            addToast(toast.error('Failed to add item to the wardrobe'));
+        }
+    }, [generatedImage, videoPrompt, clearVideoPoll, pollVideoStatus, addToast]);
 
     // Likes feed for quick fitting
     const [likedItems, setLikedItems] = useState<RecommendationItem[]>([]);
@@ -103,13 +190,13 @@ export const VirtualTryOnUI: React.FC = () => {
         return () => { unsub(); window.removeEventListener('storage', onStorage); };
     }, []);
 
-    // 이미지 복원 비활성화 (용량 문제로 인해)
+    // ?대?吏 蹂듭썝 鍮꾪솢?깊솕 (?⑸웾 臾몄젣濡??명빐)
 
 
-    // 상태를 localStorage에 저장 (이미지 제외, 라벨만 저장)
+    // ?곹깭瑜?localStorage?????(?대?吏 ?쒖쇅, ?쇰꺼留????
     useEffect(() => {
         if (personImage) {
-            // 이미지는 저장하지 않고 라벨만 저장
+            // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
             localStorage.setItem('virtualTryOn_personSource', personSource);
         } else {
             localStorage.removeItem('virtualTryOn_personImage');
@@ -117,7 +204,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [personImage, personSource]);
 
     useEffect(() => {
-        // 이미지는 저장하지 않고 라벨만 저장
+        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
         if (topLabel) {
             localStorage.setItem('virtualTryOn_topLabel', topLabel);
         } else {
@@ -126,7 +213,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [topLabel]);
 
     useEffect(() => {
-        // 이미지는 저장하지 않고 라벨만 저장
+        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
         if (pantsLabel) {
             localStorage.setItem('virtualTryOn_pantsLabel', pantsLabel);
         } else {
@@ -135,7 +222,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [pantsLabel]);
 
     useEffect(() => {
-        // 이미지는 저장하지 않고 라벨만 저장
+        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
         if (shoesLabel) {
             localStorage.setItem('virtualTryOn_shoesLabel', shoesLabel);
         } else {
@@ -144,7 +231,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [shoesLabel]);
 
     useEffect(() => {
-        // 이미지는 저장하지 않고 라벨만 저장
+        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
         if (outerLabel) {
             localStorage.setItem('virtualTryOn_outerLabel', outerLabel);
         } else {
@@ -153,17 +240,17 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [outerLabel]);
 
 
-    // 상품 카드에서 전달된 상품을 자동으로 칸에 넣기
+    // ?곹뭹 移대뱶?먯꽌 ?꾨떖???곹뭹???먮룞?쇰줈 移몄뿉 ?ｊ린
     const hasProcessedRef = useRef(false);
     
     useEffect(() => {
         const handlePendingItem = async () => {
             
             try {
-                // 여러 아이템 처리 (새로운 방식)
+                // ?щ윭 ?꾩씠??泥섎━ (?덈줈??諛⑹떇)
                 const pendingItemsStr = localStorage.getItem('app:pendingVirtualFittingItems');
                 if (pendingItemsStr) {
-                    console.log('여러 아이템 처리 시작');
+                    console.log('?щ윭 ?꾩씠??泥섎━ ?쒖옉');
                     const pendingItems = JSON.parse(pendingItemsStr);
                     hasProcessedRef.current = true;
 
@@ -171,28 +258,28 @@ export const VirtualTryOnUI: React.FC = () => {
                         await addCatalogItemToSlot(item);
                     }
 
-                    addToast(toast.success(`${pendingItems.length}개 아이템을 자동으로 담았어요`, undefined, { duration: 2000 }));
+                    addToast(toast.success(`${pendingItems.length} items queued for fitting`, undefined, { duration: 2000 }));
                     localStorage.removeItem('app:pendingVirtualFittingItems');
                     return;
                 }
 
-                // 단일 아이템 처리 (기존 방식)
+                // ?⑥씪 ?꾩씠??泥섎━ (湲곗〈 諛⑹떇)
                 const pendingItemStr = localStorage.getItem('app:pendingVirtualFittingItem');
                 if (!pendingItemStr) return;
 
                 const pendingItem = JSON.parse(pendingItemStr);
 
-                // 5분 이내의 상품만 처리 (오래된 데이터 방지)
+                // 5遺??대궡???곹뭹留?泥섎━ (?ㅻ옒???곗씠??諛⑹?)
                 if (Date.now() - pendingItem.timestamp > 5 * 60 * 1000) {
                     localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
-                // 카테고리에 따라 적절한 칸에 넣기
+                // 移댄뀒怨좊━???곕씪 ?곸젅??移몄뿉 ?ｊ린
                 const cat = (pendingItem.category || '').toLowerCase();
                 
                 
-                // 백엔드와 동일한 카테고리 매핑 로직 사용
+                // 諛깆뿏?쒖? ?숈씪??移댄뀒怨좊━ 留ㅽ븨 濡쒖쭅 ?ъ슜
                 const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
                     (cat === 'outer') ? 'outer'
                     : (cat === 'top') ? 'top'
@@ -200,53 +287,53 @@ export const VirtualTryOnUI: React.FC = () => {
                     : (cat === 'shoes') ? 'shoes'
                     : null;
 
-                console.log('결정된 슬롯:', slot);
+                console.log('寃곗젙???щ’:', slot);
                 if (!slot) {
-                    console.log('카테고리를 인식할 수 없음:', cat);
+                    console.log('移댄뀒怨좊━瑜??몄떇?????놁쓬:', cat);
                     localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
                 if (!pendingItem.imageUrl) {
-                    console.log('이미지 URL이 없음');
+                    console.log('?대?吏 URL???놁쓬');
                     localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
-                // 처리 시작 플래그 설정
+                // 泥섎━ ?쒖옉 ?뚮옒洹??ㅼ젙
                 hasProcessedRef.current = true;
 
-                console.log('이미지 변환 시작');
-                // 이미지를 UploadedImage 형식으로 변환
+                console.log('?대?吏 蹂???쒖옉');
+                // ?대?吏瑜?UploadedImage ?뺤떇?쇰줈 蹂??
                 const uploadedImage = await imageProxy.toUploadedImage(pendingItem.imageUrl, pendingItem.title);
-                console.log('이미지 변환 완료:', uploadedImage);
+                console.log('?대?吏 蹂???꾨즺:', uploadedImage);
                 
-                // addCatalogItemToSlot을 사용해서 원본 데이터도 함께 저장
-                console.log('addCatalogItemToSlot 호출 시작, 슬롯:', slot);
+                // addCatalogItemToSlot???ъ슜?댁꽌 ?먮낯 ?곗씠?곕룄 ?④퍡 ???
+                console.log('addCatalogItemToSlot ?몄텧 ?쒖옉, ?щ’:', slot);
                 await addCatalogItemToSlot(pendingItem);
 
-                addToast(toast.success(`자동으로 담았어요: ${pendingItem.title}`, undefined, { duration: 2000 }));
+                addToast(toast.success(`Queued for fitting: ${pendingItem.title}`, undefined, { duration: 2000 }));
                 
-                // 처리 완료 후 localStorage에서 제거
+                // 泥섎━ ?꾨즺 ??localStorage?먯꽌 ?쒓굅
                 localStorage.removeItem('app:pendingVirtualFittingItem');
-                console.log('상품이 자동으로 칸에 들어갔습니다:', slot);
+                console.log('?곹뭹???먮룞?쇰줈 移몄뿉 ?ㅼ뼱媛붿뒿?덈떎:', slot);
 
             } catch (error) {
-                console.error('자동 상품 추가 실패:', error);
+                console.error('?먮룞 ?곹뭹 異붽? ?ㅽ뙣:', error);
                 localStorage.removeItem('app:pendingVirtualFittingItem');
-                hasProcessedRef.current = false; // 실패 시 플래그 리셋
+                hasProcessedRef.current = false; // ?ㅽ뙣 ???뚮옒洹?由ъ뀑
             }
         };
 
         handlePendingItem();
         
-        // 스토리지 정리 실행
+        // ?ㅽ넗由ъ? ?뺣━ ?ㅽ뻾
         manageStorageSpace();
         
         return () => {
             // cleanup
         };
-    }, []); // 의존성 배열을 빈 배열로 변경
+    }, []); // ?섏〈??諛곗뿴??鍮?諛곗뿴濡?蹂寃?
 
     // Recommendation filter options
     const [minPrice, setMinPrice] = useState<string>('');
@@ -259,7 +346,7 @@ export const VirtualTryOnUI: React.FC = () => {
     const fetchRandom = useCallback(async (limit: number = 12) => {
         try {
             setIsLoadingRandom(true);
-            const per = Math.max(1, Math.floor(limit / 4)); // 4개 카테고리로 나누기
+            const per = Math.max(1, Math.floor(limit / 4)); // 4媛?移댄뀒怨좊━濡??섎늻湲?
             const [tops, pants, shoes, outers] = await Promise.all([
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=top`).catch(() => [] as RecommendationItem[]),
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=pants`).catch(() => [] as RecommendationItem[]),
@@ -285,7 +372,7 @@ export const VirtualTryOnUI: React.FC = () => {
     });
 
     // helpers for history
-    // toDataUrl 함수는 더 이상 사용하지 않음 (이미지 저장 안함)
+    // toDataUrl ?⑥닔?????댁긽 ?ъ슜?섏? ?딆쓬 (?대?吏 ????덊븿)
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
     const recordInput = (
         overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
@@ -295,7 +382,7 @@ export const VirtualTryOnUI: React.FC = () => {
         productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         products?: Partial<{ top: RecommendationItem; pants: RecommendationItem; shoes: RecommendationItem; outer: RecommendationItem }>,
     ) => {
-        // 이미지 변수들은 더 이상 사용하지 않음 (용량 절약)
+        // ?대?吏 蹂?섎뱾? ???댁긽 ?ъ슜?섏? ?딆쓬 (?⑸웾 ?덉빟)
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
         if (src === 'model' && overrides && 'person' in overrides) return;
@@ -307,12 +394,12 @@ export const VirtualTryOnUI: React.FC = () => {
             pantsLabel: labels?.pants ?? (mode === 'delta' ? undefined : pantsLabel),
             shoesLabel: labels?.shoes ?? (mode === 'delta' ? undefined : shoesLabel),
             outerLabel: labels?.outer ?? (mode === 'delta' ? undefined : outerLabel),
-            // 이미지는 저장하지 않음 (용량 절약)
+            // ?대?吏????ν븯吏 ?딆쓬 (?⑸웾 ?덉빟)
             topProductId: productIds?.top,
             pantsProductId: productIds?.pants,
             shoesProductId: productIds?.shoes,
             outerProductId: productIds?.outer,
-            // 상품 데이터도 저장 (이미지 URL 포함)
+            // ?곹뭹 ?곗씠?곕룄 ???(?대?吏 URL ?ы븿)
             topProduct: products?.top ?? originalItems.top,
             pantsProduct: products?.pants ?? originalItems.pants,
             shoesProduct: products?.shoes ?? originalItems.shoes,
@@ -326,7 +413,7 @@ export const VirtualTryOnUI: React.FC = () => {
         const allowWithoutPerson = !personImage && hasAllClothing;
         const allowWithPerson = !!personImage && hasAnyClothing;
         if (!(allowWithoutPerson || allowWithPerson)) {
-            setError("인물 사진 또는 상/하의/신발 3종 모두를 제공해 주세요.");
+            setError("?몃Ъ ?ъ쭊 ?먮뒗 ???섏쓽/?좊컻 3醫?紐⑤몢瑜??쒓났??二쇱꽭??");
             return;
         }
 
@@ -392,7 +479,7 @@ export const VirtualTryOnUI: React.FC = () => {
     const addCatalogItemToSlot = useCallback(async (item: RecommendationItem) => {
         const cat = (item.category || '').toLowerCase();
         
-        // 백엔드와 동일한 카테고리 매핑 로직 사용
+        // 諛깆뿏?쒖? ?숈씪??移댄뀒怨좊━ 留ㅽ븨 濡쒖쭅 ?ъ슜
         const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
             (cat === 'outer') ? 'outer'
             : (cat === 'top') ? 'top'
@@ -401,13 +488,13 @@ export const VirtualTryOnUI: React.FC = () => {
             : null;
         if (!slot) return;
         if (!item.imageUrl) {
-            addToast(toast.error('이미지 URL이 없어 담을 수 없어요'));
+            addToast(toast.error('Image URL is missing.'));
             return;
         }
         try {
             const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
             
-            // 원본 상품 데이터 저장
+            // ?먮낯 ?곹뭹 ?곗씠?????
             setOriginalItems(prev => ({
                 ...prev,
                 [slot]: item
@@ -417,19 +504,18 @@ export const VirtualTryOnUI: React.FC = () => {
             if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }, { pants: item }); }
             if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }, { shoes: item }); }
             if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }, { outer: item }); }
-            addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
+            addToast(toast.success(`Added ${item.title}. Try it on from the wardrobe panel!`, undefined, { duration: 1800 }));
         } catch (e: any) {
-            addToast(toast.error('가져오기에 실패했어요', e?.message));
+            addToast(toast.error('Failed to add item to the wardrobe'));
         }
     }, [addToast, setTopImage, setPantsImage, setShoesImage, setOuterImage, setTopLabel, setPantsLabel, setShoesLabel, setOuterLabel, setSelectedOuterId, setOriginalItems]);
-
     // Helper wrapper: force slot without relying on category text
     const addToSlotForced = useCallback((item: RecommendationItem, slot: 'top'|'pants'|'shoes'|'outer') => {
         // Reuse existing logic by overriding category for mapping
         return addCatalogItemToSlot({ ...(item as any), category: slot } as any);
     }, [addCatalogItemToSlot]);
 
-    // 의류 아이템 오버레이 핸들러
+    // ?섎쪟 ?꾩씠???ㅻ쾭?덉씠 ?몃뱾??
     const handleClothingLike = useCallback((slot: 'outer' | 'top' | 'pants' | 'shoes') => {
         const label = slot === 'outer' ? outerLabel : 
                      slot === 'top' ? topLabel : 
@@ -441,9 +527,9 @@ export const VirtualTryOnUI: React.FC = () => {
                              slot === 'pants' ? selectedPantsId :
                              selectedShoesId;
             
-            // 상품 ID가 있으면 (카탈로그에서 가져온 상품) 토글
+            // ?곹뭹 ID媛 ?덉쑝硫?(移댄깉濡쒓렇?먯꽌 媛?몄삩 ?곹뭹) ?좉?
             if (productId) {
-                // 원본 상품 데이터 사용
+                // ?먮낯 ?곹뭹 ?곗씠???ъ슜
                 const originalItem = originalItems[slot];
                        const item: RecommendationItem = originalItem ? {
                            ...originalItem,
@@ -466,14 +552,14 @@ export const VirtualTryOnUI: React.FC = () => {
                 
                 const wasAdded = likesService.toggle(item);
                 if (wasAdded) {
-                    addToast(toast.success('좋아요에 추가되었습니다', label, { duration: 1500 }));
+                    addToast(toast.success('Added to likes', label, { duration: 1500 }));
                 } else {
-                    addToast(toast.success('좋아요가 취소되었습니다', label, { duration: 1500 }));
+                    addToast(toast.success('Removed from likes', label, { duration: 1500 }));
                 }
             } else {
-                       // 업로드된 이미지도 토글 (고정 ID 사용)
+                       // ?낅줈?쒕맂 ?대?吏???좉? (怨좎젙 ID ?ъ슜)
                        const item: RecommendationItem = {
-                           id: `uploaded-${slot}`,
+                           id: 'uploaded-' + slot,
                            title: label,
                            price: 0,
                            imageUrl: slot === 'outer' ? (outerImage?.previewUrl || '') :
@@ -486,9 +572,9 @@ export const VirtualTryOnUI: React.FC = () => {
                 
                 const wasAdded = likesService.toggle(item);
                 if (wasAdded) {
-                    addToast(toast.success('좋아요에 추가되었습니다', label, { duration: 1500 }));
+                    addToast(toast.success('Added to likes', label, { duration: 1500 }));
                 } else {
-                    addToast(toast.success('좋아요가 취소되었습니다', label, { duration: 1500 }));
+                    addToast(toast.success('Removed from likes', label, { duration: 1500 }));
                 }
             }
         }
@@ -500,16 +586,16 @@ export const VirtualTryOnUI: React.FC = () => {
                      slot === 'pants' ? pantsLabel : shoesLabel;
         
         if (label) {
-            // 원본 상품 데이터에서 URL 가져오기
+            // ?먮낯 ?곹뭹 ?곗씠?곗뿉??URL 媛?몄삤湲?
             const originalItem = originalItems[slot];
             if (originalItem?.productUrl) {
-                // 실제 상품 URL이 있으면 해당 페이지로 이동
+                // ?ㅼ젣 ?곹뭹 URL???덉쑝硫??대떦 ?섏씠吏濡??대룞
                 window.open(originalItem.productUrl, '_blank');
-                addToast(toast.success('상품 페이지로 이동', originalItem.title, { duration: 2000 }));
+                addToast(toast.success('?곹뭹 ?섏씠吏濡??대룞', originalItem.title, { duration: 2000 }));
             } else {
-                // 업로드된 이미지이거나 URL이 없으면 쇼핑 페이지로 이동
+                // ?낅줈?쒕맂 ?대?吏?닿굅??URL???놁쑝硫??쇳븨 ?섏씠吏濡??대룞
                 window.open('https://www.musinsa.com', '_blank');
-                addToast(toast.info('쇼핑 페이지로 이동', '무신사에서 비슷한 상품을 찾아보세요', { duration: 2000 }));
+                addToast(toast.info('Opening shopping page', 'Check Musinsa for similar items.', { duration: 2000 }));
             }
         }
     }, [outerLabel, topLabel, pantsLabel, shoesLabel, originalItems, addToast]);
@@ -523,7 +609,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         {/* Input Section */}
                         <div className="lg:col-span-8 order-1 bg-white p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* 왼쪽 영역: Person + AI Sample */}
+                                {/* ?쇱そ ?곸뿭: Person + AI Sample */}
                                 <div className="md:col-span-1 space-y-2 border-r border-gray-200 pr-4">
                                     <ImageUploader
                                         id="person-image"
@@ -541,10 +627,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                     />
                                 </div>
                                 
-                                {/* 오른쪽 영역: 의류 4개 */}
+                                {/* ?ㅻⅨ履??곸뿭: ?섎쪟 4媛?*/}
                                 <div className="md:col-span-2 pl-4">
                                     <div className="flex justify-between items-center mb-2">
-                                        <h3 className="text-sm font-medium text-gray-700">의류 아이템</h3>
+                                        <h3 className="text-sm font-medium text-gray-700">?섎쪟 ?꾩씠??</h3>
                                         <Button 
                                             size="sm" 
                                             variant="outline" 
@@ -562,11 +648,11 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 setSelectedPantsId(null);
                                                 setSelectedShoesId(null);
                                                 setOriginalItems({});
-                                                addToast(toast.success('모든 의류가 비워졌습니다', undefined, { duration: 1500 }));
+                                                addToast(toast.success('紐⑤뱺 ?섎쪟媛 鍮꾩썙議뚯뒿?덈떎', undefined, { duration: 1500 }));
                                             }}
                                             disabled={!outerImage && !topImage && !pantsImage && !shoesImage}
                                         >
-                                            전체 비우기
+                                            ?꾩껜 鍮꾩슦湲?
                                         </Button>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
@@ -578,7 +664,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 id="outer-image"
                                                 title="Outer"
                                                 description="Upload a photo of outerwear."
-                                                onImageUpload={(img) => { setOuterImage(img); setOuterLabel(img ? '업로드' : undefined); recordInput({ outer: img }, { outer: img ? '업로드' : undefined }, 'delta'); }}
+                                                onImageUpload={(img) => {
+                                                    setOuterImage(img);
+                                                    const label = img ? 'Uploaded outer' : undefined;
+                                                    setOuterLabel(label);
+                                                    recordInput({ outer: img }, { outer: label }, 'delta');
+                                                }}
                                                 externalImage={outerImage}
                                                 active={!!outerImage}
                                                 overlay={
@@ -606,7 +697,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 id="top-image"
                                                 title="Top"
                                                 description="Upload a photo of a top."
-                                                onImageUpload={(img) => { setTopImage(img); setTopLabel(img ? '업로드' : undefined); recordInput({ top: img }, { top: img ? '업로드' : undefined }, 'delta'); }}
+                                                onImageUpload={(img) => {
+                                                    setTopImage(img);
+                                                    const label = img ? 'Uploaded top' : undefined;
+                                                    setTopLabel(label);
+                                                    recordInput({ top: img }, { top: label }, 'delta');
+                                                }}
                                                 externalImage={topImage}
                                                 active={!!topImage}
                                                 overlay={
@@ -634,7 +730,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 id="pants-image"
                                                 title="Pants"
                                                 description="Upload a photo of pants."
-                                                onImageUpload={(img) => { setPantsImage(img); setPantsLabel(img ? '업로드' : undefined); recordInput({ pants: img }, { pants: img ? '업로드' : undefined }, 'delta'); }}
+                                                onImageUpload={(img) => {
+                                                    setPantsImage(img);
+                                                    const label = img ? 'Uploaded pants' : undefined;
+                                                    setPantsLabel(label);
+                                                    recordInput({ pants: img }, { pants: label }, 'delta');
+                                                }}
                                                 externalImage={pantsImage}
                                                 active={!!pantsImage}
                                                 overlay={
@@ -662,7 +763,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 id="shoes-image"
                                                 title="Shoes"
                                                 description="Upload a photo of shoes."
-                                                onImageUpload={(img) => { setShoesImage(img); setShoesLabel(img ? '업로드' : undefined); recordInput({ shoes: img }, { shoes: img ? '업로드' : undefined }, 'delta'); }}
+                                                onImageUpload={(img) => {
+                                                    setShoesImage(img);
+                                                    const label = img ? 'Uploaded shoes' : undefined;
+                                                    setShoesLabel(label);
+                                                    recordInput({ shoes: img }, { shoes: label }, 'delta');
+                                                }}
                                                 externalImage={shoesImage}
                                                 active={!!shoesImage}
                                                 overlay={
@@ -702,7 +808,8 @@ export const VirtualTryOnUI: React.FC = () => {
                                         const byteArray = new Uint8Array(byteNumbers);
                                         const blob = new Blob([byteArray], { type: mimeType });
                                         const ext = mimeType.split('/')[1] || 'png';
-                                        const file = new File([blob], `${title || 'history'}.${ext}`, { type: mimeType });
+                                        const fileName = (title || 'history') + '.' + ext;
+                                        const file = new File([blob], fileName, { type: mimeType });
                                         return { file, previewUrl: data, base64, mimeType };
                                     } catch {
                                         return { file: new File([], title || 'history', { type: mimeType }), previewUrl: data, base64, mimeType } as UploadedImage;
@@ -713,10 +820,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                 const pa = parse(payload.pants, payload.pantsLabel || 'pants');
                                 const s = parse(payload.shoes, payload.shoesLabel || 'shoes');
                                 if (p) { setPersonImage(p); setPersonSource('upload'); }
-                                if (t) { setTopImage(t); setTopLabel(payload.topLabel || '히스토리'); }
-                                if (pa) { setPantsImage(pa); setPantsLabel(payload.pantsLabel || '히스토리'); }
-                                if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || '히스토리'); }
-                                addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1200 }));
+                                if (t) { setTopImage(t); setTopLabel(payload.topLabel || 'top'); }
+                                if (pa) { setPantsImage(pa); setPantsLabel(payload.pantsLabel || 'pants'); }
+                                if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || 'shoes'); }
+                                addToast(toast.success('?덉뒪?좊━?먯꽌 ?곸슜?덉뒿?덈떎', undefined, { duration: 1200 }));
                             }} />
                         </div>
 
@@ -736,55 +843,89 @@ export const VirtualTryOnUI: React.FC = () => {
                             {/* Style Tips below result */}
                             <StyleTipsCard generatedImage={generatedImage || undefined} />
                             {/* Share button (feature flag default ON) */}
-                            {(() => { const v = (import.meta as any).env?.VITE_FEATURE_SHARE; const on = !(String(v).toLowerCase() === '0' || String(v).toLowerCase() === 'false' || String(v).toLowerCase() === 'off'); return on; })() && (
+                            {shareFeatureEnabled && (
                                 <div>
-                                    <Button disabled={!generatedImage} onClick={() => setShareOpen(true)}>SNS 공유용 이미지 저장</Button>
+                                    <Button disabled={!generatedImage} onClick={() => setShareOpen(true)}>Save share image</Button>
                                 </div>
                             )}
-                            <SnsShareDialog open={shareOpen} onClose={() => setShareOpen(false)} image={generatedImage || undefined} />
+                            {videoFeatureEnabled && (
+                                <Card className="space-y-3">
+                                    <div className="space-y-1">
+                                        <h3 className="text-lg font-semibold text-gray-800">Create video clip</h3>
+                                        <p className="text-sm text-gray-500">Turn the generated look into a short clip.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide" htmlFor="video-prompt">Prompt</label>
+                                        <Input id="video-prompt" value={videoPrompt} onChange={(e) => setVideoPrompt(e.target.value)} placeholder="Describe the tone or mood for the clip" disabled={videoStatus === 'starting' || videoStatus === 'polling'} />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button onClick={handleStartVideoGeneration} disabled={!generatedImage || videoStatus === 'starting' || videoStatus === 'polling'} loading={videoStatus === 'starting' || videoStatus === 'polling'}>
+                                            Generate video
+                                        </Button>
+                                        {(videoStatus === 'starting' || videoStatus === 'polling') && (<span className="text-xs text-gray-500">Generating...</span>)}
+                                        {videoStatus === 'completed' && videoUrls.length === 0 && (<span className="text-xs text-gray-500">No download link returned.</span>)}
+                                    </div>
+                                    {videoOperationName && (<p className="text-xs text-gray-400 break-all">Operation: {videoOperationName}</p>)}
+                                    {videoError && (<p className="text-sm text-red-500">{videoError}</p>)}
+                                    {videoUrls.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium text-gray-700">Download</p>
+                                            <ul className="space-y-1">
+                                                {videoUrls.map((url, idx) => (
+                                                    <li key={url} className="flex items-center justify-between gap-3">
+                                                        <span className="text-xs text-gray-500">Clip {idx + 1}</span>
+                                                        <a className="text-sm text-blue-600 underline" href={url} target="_blank" rel="noreferrer">Open</a>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </Card>
+                            )}<SnsShareDialog open={shareOpen} onClose={() => setShareOpen(false)} image={generatedImage || undefined} />
                             {/* ModelPicker moved to left sidebar in input section */}
                             {likedItems.length > 0 && (
                                 <Card className="space-y-3">
-                                    <h3 className="text-lg font-semibold text-gray-800">좋아요에서 빠르게 담기</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800">Quick add from likes</h3>
                                     <div className="overflow-x-auto whitespace-nowrap flex gap-4 pb-1">
                                         {likedItems.map(item => {
                                             const cat = (item.category || '').toLowerCase();
-                                            const slot: 'top' | 'pants' | 'shoes' | 'outer' | null =
-                                                cat.includes('top') || cat.includes('상의') ? 'top'
-                                                : (cat.includes('pant') || cat.includes('하의') || cat.includes('바지')) ? 'pants'
-                                                : (cat.includes('shoe') || cat.includes('신발')) ? 'shoes'
-                                                : (cat.includes('outer') || cat.includes('아우터') || cat.includes('자켓') || cat.includes('코트')) ? 'outer'
-                                                : null;
+                                            let slot: 'top' | 'pants' | 'shoes' | 'outer' | null = null;
+                                            if (cat.includes('outer')) slot = 'outer';
+                                            else if (cat.includes('top')) slot = 'top';
+                                            else if (cat.includes('pant')) slot = 'pants';
+                                            else if (cat.includes('shoe')) slot = 'shoes';
                                             if (!slot) return null;
-                                            const onAdd = async () => {
+                                            const handleAdd = async () => {
                                                 if (!item.imageUrl) {
-                                                    addToast(toast.error('이미지를 가져올 수 없습니다'));
+                                                    addToast(toast.error('Image URL is missing.'));
                                                     return;
                                                 }
                                                 try {
-                                                    const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
-                                                    if (slot === 'top') { setTopImage(up); setTopLabel(item.title); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }); }
-                                                    if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }); }
-                                                    if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }); }
-                                                    if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }); }
-                                                    addToast(toast.success('피팅에 담겼습니다', `${item.title} → ${slot}`, { duration: 2000 }));
-                                                    if (personImage) {
-                                                        void 0; // generation only via Try It On
-                                                    } else {
-                                                        addToast(toast.info('모델을 먼저 선택하세요', '상반신 모델을 선택하면 자동 합성됩니다.', { duration: 1800 }));
+                                                    const uploaded = await imageProxy.toUploadedImage(item.imageUrl, item.title);
+                                                    if (slot === 'top') { setTopImage(uploaded); setTopLabel(item.title); recordInput({ top: uploaded }, { top: item.title }, 'delta', undefined, { top: String(item.id) }); }
+                                                    if (slot === 'pants') { setPantsImage(uploaded); setPantsLabel(item.title); recordInput({ pants: uploaded }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }); }
+                                                    if (slot === 'shoes') { setShoesImage(uploaded); setShoesLabel(item.title); recordInput({ shoes: uploaded }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }); }
+                                                    if (slot === 'outer') { setOuterImage(uploaded); setOuterLabel(item.title); recordInput({ outer: uploaded }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }); }
+                                                    addToast(toast.success('Added to fitting queue', `${item.title} -> ${slot}`, { duration: 2000 }));
+                                                    if (!personImage) {
+                                                        addToast(toast.info('Choose a model first', 'Select a base model to apply outfits automatically.', { duration: 1800 }));
                                                     }
-                                                } catch (e: any) {
-                                                    addToast(toast.error('가져오기에 실패했습니다', e?.message));
+                                                } catch (error: any) {
+                                                    addToast(toast.error('Failed to load liked item', error?.message));
                                                 }
                                             };
                                             return (
                                                 <div key={item.id} className="inline-block w-40">
-                                                    <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 cursor-pointer" onClick={onAdd} title="이미지를 클릭하면 담깁니다">
+                                                    <div
+                                                        className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 cursor-pointer"
+                                                        onClick={handleAdd}
+                                                        title={`Tap to use this liked ${slot}`}
+                                                    >
                                                         {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
                                                     </div>
                                                     <p className="mt-1 text-xs text-gray-600 truncate" title={item.title}>{item.title}</p>
                                                     <div className="mt-1">
-                                                        <Button size="sm" onClick={onAdd}>담기 ({slot})</Button>
+                                                        <Button size="sm" onClick={handleAdd}>Use ({slot})</Button>
                                                     </div>
                                                 </div>
                                             );
@@ -793,36 +934,6 @@ export const VirtualTryOnUI: React.FC = () => {
                                 </Card>
                             )}
                             {/* Recommendation Filters */}
-                            {false && (
-                            <Card className="space-y-4">
-                                <h3 className="text-lg font-semibold text-gray-800">추천 필터</h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <Input
-                                        type="number"
-                                        label="최소 가격"
-                                        placeholder="₩ 10000"
-                                        value={minPrice}
-                                        onChange={(e) => setMinPrice(e.target.value)}
-                                        min={0}
-                                    />
-                                    <Input
-                                        type="number"
-                                        label="최대 가격"
-                                        placeholder="₩ 100000"
-                                        value={maxPrice}
-                                        onChange={(e) => setMaxPrice(e.target.value)}
-                                        min={0}
-                                    />
-                                    <Input
-                                        label="제외 태그(콤마 구분)"
-                                        placeholder="예: formal, leather"
-                                        value={excludeTagsInput}
-                                        onChange={(e) => setExcludeTagsInput(e.target.value)}
-                                    />
-                                </div>
-                                <p className="text-xs text-gray-500">필터는 가상 피팅 이후 추천 호출에 자동 적용됩니다.</p>
-                            </Card>
-                            )}
                         </div>
                     </div>
 
@@ -833,7 +944,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <div className="flex items-center justify-center">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                        <span className="ml-3 text-gray-600">추천 상품을 불러오는 중...</span>
+                                        <span className="ml-3 text-gray-600">異붿쿇 ?곹뭹??遺덈윭?ㅻ뒗 以?..</span>
                                     </div>
                                 </div>
                             ) : recommendations ? (
@@ -845,19 +956,19 @@ export const VirtualTryOnUI: React.FC = () => {
                             ) : null}
                         </div>
                     )}
-                    {/* LLM 평가: 히스토리 선택 후 점수화 */}
+                    {/* LLM ?됯?: ?덉뒪?좊━ ?좏깮 ???먯닔??*/}
                     {/* HistoryEvaluator removed per request */}
                     {/* Fallback random items before recommendations are available */}
                     {!recommendations && !isLoadingRecommendations && (
                         <div className="mt-8">
                             <Card>
                                 <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-2xl font-bold text-gray-800">랜덤 아이템</h2>
-                                    <Button size="sm" onClick={() => fetchRandom(12)} loading={isLoadingRandom}>새로고침</Button>
+                                    <h2 className="text-2xl font-bold text-gray-800">?쒕뜡 ?꾩씠??</h2>
+                                    <Button size="sm" onClick={() => fetchRandom(12)} loading={isLoadingRandom}>?덈줈怨좎묠</Button>
                                 </div>
                                 <div className="space-y-6">
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">상의</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?곸쓽</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.top.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'top')} padding="sm">
@@ -870,7 +981,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">하의</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?섏쓽</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.pants.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'pants')} padding="sm">
@@ -883,7 +994,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">아우터</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?꾩슦??</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.outer.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'outer')} padding="sm">
@@ -896,7 +1007,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">신발</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?좊컻</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.shoes.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'shoes')} padding="sm">
@@ -909,7 +1020,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         </div>
                                     </div>
                                     {randomItemsByCat.top.length + randomItemsByCat.pants.length + randomItemsByCat.shoes.length === 0 && (
-                                        <div className="text-center text-gray-500 py-6">아이템을 불러오는 중이거나 목록이 비어있습니다.</div>
+                                        <div className="text-center text-gray-500 py-6">?꾩씠?쒖쓣 遺덈윭?ㅻ뒗 以묒씠嫄곕굹 紐⑸줉??鍮꾩뼱?덉뒿?덈떎.</div>
                                     )}
                                 </div>
                             </Card>
@@ -920,3 +1031,12 @@ export const VirtualTryOnUI: React.FC = () => {
         </div>
     );
 };
+
+
+
+
+
+
+
+
+

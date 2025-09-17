@@ -1,4 +1,4 @@
-// Frontend type definitions
+﻿// Frontend type definitions
 
 export interface UploadedImage {
     file: File;
@@ -66,6 +66,24 @@ export interface RecommendationOptions {
     minPrice?: number;
     maxPrice?: number;
     excludeTags?: string[];
+}
+
+export interface VideoGenerationRequest {
+    prompt: string;
+    imageData: string;
+    mimeType?: string;
+    parameters?: Record<string, unknown>;
+}
+
+export interface VideoGenerationStartResponse {
+    operationName: string;
+    raw?: unknown;
+}
+
+export interface VideoGenerationStatusResponse {
+    done: boolean;
+    videoUris: string[];
+    operation: unknown;
 }
 
 // Style tips
