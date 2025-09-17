@@ -20,13 +20,6 @@ from ..services.llm_ranker import llm_ranker
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 
 
-@router.get("/__health/db", tags=["health"])
-def db_health():
-    ok = bool(db_pos_recommender and db_pos_recommender.available())
-    n = len(db_pos_recommender.products) if ok else 0
-    return {"healthy": ok, "count": n}
-
-
 def _candidate_budget(opts: RecommendationOptions) -> int:
     base = opts.maxPerCategory if opts.maxPerCategory is not None else 3
     return base * 4
