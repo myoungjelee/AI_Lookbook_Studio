@@ -20,6 +20,13 @@ from ..services.llm_ranker import llm_ranker
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 
 
+@router.get("/__health/db", tags=["health"])
+def db_health():
+    ok = bool(db_pos_recommender and db_pos_recommender.available())
+    n = len(db_pos_recommender.products) if ok else 0
+    return {"healthy": ok, "count": n}
+
+
 def _candidate_budget(opts: RecommendationOptions) -> int:
     base = opts.maxPerCategory if opts.maxPerCategory is not None else 3
     return base * 4
@@ -50,7 +57,9 @@ def _build_candidates(
     kwargs = _candidate_kwargs(opts)
     products_override = _db_products()
     if products_override is None:
-        raise HTTPException(status_code=503, detail="Recommendation database unavailable")
+        raise HTTPException(
+            status_code=503, detail="Recommendation database unavailable"
+        )
 
     return svc.find_similar(
         analysis,
