@@ -69,13 +69,18 @@ export const VirtualTryOnUI: React.FC = () => {
     const { addToast } = useToast();
     const [shareOpen, setShareOpen] = useState<boolean>(false);
 // Video generation state
-const [videoPrompt, setVideoPrompt] = useState<string>('Create an 8-second lookbook video for this outfit.');
+const [videoPrompt, setVideoPrompt] = useState<string>((import.meta as any).env?.VITE_VIDEO_PROMPT || 'Create an 8-second lookbook video for this outfit.');
 const [videoStatus, setVideoStatus] = useState<'idle' | 'starting' | 'polling' | 'completed' | 'error'>('idle');
 const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
 const [videoError, setVideoError] = useState<string | null>(null);
 const [videoUrls, setVideoUrls] = useState<string[]>([]);
 const videoPollTimeoutRef = useRef<number | null>(null);
-const shareFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_SHARE);
+    const videoDefaults = {
+        aspectRatio: (import.meta as any).env?.VITE_VIDEO_ASPECT || '9:16',
+        durationSeconds: (import.meta as any).env?.VITE_VIDEO_DURATION || '4',
+        resolution: (import.meta as any).env?.VITE_VIDEO_RESOLUTION || '720p',
+    } as const;
+    const promptLocked = isFeatureEnabled((import.meta as any).env?.VITE_VIDEO_PROMPT_LOCK);const shareFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_SHARE);
 const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_VIDEO);
     // UI highlight states
     const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -156,7 +161,7 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
             addToast(toast.info('Generate a try-on image first.', undefined, { duration: 1600 }));
             return;
         }
-        const trimmed = videoPrompt.trim();
+        const trimmed = (promptLocked ? ((import.meta as any).env?.VITE_VIDEO_PROMPT || videoPrompt) : videoPrompt).trim();
         if (!trimmed) {
             addToast(toast.info('Enter a prompt for the video.', undefined, { duration: 1600 }));
             return;
@@ -167,7 +172,7 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
         setVideoOperationName(null);
         setVideoStatus('starting');
         try {
-            const res = await virtualTryOnService.startVideoGeneration({ prompt: trimmed, imageData: generatedImage });
+            const res = await virtualTryOnService.startVideoGeneration({ prompt: trimmed, imageData: generatedImage, parameters: { aspectRatio: String(videoDefaults.aspectRatio), durationSeconds: String(videoDefaults.durationSeconds), resolution: String(videoDefaults.resolution) } });
             const op = res.operationName;
             setVideoOperationName(op);
             setVideoStatus('polling');
@@ -856,7 +861,7 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide" htmlFor="video-prompt">Prompt</label>
-                                        <Input id="video-prompt" value={videoPrompt} onChange={(e) => setVideoPrompt(e.target.value)} placeholder="Describe the tone or mood for the clip" disabled={videoStatus === 'starting' || videoStatus === 'polling'} />
+                                        <Input id="video-prompt" value={videoPrompt} onChange={(e) => setVideoPrompt(e.target.value)} placeholder="Describe the tone or mood for the clip" disabled={promptLocked || videoStatus === 'starting' || videoStatus === 'polling'} />
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Button onClick={handleStartVideoGeneration} disabled={!generatedImage || videoStatus === 'starting' || videoStatus === 'polling'} loading={videoStatus === 'starting' || videoStatus === 'polling'}>
@@ -1031,6 +1036,7 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
         </div>
     );
 };
+
 
 
 
