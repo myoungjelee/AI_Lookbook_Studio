@@ -110,7 +110,13 @@ class GeminiImageService:
                 )
 
         clothing_items = clothing_items or {}
+        print("[gemini] generate_virtual_try_on_image 호출:")
+        print(f"  - person: {'있음' if person else '없음'}")
+        print(f"  - clothing_items: {clothing_items}")
+        print(f"  - prompt: {prompt}")
+
         parts = self._build_parts(person, clothing_items, prompt)
+        print(f"[gemini] _build_parts 결과: {len(parts)}개 파트 생성")
 
         last_error: Optional[Exception] = None
         # Iterate keys with per-key retries
@@ -170,9 +176,12 @@ class GeminiImageService:
 
         # Clothing images
         has_any_clothing = False
+        print(f"[gemini] _build_parts 시작 - clothing_items: {clothing_items}")
         for key in ("top", "pants", "shoes", "outer"):
             item = clothing_items.get(key)
+            print(f"[gemini] {key} 아이템 확인: {item}")
             if item and item.get("base64"):
+                print(f"[gemini] {key} 아이템 처리 중...")
                 b64, mime = self._normalize_image(
                     item.get("base64"), item.get("mimeType")
                 )

@@ -52,7 +52,7 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
             if not f:
                 continue
             b64 = f.get("base64") if isinstance(f, dict) else None  # type: ignore[assignment]
-            mime = (f.get("mimeType") if isinstance(f, dict) else None) or "image/jpeg"
+            _ = (f.get("mimeType") if isinstance(f, dict) else None) or "image/jpeg"
             if not b64:
                 continue
             raw = base64.b64decode(b64)
@@ -93,16 +93,38 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
 
 @router.post("")
 def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
+    # 디버깅: 요청 데이터 로그
+    print("[generate] 요청 수신:")
+    print(f"  - person: {'있음' if req.person else '없음'}")
+    if req.clothingItems:
+        print("  - clothingItems:")
+        for key in ["top", "pants", "shoes", "outer"]:
+            item = getattr(req.clothingItems, key, None)
+            print(f"    - {key}: {'있음' if item else '없음'}")
+            if item:
+                print(
+                    f"      - base64 길이: {len(item.base64) if hasattr(item, 'base64') else 'N/A'}"
+                )
+                print(f"      - mimeType: {getattr(item, 'mimeType', 'N/A')}")
+    else:
+        print("  - clothingItems: 없음")
     # Option A: Use native Python Gemini service if available
     if gemini_image_service.available():
         try:
             # 호환성: 혹시 클라이언트가 prprompt로 보낸 경우 대비
             user_prompt = getattr(req, "prompt", None) or getattr(req, "prprompt", None)
+
+            # 디버깅: Gemini 서비스 호출 전 데이터 확인
+            person_data = req.person.model_dump() if req.person else None
+            clothing_data = req.clothingItems.model_dump() if req.clothingItems else {}
+            print("[generate] Gemini 서비스 호출 데이터:")
+            print(f"  - person: {'있음' if person_data else '없음'}")
+            print(f"  - clothing_items: {clothing_data}")
+            print(f"  - prompt: {user_prompt}")
+
             result = gemini_image_service.generate_virtual_try_on_image(
-                person=req.person.model_dump() if req.person else None,
-                clothing_items=(
-                    req.clothingItems.model_dump() if req.clothingItems else {}
-                ),
+                person=person_data,
+                clothing_items=clothing_data,
                 prompt=(user_prompt or None),
             )
             if result:

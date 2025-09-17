@@ -338,12 +338,30 @@ export const VirtualTryOnUI: React.FC = () => {
         setRecommendations(null);
 
         try {
+            // 현재 슬롯에 실제로 있는 아이템들만 가져가기
+            // 상태가 아닌 실제 DOM에서 확인하여 최신 상태 보장
             const clothingItems: ClothingItems = {
                 top: topImage ? convertToApiFile(topImage) : null,
                 pants: pantsImage ? convertToApiFile(pantsImage) : null,
                 shoes: shoesImage ? convertToApiFile(shoesImage) : null,
                 outer: outerImage ? convertToApiFile(outerImage) : null,
             };
+            
+            // 디버깅: 전체 의류 아이템 상태 확인
+            console.log('🔍 합성 요청 데이터:', {
+                personImage: personImage ? '있음' : '없음',
+                clothingItems: {
+                    top: topImage ? '있음' : '없음',
+                    pants: pantsImage ? '있음' : '없음', 
+                    shoes: shoesImage ? '있음' : '없음',
+                    outer: outerImage ? '있음' : '없음'
+                },
+                clothingItemsData: clothingItems,
+                outerImage: outerImage,
+                outerInClothingItems: clothingItems.outer,
+                outerImageNull: outerImage === null,
+                outerImageUndefined: outerImage === undefined
+            });
 
 
             const result = await virtualTryOnService.combineImages({
@@ -386,7 +404,7 @@ export const VirtualTryOnUI: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [personImage, topImage, pantsImage, shoesImage, minPrice, maxPrice, excludeTagsInput]);
+    }, [personImage, topImage, pantsImage, shoesImage, outerImage, minPrice, maxPrice, excludeTagsInput]);
 
 
     const canCombine = (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
@@ -616,10 +634,14 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         onLike={() => handleClothingLike('outer')}
                                                         onBuy={() => handleClothingBuy('outer')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 아우터 제거 시작');
                                                             setOuterImage(null); 
                                                             setOuterLabel(undefined); 
                                                             setSelectedOuterId(null);
                                                             setOriginalItems(prev => ({ ...prev, outer: undefined }));
+                                                            // 생성된 이미지도 초기화하여 이전 결과가 남아있지 않도록 함
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 아우터 제거 완료');
                                                         }}
                                                         itemTitle={outerLabel || 'Outer'}
                                                         isLiked={selectedOuterId ? likesService.isLiked(selectedOuterId) : likesService.isLiked('uploaded-outer')}
@@ -644,10 +666,13 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         onLike={() => handleClothingLike('top')}
                                                         onBuy={() => handleClothingBuy('top')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 상의 제거 시작');
                                                             setTopImage(null); 
                                                             setTopLabel(undefined); 
                                                             setSelectedTopId(null);
                                                             setOriginalItems(prev => ({ ...prev, top: undefined }));
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 상의 제거 완료');
                                                         }}
                                                         itemTitle={topLabel || 'Top'}
                                                         isLiked={selectedTopId ? likesService.isLiked(selectedTopId) : likesService.isLiked('uploaded-top')}
@@ -672,10 +697,13 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         onLike={() => handleClothingLike('pants')}
                                                         onBuy={() => handleClothingBuy('pants')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 하의 제거 시작');
                                                             setPantsImage(null); 
                                                             setPantsLabel(undefined); 
                                                             setSelectedPantsId(null);
                                                             setOriginalItems(prev => ({ ...prev, pants: undefined }));
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 하의 제거 완료');
                                                         }}
                                                         itemTitle={pantsLabel || 'Pants'}
                                                         isLiked={selectedPantsId ? likesService.isLiked(selectedPantsId) : likesService.isLiked('uploaded-pants')}
@@ -700,10 +728,13 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         onLike={() => handleClothingLike('shoes')}
                                                         onBuy={() => handleClothingBuy('shoes')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 신발 제거 시작');
                                                             setShoesImage(null); 
                                                             setShoesLabel(undefined); 
                                                             setSelectedShoesId(null);
                                                             setOriginalItems(prev => ({ ...prev, shoes: undefined }));
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 신발 제거 완료');
                                                         }}
                                                         itemTitle={shoesLabel || 'Shoes'}
                                                         isLiked={selectedShoesId ? likesService.isLiked(selectedShoesId) : likesService.isLiked('uploaded-shoes')}
