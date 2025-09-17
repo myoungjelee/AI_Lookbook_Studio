@@ -392,7 +392,7 @@ export const VirtualTryOnUI: React.FC = () => {
     const canCombine = (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
 
     // Helper: add a catalog/recommendation item into proper slot
-    const addCatalogItemToSlot = useCallback(async (item: RecommendationItem) => {
+    const addCatalogItemToSlot = useCallback(async (item: RecommendationItem, showToast: boolean = true) => {
         console.log('🔔🔔🔔 addCatalogItemToSlot 호출됨! 🔔🔔🔔');
         console.log('🔔 상품 정보:', {
             id: item.id,
@@ -441,7 +441,9 @@ export const VirtualTryOnUI: React.FC = () => {
             if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }, { outer: item }); }
             
             console.log('🔔 recordInput 호출 완료');
-            addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
+            if (showToast) {
+                addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
+            }
         } catch (e: any) {
             console.error('❌ 이미지 처리 실패:', e);
             addToast(toast.error('가져오기에 실패했어요', e?.message));
@@ -732,24 +734,26 @@ export const VirtualTryOnUI: React.FC = () => {
                                 console.log('🔔 히스토리에서 적용 시도:', payload);
                                 
                                 // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
+                                
                                 if (payload.topProduct) {
                                     console.log('🔔 상의 적용:', payload.topProduct.title);
-                                    await addCatalogItemToSlot(payload.topProduct);
+                                    await addCatalogItemToSlot(payload.topProduct, false);
                                 }
                                 if (payload.pantsProduct) {
                                     console.log('🔔 하의 적용:', payload.pantsProduct.title);
-                                    await addCatalogItemToSlot(payload.pantsProduct);
+                                    await addCatalogItemToSlot(payload.pantsProduct, false);
                                 }
                                 if (payload.shoesProduct) {
                                     console.log('🔔 신발 적용:', payload.shoesProduct.title);
-                                    await addCatalogItemToSlot(payload.shoesProduct);
+                                    await addCatalogItemToSlot(payload.shoesProduct, false);
                                 }
                                 if (payload.outerProduct) {
                                     console.log('🔔 아우터 적용:', payload.outerProduct.title);
-                                    await addCatalogItemToSlot(payload.outerProduct);
+                                    await addCatalogItemToSlot(payload.outerProduct, false);
                                 }
                                 
-                                addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1200 }));
+                                // 히스토리에서 적용 완료 토스트
+                                addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1500 }));
                             }, [addCatalogItemToSlot, addToast])} />
                         </div>
 

@@ -43,8 +43,8 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
     except Exception as e:  # noqa: BLE001
         print(f"[generate] PIL not available for collage fallback: {e}")
         return None
-    # Collect present images in display order
-    order = ["top", "pants", "shoes", "outer"]
+    # Collect present images in display order (outer should be outermost)
+    order = ["outer", "top", "pants", "shoes"]
     present: list[Image.Image] = []
     try:
         for key in order:

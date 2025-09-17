@@ -48,19 +48,13 @@ export const ClothingItemOverlay: React.FC<ClothingItemOverlayProps> = ({
       
       <div className="flex flex-col gap-2 p-3">
         <Button
-          size="sm"
-          variant={isLiked ? 'secondary' : 'outline'}
           onClick={(e) => {
             e.stopPropagation();
             onLike();
           }}
-          className="w-full"
-          aria-pressed={isLiked}
+          className="w-full font-semibold text-sm py-1.5 bg-white/90 text-gray-700 border border-gray-300 hover:bg-gray-50"
         >
-          <span className="inline-flex items-center gap-1">
-            <HeartIcon className={isLiked ? 'w-4 h-4 text-red-500' : 'w-4 h-4'} />
-            {isLiked ? '좋아요됨' : '좋아요'}
-          </span>
+          <HeartIcon className={`h-4 w-4 ${isLiked ? 'text-[#d6001c]' : 'text-gray-500'}`} />
         </Button>
         <Button
           onClick={(e) => {
