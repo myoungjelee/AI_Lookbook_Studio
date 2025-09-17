@@ -68,20 +68,30 @@ export const VirtualTryOnUI: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const { addToast } = useToast();
     const [shareOpen, setShareOpen] = useState<boolean>(false);
-// Video generation state
-const [videoPrompt, setVideoPrompt] = useState<string>((import.meta as any).env?.VITE_VIDEO_PROMPT || 'Create an 8-second lookbook video for this outfit.');
-const [videoStatus, setVideoStatus] = useState<'idle' | 'starting' | 'polling' | 'completed' | 'error'>('idle');
-const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
-const [videoError, setVideoError] = useState<string | null>(null);
-const [videoUrls, setVideoUrls] = useState<string[]>([]);
-const videoPollTimeoutRef = useRef<number | null>(null);
+    // Video generation state
+    const [videoPrompt, setVideoPrompt] = useState<string>((import.meta as any).env?.VITE_VIDEO_PROMPT || 'Create an 8-second lookbook video for this outfit.');
+    const [videoStatus, setVideoStatus] = useState<'idle' | 'starting' | 'polling' | 'completed' | 'error'>('idle');
+    const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
+    const [videoError, setVideoError] = useState<string | null>(null);
+    const [videoUrls, setVideoUrls] = useState<string[]>([]);
+const [selectedVideoIndex, setSelectedVideoIndex] = useState<number>(0);
+const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/video/stream?uri=${encodeURIComponent(u)}` : u;
+    const [videoProgress, setVideoProgress] = useState<number | null>(null);
+    const videoPollTimeoutRef = useRef<number | null>(null);
     const videoDefaults = {
         aspectRatio: (import.meta as any).env?.VITE_VIDEO_ASPECT || '9:16',
         durationSeconds: (import.meta as any).env?.VITE_VIDEO_DURATION || '4',
         resolution: (import.meta as any).env?.VITE_VIDEO_RESOLUTION || '720p',
     } as const;
-    const promptLocked = isFeatureEnabled((import.meta as any).env?.VITE_VIDEO_PROMPT_LOCK);const shareFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_SHARE);
-const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_VIDEO);
+    const promptLocked = isFeatureEnabled((import.meta as any).env?.VITE_VIDEO_PROMPT_LOCK);
+    const shareFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_SHARE);
+    const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEATURE_VIDEO);
+    const isSafari = typeof navigator !== 'undefined'
+        ? (() => {
+            const ua = navigator.userAgent.toLowerCase();
+            return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
+        })()
+        : false;
     // UI highlight states
     const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
     const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
@@ -118,16 +128,29 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
             window.clearTimeout(videoPollTimeoutRef.current);
             videoPollTimeoutRef.current = null;
         }
+        setVideoProgress(null);
     }, []);
 
     const pollVideoStatus = useCallback((operationName: string, attempt: number = 0) => {
         const execute = async () => {
             try {
                 const status = await virtualTryOnService.fetchVideoStatus(operationName);
+                let progress: number | null = null;
+                const rawProgress = (status as any).progressPercent;
+                if (typeof rawProgress === 'number') {
+                    progress = rawProgress;
+                } else if (typeof rawProgress === 'string') {
+                    const parsed = Number(rawProgress);
+                    if (!Number.isNaN(parsed)) {
+                        progress = parsed;
+                    }
+                }
+                setVideoProgress(progress);
                 if (status.done) {
                     clearVideoPoll();
                     setVideoStatus('completed');
-                    setVideoUrls(status.videoUris ?? []);
+                    { const urls = Array.isArray((status as any).videoUris) ? (status as any).videoUris : []; const dataUris = Array.isArray((status as any).videoDataUris) ? (status as any).videoDataUris : []; setVideoUrls([...urls, ...dataUris]); }
+                    setVideoProgress(progress ?? 100);
                     return;
                 }
                 setVideoStatus('polling');
@@ -137,6 +160,7 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
                 }, delay);
             } catch (err) {
                 clearVideoPoll();
+                setVideoProgress(null);
                 setVideoStatus('error');
                 setVideoError(err instanceof Error ? err.message : 'Failed to fetch video status.');
             }
@@ -153,8 +177,20 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
             setVideoOperationName(null);
             setVideoError(null);
             setVideoUrls([]);
+            setVideoProgress(null);
         }
     }, [generatedImage, clearVideoPoll]);
+
+    useEffect(() => {
+        if (!videoFeatureEnabled) {
+            clearVideoPoll();
+            setVideoStatus('idle');
+            setVideoOperationName(null);
+            setVideoError(null);
+            setVideoUrls([]);
+            setVideoProgress(null);
+        }
+    }, [videoFeatureEnabled, clearVideoPoll]);
 
     const handleStartVideoGeneration = useCallback(async () => {
         if (!generatedImage) {
@@ -170,9 +206,18 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
         setVideoError(null);
         setVideoUrls([]);
         setVideoOperationName(null);
+        setVideoProgress(0);
         setVideoStatus('starting');
         try {
-            const res = await virtualTryOnService.startVideoGeneration({ prompt: trimmed, imageData: generatedImage, parameters: { aspectRatio: String(videoDefaults.aspectRatio), durationSeconds: String(videoDefaults.durationSeconds), resolution: String(videoDefaults.resolution) } });
+            const res = await virtualTryOnService.startVideoGeneration({
+                prompt: trimmed,
+                imageData: generatedImage,
+                parameters: {
+                    aspectRatio: String(videoDefaults.aspectRatio),
+                    durationSeconds: String(videoDefaults.durationSeconds),
+                    resolution: String(videoDefaults.resolution),
+                },
+            });
             const op = res.operationName;
             setVideoOperationName(op);
             setVideoStatus('polling');
@@ -180,10 +225,21 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
             videoPollTimeoutRef.current = window.setTimeout(() => { pollVideoStatus(op); }, 1500);
         } catch (err) {
             clearVideoPoll();
-            setVideoError(err instanceof Error ? err.message : 'Video generation failed. Please try again later.');
-            addToast(toast.error('Failed to add item to the wardrobe'));
+            const message = err instanceof Error ? err.message : 'Video generation failed. Please try again later.';
+            setVideoStatus('error');
+            setVideoError(message);
+            addToast(toast.error(message, undefined, { duration: 2200 }));
         }
     }, [generatedImage, videoPrompt, clearVideoPoll, pollVideoStatus, addToast]);
+
+    const handleCancelVideoPolling = useCallback(() => {
+        clearVideoPoll();
+        setVideoStatus('idle');
+        setVideoOperationName(null);
+        setVideoError(null);
+        setVideoUrls([]);
+        setVideoProgress(null);
+    }, [clearVideoPoll]);
 
     // Likes feed for quick fitting
     const [likedItems, setLikedItems] = useState<RecommendationItem[]>([]);
@@ -858,28 +914,63 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
                                     <div className="space-y-1">
                                         <h3 className="text-lg font-semibold text-gray-800">Create video clip</h3>
                                         <p className="text-sm text-gray-500">Turn the generated look into a short clip.</p>
+                                        {isSafari && (
+                                            <p className="text-xs text-amber-600">Safari에서는 다운로드가 제한될 수 있어요. Chrome 또는 Edge 사용을 권장합니다.</p>
+                                        )}
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide" htmlFor="video-prompt">Prompt</label>
-                                        <Input id="video-prompt" value={videoPrompt} onChange={(e) => setVideoPrompt(e.target.value)} placeholder="Describe the tone or mood for the clip" disabled={promptLocked || videoStatus === 'starting' || videoStatus === 'polling'} />
+                                        <Input
+                                            id="video-prompt"
+                                            value={videoPrompt}
+                                            onChange={(e) => setVideoPrompt(e.target.value)}
+                                            placeholder="Describe the tone or mood for the clip"
+                                            disabled={promptLocked || videoStatus === 'starting' || videoStatus === 'polling'}
+                                        />
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button onClick={handleStartVideoGeneration} disabled={!generatedImage || videoStatus === 'starting' || videoStatus === 'polling'} loading={videoStatus === 'starting' || videoStatus === 'polling'}>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button
+                                            onClick={handleStartVideoGeneration}
+                                            disabled={!generatedImage || videoStatus === 'starting' || videoStatus === 'polling'}
+                                            loading={videoStatus === 'starting' || videoStatus === 'polling'}
+                                        >
                                             Generate video
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleCancelVideoPolling}
+                                            disabled={videoStatus !== 'starting' && videoStatus !== 'polling'}
+                                        >
+                                            Cancel
                                         </Button>
                                         {(videoStatus === 'starting' || videoStatus === 'polling') && (<span className="text-xs text-gray-500">Generating...</span>)}
                                         {videoStatus === 'completed' && videoUrls.length === 0 && (<span className="text-xs text-gray-500">No download link returned.</span>)}
                                     </div>
+                                    {typeof videoProgress === 'number' && (<p className="text-xs text-gray-500">Progress: {Math.min(100, Math.max(0, Math.round(videoProgress)))}%</p>)}
                                     {videoOperationName && (<p className="text-xs text-gray-400 break-all">Operation: {videoOperationName}</p>)}
                                     {videoError && (<p className="text-sm text-red-500">{videoError}</p>)}
                                     {videoUrls.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-sm font-medium text-gray-700">Download</p>
+                                            <div>
+    <p className="text-sm font-medium text-gray-700">Preview</p>
+    <div className="w-full rounded-lg overflow-hidden bg-black">
+        <video key={selectedVideoIndex} src={toPlayable(videoUrls[selectedVideoIndex])} controls playsInline className="w-full h-auto" />
+    </div>
+</div>
+{videoUrls.length > 1 && (
+    <div className="flex flex-wrap gap-2">
+        {videoUrls.map((_, idx) => (
+            <button key={idx} className={`px-2 py-1 text-xs rounded-full border ${idx === selectedVideoIndex ? 'bg-[#111111] text-white' : 'bg-white text-gray-700'}`} onClick={() => setSelectedVideoIndex(idx)}>Clip {idx + 1}</button>
+        ))}
+    </div>
+)}
+<p className="text-sm font-medium text-gray-700">Download</p>
                                             <ul className="space-y-1">
                                                 {videoUrls.map((url, idx) => (
                                                     <li key={url} className="flex items-center justify-between gap-3">
                                                         <span className="text-xs text-gray-500">Clip {idx + 1}</span>
-                                                        <a className="text-sm text-blue-600 underline" href={url} target="_blank" rel="noreferrer">Open</a>
+                                                        <a className="text-sm text-blue-600 underline" href={toPlayable(url)} target="_blank" rel="noreferrer">Open</a>
                                                     </li>
                                                 ))}
                                             </ul>
@@ -1036,6 +1127,8 @@ const videoFeatureEnabled = isFeatureEnabled((import.meta as any).env?.VITE_FEAT
         </div>
     );
 };
+
+
 
 
 

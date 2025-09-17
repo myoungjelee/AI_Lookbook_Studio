@@ -84,6 +84,7 @@ export interface VideoGenerationStatusResponse {
     done: boolean;
     videoUris: string[];
     operation: unknown;
+    progressPercent?: number | null;
 }
 
 // Style tips

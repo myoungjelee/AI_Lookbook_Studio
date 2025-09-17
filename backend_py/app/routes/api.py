@@ -14,5 +14,6 @@ def api_info():
             "generate": "/api/generate",
             "recommend": "/api/recommend",
             "tryOnVideo": "/api/try-on/video",
+            "tryOnVideoStatus": "/api/try-on/video/status",
         },
     }

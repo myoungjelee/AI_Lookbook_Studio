@@ -154,12 +154,16 @@ export class VirtualTryOnService {
                 request,
                 { timeout: 90000 }
             );
+            if (!response || typeof response.operationName !== 'string' || !response.operationName.trim()) {
+                throw new ApiError('Video generation failed: invalid response from server', 502, 'VIDEO_GENERATION_INVALID', response);
+            }
             return response;
         } catch (error) {
             if (error instanceof ApiError) {
                 throw error;
             }
-            throw new ApiError('Failed to start video generation', 500, 'VIDEO_GENERATION_FAILED');
+            const message = error instanceof Error ? error.message : 'Failed to start video generation';
+            throw new ApiError(message || 'Failed to start video generation', 500, 'VIDEO_GENERATION_FAILED');
         }
     }
 
@@ -173,12 +177,16 @@ export class VirtualTryOnService {
                 { operationName },
                 { timeout: 20000 }
             );
+            if (!response || typeof response.done !== 'boolean' || !Array.isArray(response.videoUris)) {
+                throw new ApiError('Video status response malformed', 502, 'VIDEO_STATUS_INVALID', response);
+            }
             return response;
         } catch (error) {
             if (error instanceof ApiError) {
                 throw error;
             }
-            throw new ApiError('Failed to fetch video generation status', 500, 'VIDEO_STATUS_FAILED');
+            const message = error instanceof Error ? error.message : 'Failed to fetch video generation status';
+            throw new ApiError(message || 'Failed to fetch video generation status', 500, 'VIDEO_STATUS_FAILED');
         }
     }
 
