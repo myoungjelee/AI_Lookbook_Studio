@@ -3,18 +3,15 @@ import { likesService } from '../../../services/likes.service';
 import type { CategoryRecommendations, RecommendationItem } from '../../../types';
 import { HeartIcon } from '../../icons/HeartIcon';
 import { Button, Card, toast, useToast } from '../../ui';
-import { ProductCardOverlay } from '../ecommerce/ProductCardOverlay';
 
 interface RecommendationDisplayProps {
     recommendations: CategoryRecommendations;
     onItemClick?: (item: RecommendationItem) => void;
-    mode?: 'main' | 'fitting'; // 메인 페이지용 vs 피팅룸용
 }
 
 export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
     recommendations,
     onItemClick,
-    mode = 'main', // 기본값은 메인 페이지
 }) => {
 
     // Lightweight inline placeholder (SVG) shown when product image fails to load
@@ -48,7 +45,6 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
     const ItemCard: React.FC<{ item: RecommendationItem }> = ({ item }) => {
         const { addToast } = useToast();
         const [liked, setLiked] = useState<boolean>(() => likesService.isLiked(item.id));
-        const [showOverlay, setShowOverlay] = useState(false);
 
         const onToggleLike: React.MouseEventHandler = (e) => {
             e.preventDefault(); e.stopPropagation();
@@ -61,44 +57,10 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
             );
         };
 
-        const handleMouseEnter = () => {
-            setShowOverlay(true);
-        };
-
-        const handleMouseLeave = () => {
-            setShowOverlay(false);
-        };
-
-        const handleBuy = () => {
-            if ((item as any).productUrl) {
-                window.open((item as any).productUrl as string, '_blank', 'noopener,noreferrer');
-            }
-        };
-
-        const handleVirtualFitting = async () => {
-            if (mode === 'fitting') {
-                // 피팅룸 모드: onItemClick으로 부모에게 전달
-                onItemClick?.(item);
-            } else {
-                // 메인 페이지 모드: 사이드바에 등록 (기존 방식)
-                const productData = {
-                    ...item, // 모든 원본 필드 포함
-                    timestamp: Date.now()
-                };
-                
-                try {
-                    localStorage.setItem('app:pendingVirtualFittingItem', JSON.stringify(productData));
-                } catch (error) {
-                    console.warn('localStorage 용량 초과, 상품 정보 저장 실패:', error);
-                }
-            }
-        };
 
         return (
             <Card 
                 className="cursor-pointer hover:shadow-lg transition-shadow duration-200" 
-                onMouseEnter={handleMouseEnter} 
-                onMouseLeave={handleMouseLeave} 
                 onClick={() => onItemClick?.(item)}
                 data-card-id={item.id}
             >
@@ -121,13 +83,7 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
                         </div>
                     )}
                     
-                    {/* 오버레이 */}
-                    <ProductCardOverlay
-                        isVisible={showOverlay}
-                        onBuy={handleBuy}
-                        onVirtualFitting={handleVirtualFitting}
-                        product={item}
-                    />
+                    {/* 오버레이 제거 - 유사상품추천에서는 오버레이 없음 */}
                 </div>
                 <div className="space-y-1">
                     <p className="font-medium text-sm text-gray-900 line-clamp-2">{item.title}</p>

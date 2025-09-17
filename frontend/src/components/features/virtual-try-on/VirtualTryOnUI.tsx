@@ -353,7 +353,7 @@ export const VirtualTryOnUI: React.FC = () => {
             if (result.generatedImage) {
                 setGeneratedImage(result.generatedImage);
                 // Record output history (data URI)
-                tryOnHistory.addOutput(result.generatedImage);
+                await tryOnHistory.addOutput(result.generatedImage);
 
                 // Fetch recommendations after virtual fitting
                 setIsLoadingRecommendations(true);
@@ -871,7 +871,6 @@ export const VirtualTryOnUI: React.FC = () => {
                             ) : recommendations ? (
                                 <RecommendationDisplay
                                     recommendations={recommendations}
-                                    mode="fitting"
                                     onItemClick={addCatalogItemToSlot}
                                 />
                             ) : null}
