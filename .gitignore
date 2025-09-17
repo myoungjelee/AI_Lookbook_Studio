@@ -150,3 +150,15 @@ frontend/.env.development
 .pyc
 test.httpㅇ
 
+# === Local-only: mise & uv ===
+# mise: keep local-only runtime/tool settings untracked
+mise.toml
+
+# uv: local caches and venvs (per-developer)
+.uv/
+.uv-cache/
+uv.lock
+pyproject.toml
+.python-version
+*.egg-info/
+

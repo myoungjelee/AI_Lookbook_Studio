@@ -7,7 +7,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_CATALOG_PATH = ROOT_DIR / "data" / "catalog.json"
 REC_CONFIG_PATH = ROOT_DIR / "config" / "recommendation.config.json"
@@ -18,7 +17,7 @@ class CatalogServiceConfig:
     catalog_path: Path = Path(os.getenv("CATALOG_PATH", str(DEFAULT_CATALOG_PATH)))
     max_recommendations: int = 10
     score_threshold: float = 0.0
-    categories: Tuple[str, ...] = ("top", "pants", "shoes", "accessories")
+    categories: Tuple[str, ...] = ("top", "pants", "shoes", "outer", "accessories")
     exact_weight: float = 1.0
     partial_weight: float = 0.5
     rec_config_path: Path = Path(os.getenv("REC_CONFIG_PATH", str(REC_CONFIG_PATH)))

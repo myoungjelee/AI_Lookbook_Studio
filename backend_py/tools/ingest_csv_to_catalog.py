@@ -93,11 +93,15 @@ def map_row(row: Dict[str, str], idx: int, tags_delim: str, forced_category: Opt
     title = pick(["title", "name", "상품명", "제품명", "product_n"]) or ""
     price = parse_price(pick(["price", "가격", "판매가", "product_p"]))
     tags_field = pick(["tags", "태그", "키워드"]) or ""
-    category = pick(["category", "카테고리", "분류"]) or ""
+    category = pick(["category", "Category", "카테고리", "분류"]) or ""
 
     brand = pick(["brand", "브랜드", "product_b"]) or None
     base_tags = split_tags(tags_field, tags_delim)
 
+    # DB 카테고리에서 성별 제거 (man_, woman_ 접두사 제거)
+    if category:
+        category = category.replace("man_", "").replace("woman_", "")
+    
     # 강제 카테고리 지정이 있으면 우선 적용
     if forced_category:
         category = forced_category
@@ -157,11 +161,16 @@ def map_row(row: Dict[str, str], idx: int, tags_delim: str, forced_category: Opt
 
 def read_csv_file(path: Path, tags_delim: str, forced_category: Optional[str] = None) -> List[Dict]:
     items: List[Dict] = []
+    
+    # DB의 원본 카테고리를 우선 사용하도록 수정
+    # 파일명 기반 강제 분류 제거
+    
     with path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for i, row in enumerate(reader, start=1):
             try:
-                items.append(map_row(row, i, tags_delim, forced_category))
+                # DB의 원본 카테고리를 사용 (forced_category 제거)
+                items.append(map_row(row, i, tags_delim, None))
             except Exception as e:
                 print(f"[WARN] {path.name} #{i} 변환 실패: {e}")
     return items
@@ -173,7 +182,7 @@ def main():
     ap.add_argument("--output", "-o", default=str(DEFAULT_OUTPUT), help="출력 JSON 경로 (기본: data/catalog.json)")
     ap.add_argument("--tags-delim", default=",", help="tags 컬럼 구분자 (기본: ,)")
     ap.add_argument("--merge-existing", action="store_true", help="출력 파일이 존재하면 기존 JSON과 병합(id 중복 시 신규 우선)")
-    ap.add_argument("--force-category", choices=["top", "pants", "shoes"], help="모든 입력 레코드의 카테고리를 강제 지정(top/pants/shoes)")
+    ap.add_argument("--force-category", choices=["top", "pants", "shoes", "outer"], help="모든 입력 레코드의 카테고리를 강제 지정(top/pants/shoes/outer)")
     args = ap.parse_args()
 
     inputs: List[Path] = []
