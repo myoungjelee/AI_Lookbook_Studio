@@ -714,36 +714,42 @@ export const VirtualTryOnUI: React.FC = () => {
                         </div>
                         {/* Histories section separated from upload card */}
                         <div className="lg:col-span-8 order-3">
-                            <TryOnHistory onApply={useCallback((payload) => {
-                                const parse = (data?: string, title?: string): UploadedImage | null => {
-                                    if (!data) return null;
-                                    const m = data.match(/^data:([^;]+);base64,(.*)$/);
-                                    if (!m) return null;
-                                    const mimeType = m[1];
-                                    const base64 = m[2];
-                                    try {
-                                        const byteChars = atob(base64);
-                                        const byteNumbers = new Array(byteChars.length);
-                                        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-                                        const byteArray = new Uint8Array(byteNumbers);
-                                        const blob = new Blob([byteArray], { type: mimeType });
-                                        const ext = mimeType.split('/')[1] || 'png';
-                                        const file = new File([blob], `${title || 'history'}.${ext}`, { type: mimeType });
-                                        return { file, previewUrl: data, base64, mimeType };
-                                    } catch {
-                                        return { file: new File([], title || 'history', { type: mimeType }), previewUrl: data, base64, mimeType } as UploadedImage;
-                                    }
-                                };
-                                const p = parse(payload.person, 'person');
-                                const t = parse(payload.top, payload.topLabel || 'top');
-                                const pa = parse(payload.pants, payload.pantsLabel || 'pants');
-                                const s = parse(payload.shoes, payload.shoesLabel || 'shoes');
-                                if (p) { setPersonImage(p); setPersonSource('upload'); }
-                                if (t) { setTopImage(t); setTopLabel(payload.topLabel || '히스토리'); }
-                                if (pa) { setPantsImage(pa); setPantsLabel(payload.pantsLabel || '히스토리'); }
-                                if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || '히스토리'); }
+                            <TryOnHistory onApply={useCallback(async (payload: {
+                                person?: string;
+                                top?: string;
+                                pants?: string;
+                                shoes?: string;
+                                topLabel?: string;
+                                pantsLabel?: string;
+                                shoesLabel?: string;
+                                outerLabel?: string;
+                                topProduct?: RecommendationItem;
+                                pantsProduct?: RecommendationItem;
+                                shoesProduct?: RecommendationItem;
+                                outerProduct?: RecommendationItem;
+                            }) => {
+                                console.log('🔔 히스토리에서 적용 시도:', payload);
+                                
+                                // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
+                                if (payload.topProduct) {
+                                    console.log('🔔 상의 적용:', payload.topProduct.title);
+                                    await addCatalogItemToSlot(payload.topProduct);
+                                }
+                                if (payload.pantsProduct) {
+                                    console.log('🔔 하의 적용:', payload.pantsProduct.title);
+                                    await addCatalogItemToSlot(payload.pantsProduct);
+                                }
+                                if (payload.shoesProduct) {
+                                    console.log('🔔 신발 적용:', payload.shoesProduct.title);
+                                    await addCatalogItemToSlot(payload.shoesProduct);
+                                }
+                                if (payload.outerProduct) {
+                                    console.log('🔔 아우터 적용:', payload.outerProduct.title);
+                                    await addCatalogItemToSlot(payload.outerProduct);
+                                }
+                                
                                 addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1200 }));
-                            }, [setPersonImage, setPersonSource, setTopImage, setTopLabel, setPantsImage, setPantsLabel, setShoesImage, setShoesLabel, addToast])} />
+                            }, [addCatalogItemToSlot, addToast])} />
                         </div>
 
                         {/* Action and Result Section */}

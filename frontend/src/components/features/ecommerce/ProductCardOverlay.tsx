@@ -1,19 +1,16 @@
 import React from 'react';
-import type { RecommendationItem } from '../../../types';
 import { Button } from '../../ui';
 
 interface ProductCardOverlayProps {
   isVisible: boolean;
   onBuy: () => void;
   onVirtualFitting: () => void;
-  product: RecommendationItem;
 }
 
 export const ProductCardOverlay: React.FC<ProductCardOverlayProps> = ({
   isVisible,
   onBuy,
-  onVirtualFitting,
-  product
+  onVirtualFitting
 }) => {
   if (!isVisible) return null;
 
@@ -22,15 +19,9 @@ export const ProductCardOverlay: React.FC<ProductCardOverlayProps> = ({
     e.stopPropagation();
   };
 
-  const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
-    console.log('ProductCardOverlay 버튼 클릭됨');
-    e.stopPropagation();
-    action();
-  };
-
   return (
     <div 
-      className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-xl flex items-center justify-center z-10"
+      className="absolute inset-x-0 top-1/4 bottom-1/4 bg-black/60 backdrop-blur-sm rounded-xl flex items-center justify-center z-10"
       onClick={handleOverlayClick}
     >
       <div className="flex flex-col gap-3 p-4">
@@ -43,18 +34,16 @@ export const ProductCardOverlay: React.FC<ProductCardOverlayProps> = ({
         >
           입어보기
         </Button>
-        {product.productUrl && (
-          <Button 
-            onClick={(e) => {
-              console.log('사러가기 버튼 클릭됨');
-              e.stopPropagation();
-              onBuy();
-            }}
-            className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
-          >
-            구매하기
-          </Button>
-        )}
+         <Button 
+           onClick={(e) => {
+             console.log('사이드바에 담기 버튼 클릭됨');
+             e.stopPropagation();
+             onBuy();
+           }}
+           className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
+         >
+           사이드바에 담기
+         </Button>
       </div>
     </div>
   );

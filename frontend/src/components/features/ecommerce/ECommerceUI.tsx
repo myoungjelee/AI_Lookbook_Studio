@@ -105,7 +105,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
           isVisible={showOverlay}
           onBuy={handleBuy}
           onVirtualFitting={handleVirtual}
-          product={item}
         />
         <button
           onClick={onToggleLike}
@@ -191,12 +190,7 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     setSelectedItems({});
   };
 
-  const handleBuy = (product: RecommendationItem) => {
-    if (product.productUrl) {
-      window.open(product.productUrl, '_blank', 'noopener,noreferrer');
-    }
-  };
-
+  // 사이드바에 담기 (기존 handleAddToCart)
   const handleAddToCart = (product: RecommendationItem) => {
     const category = resolveCartCategory(product);
     if (!category) {
@@ -207,9 +201,23 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
       [category]: product,
     }));
     
-    // 히스토리에 저장 (메인페이지에서도 기록)
     console.log('🔔 메인페이지에서 상품 클릭:', { product, category });
-    // TODO: 히스토리 저장 로직 추가 필요
+  };
+
+  // 바로 피팅룸에 박히는 기능 (상품추천처럼)
+  const handleDirectFitting = (product: RecommendationItem) => {
+    console.log('🔔 바로 피팅룸으로 이동:', product.title);
+    try {
+      // VirtualTryOnUI에서 기대하는 키 이름으로 저장
+      const itemWithTimestamp = {
+        ...product,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('app:pendingVirtualFittingItem', JSON.stringify(itemWithTimestamp));
+      onNavigate?.('try-on');
+    } catch (error) {
+      console.warn('직접 피팅 데이터 저장 실패', error);
+    }
   };
 
   return (
@@ -259,8 +267,8 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
               <ProductCard
                 key={item.id}
                 item={item}
-                onBuy={handleBuy}
-                onVirtualFitting={handleAddToCart}
+                onBuy={handleAddToCart}
+                onVirtualFitting={handleDirectFitting}
               />
             ))}
           </div>

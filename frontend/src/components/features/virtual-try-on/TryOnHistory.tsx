@@ -1,15 +1,42 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { tryOnHistory, TryOnInputHistoryItem, TryOnOutputHistoryItem } from '../../../services/tryon_history.service';
+import type { RecommendationItem } from '../../../types';
 import { Button, Card } from '../../ui';
 import { FullScreenImage } from '../common/FullScreenImage';
 
 interface TryOnHistoryProps {
-  onApply?: (payload: { person?: string; top?: string; pants?: string; shoes?: string; topLabel?: string; pantsLabel?: string; shoesLabel?: string }) => void;
+  onApply?: (payload: { 
+    person?: string; 
+    top?: string; 
+    pants?: string; 
+    shoes?: string; 
+    topLabel?: string; 
+    pantsLabel?: string; 
+    shoesLabel?: string; 
+    outerLabel?: string;
+    topProduct?: RecommendationItem;
+    pantsProduct?: RecommendationItem;
+    shoesProduct?: RecommendationItem;
+    outerProduct?: RecommendationItem;
+  }) => void;
 }
 
 interface HistoryItemCardProps {
   item: TryOnInputHistoryItem;
-  onApply?: (payload: { person?: string; top?: string; pants?: string; shoes?: string; topLabel?: string; pantsLabel?: string; shoesLabel?: string }) => void;
+  onApply?: (payload: { 
+    person?: string; 
+    top?: string; 
+    pants?: string; 
+    shoes?: string; 
+    topLabel?: string; 
+    pantsLabel?: string; 
+    shoesLabel?: string; 
+    outerLabel?: string;
+    topProduct?: RecommendationItem;
+    pantsProduct?: RecommendationItem;
+    shoesProduct?: RecommendationItem;
+    outerProduct?: RecommendationItem;
+  }) => void;
   getHistoryItemImage: (item: TryOnInputHistoryItem) => Promise<string | null>;
 }
 
@@ -39,7 +66,20 @@ const HistoryItemCard: React.FC<HistoryItemCardProps> = ({ item, onApply, getHis
   return (
     <button
       type="button"
-      onClick={() => onApply?.({ person: undefined, top: undefined, pants: undefined, shoes: undefined, topLabel: item.topLabel, pantsLabel: item.pantsLabel, shoesLabel: item.shoesLabel })}
+      onClick={() => onApply?.({
+        person: undefined, 
+        top: undefined, 
+        pants: undefined, 
+        shoes: undefined, 
+        topLabel: item.topLabel, 
+        pantsLabel: item.pantsLabel, 
+        shoesLabel: item.shoesLabel,
+        outerLabel: item.outerLabel,
+        topProduct: item.topProduct,
+        pantsProduct: item.pantsProduct,
+        shoesProduct: item.shoesProduct,
+        outerProduct: item.outerProduct
+      })}
       className="relative w-40 aspect-[4/5] rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition"
       title="클릭하면 입력을 적용합니다"
     >
