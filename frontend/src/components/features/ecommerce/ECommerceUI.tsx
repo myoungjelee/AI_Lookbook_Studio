@@ -1,18 +1,16 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Card, Button, useToast, toast } from '../../ui';
+import { useToast, toast } from '../../ui';
 import type { RecommendationItem } from '../../../types';
 import { apiClient } from '../../../services/api.service';
 import { likesService } from '../../../services/likes.service';
 import { HeartIcon } from '../../icons/HeartIcon';
-import { HeroBanner } from '../home/HeroBanner';
-import { CategoryRow } from '../home/CategoryRow';
 import { FilterChips } from '../home/FilterChips';
 
 function formatPriceKRW(n: number) {
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(n);
 }
 
-const useRandomProducts = (limit: number = 18) => {
+const useRandomProducts = (limit: number = 20) => {
   const [items, setItems] = useState<RecommendationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +21,7 @@ const useRandomProducts = (limit: number = 18) => {
       const data = await apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${limit}`);
       setItems(data);
     } catch (e: any) {
-      setError(e?.message || 'failed');
+      setError(e?.message || '추천 상품을 불러오지 못했습니다.');
     } finally { setLoading(false); }
   };
 
@@ -41,157 +39,93 @@ const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
     const nowLiked = likesService.toggle(item);
     setLiked(nowLiked);
     addToast(nowLiked
-      ? toast.success('좋아요에 추가', item.title, { duration: 2000 })
-      : toast.info('좋아요에서 제거', item.title, { duration: 1500 })
+      ? toast.success('좋아요에 추가했어요', item.title, { duration: 2000 })
+      : toast.info('좋아요에서 제거했어요', item.title, { duration: 1500 })
     );
   };
 
-  const onBuy: React.MouseEventHandler = (e) => {
-    e.preventDefault(); e.stopPropagation();
+  const onClick = () => {
     if (item.productUrl) {
       window.open(item.productUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
-  const body = (
-    <Card
-      padding="sm"
-      className="group relative cursor-pointer transition-all duration-200 hover:shadow-xl hover:-translate-y-1 hover:scale-[1.02] ring-1 ring-transparent hover:ring-blue-200 rounded-xl"
+  const discount = item.discountRate ? Math.round(item.discountRate * 100) : item.discountPercentage;
+
+  return (
+    <article
+      onClick={onClick}
+      className="group cursor-pointer"
     >
-      <div className="relative aspect-[4/5] bg-gray-100 rounded-lg mb-2 overflow-hidden">
-        {item.imageUrl && (
-          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />
-        )}
-        <div className="pointer-events-none absolute inset-0 rounded-lg ring-0 ring-blue-200/50 opacity-0 group-hover:opacity-100 group-hover:ring-4 transition-opacity" />
+      <div className="relative mb-3 overflow-hidden rounded-[var(--radius-card)] border border-[var(--divider)] bg-[var(--surface-bg)]">
+        <div className="aspect-[4/5] bg-[var(--surface-muted)]">
+          {item.imageUrl && (
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+            />
+          )}
+        </div>
+        <button
+          onClick={onToggleLike}
+          aria-label="좋아요 토글"
+          className={`absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/90 shadow-sm transition-colors ${liked ? 'text-[#d6001c]' : 'text-gray-500 hover:text-black'}`}
+        >
+          <HeartIcon className="h-4 w-4" />
+        </button>
       </div>
-      <p className="font-bold text-sm truncate">{item.tags?.[0] || '브랜드'}</p>
-      <p className="text-xs text-gray-600 truncate h-8">{item.title}</p>
-      <p className="text-sm font-bold">{formatPriceKRW(item.price)}</p>
-      <div className="mt-2 flex gap-2">
-        <Button size="sm" onClick={onBuy} disabled={!item.productUrl}>구매</Button>
-        <Button size="sm" variant={liked ? 'secondary' : 'outline'} onClick={onToggleLike} aria-pressed={liked}>
-          <span className="inline-flex items-center gap-1">
-            <HeartIcon className={liked ? 'w-4 h-4 text-red-500' : 'w-4 h-4'} />
-            {liked ? '좋아요됨' : '좋아요'}
-          </span>
-        </Button>
+      <div className="space-y-1">
+        <p className="text-[13px] font-semibold text-[var(--text-muted)] truncate uppercase tracking-wide">
+          {item.brandName || item.tags?.[0] || 'MUSINSA'}
+        </p>
+        <p className="text-[15px] font-medium text-[var(--text-strong)] leading-snug h-[44px] overflow-hidden">
+          {item.title}
+        </p>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[15px] font-semibold text-[var(--text-strong)]">{formatPriceKRW(item.price)}</span>
+          {typeof discount === 'number' && discount > 0 && (
+            <span className="text-[13px] font-semibold text-[#d6001c]">{discount}%</span>
+          )}
+        </div>
       </div>
-    </Card>
-  );
-  return item.productUrl ? (
-    <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="block">{body}</a>
-  ) : (
-    <div className="block">{body}</div>
-  );
-};
-
-// Carousel item with Buy/Like actions
-const CarouselItem: React.FC<{ item: RecommendationItem }> = ({ item }) => {
-  const { addToast } = useToast();
-  const [liked, setLiked] = useState<boolean>(() => likesService.isLiked(item.id));
-
-  const onToggleLike: React.MouseEventHandler = (e) => {
-    e.preventDefault(); e.stopPropagation();
-    const nowLiked = likesService.toggle(item);
-    setLiked(nowLiked);
-    addToast(nowLiked
-      ? toast.success('좋아요에 추가', item.title, { duration: 2000 })
-      : toast.info('좋아요에서 제거', item.title, { duration: 1500 })
-    );
-  };
-
-  const onBuy: React.MouseEventHandler = (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (item.productUrl) window.open(item.productUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  const card = (
-    <div className="flex-shrink-0 w-40 group cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:scale-105">
-      <div className="relative aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden ring-1 ring-transparent group-hover:ring-blue-200">
-        {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />}
-        <div className="pointer-events-none absolute inset-0 rounded-lg ring-0 ring-blue-200/50 opacity-0 group-hover:opacity-100 group-hover:ring-4 transition-opacity" />
-      </div>
-      <p className="font-bold text-sm truncate">{item.tags?.[0] || '브랜드'}</p>
-      <p className="text-xs text-gray-600 truncate">{item.title}</p>
-      <p className="text-sm font-bold">{formatPriceKRW(item.price)}</p>
-      <div className="mt-2 flex gap-2">
-        <Button size="sm" onClick={onBuy} disabled={!item.productUrl}>구매</Button>
-        <Button size="sm" variant={liked ? 'secondary' : 'outline'} onClick={onToggleLike} aria-pressed={liked}>
-          <span className="inline-flex items-center gap-1">
-            <HeartIcon className={liked ? 'w-4 h-4 text-red-500' : 'w-4 h-4'} />
-            {liked ? '좋아요됨' : '좋아요'}
-          </span>
-        </Button>
-      </div>
-    </div>
-  );
-
-  return item.productUrl ? (
-    <a href={item.productUrl} target="_blank" rel="noopener noreferrer" className="block">{card}</a>
-  ) : (
-    <div className="block">{card}</div>
+    </article>
   );
 };
 
 interface HomeProps { onNavigate?: (page: 'home' | 'try-on' | 'likes') => void }
 export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { items, loading, error, refresh } = useRandomProducts(18);
-  const carousel = items.slice(0, 8);
-  const gridItems = items.slice(8);
+  const { items, loading, error, refresh } = useRandomProducts(25);
 
   return (
-    <div className="bg-white font-sans">
-      <header className="sticky top-0 bg-white z-10 shadow-sm">
-        <div className="overflow-x-auto whitespace-nowrap">
-          <nav className="flex items-center justify-center space-x-4 p-3 text-sm font-medium">
-            {[
-              { id: 'content', label: '콘텐츠' },
-              { id: 'recommend', label: '추천' },
-              { id: 'ranking', label: '랭킹' },
-              { id: 'sale', label: '세일' },
-              { id: 'brand', label: '브랜드' },
-              { id: 'release', label: '발매' },
-              { id: 'beauty', label: '뷰티' },
-              { id: 'time', label: '시간특가' },
-              { id: 'try-on', label: '사이버피팅', go: 'try-on' as const },
-              { id: 'likes', label: '좋아요', go: 'likes' as const },
-            ].map((item, idx) => (
-              <button
-                key={item.id}
-                onClick={() => item.go && onNavigate?.(item.go)}
-                className={`pb-1 ${idx === 1 ? 'text-black border-b-2 border-black font-bold' : 'text-gray-500'} ${item.go ? 'hover:text-black' : ''}`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+    <div className="pt-[124px]">
+      <div className="border-y border-[var(--divider)] bg-[var(--surface-bg)]/70 backdrop-blur">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-8 py-3 text-sm text-[var(--text-muted)]">
+          <span className="font-semibold text-[var(--text-strong)]">스포츠 종목 아이템 추천</span>
+          <span className="text-[var(--text-muted)]">러닝</span>
+          <div className="ml-auto flex items-center gap-3 text-xs">
+            <button onClick={() => onNavigate?.('try-on')} className="rounded-full border border-[var(--divider)] bg-white/40 px-3 py-1 text-[var(--text-strong)] hover:bg-white">버추얼 피팅 이동</button>
+            <button onClick={refresh} className="rounded-full border border-[var(--divider)] px-3 py-1 text-[var(--text-muted)] hover:text-[var(--text-strong)]">새로고침</button>
+          </div>
         </div>
-      </header>
-
-      <main className="p-4 space-y-8 max-w-3xl mx-auto">
-        <HeroBanner />
-        <CategoryRow />
-        <section>
-          <h2 className="text-lg font-bold mb-3">인기 신상</h2>
+        <div className="mx-auto max-w-[1280px] px-8 pb-4">
           <FilterChips />
-        </section>
+        </div>
+      </div>
 
-        <Button className="w-full" size="lg" onClick={refresh} loading={loading}>새로고침</Button>
-
-        <section>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold">오늘 인기 아이템</h2>
-            <Button onClick={refresh} size="sm" loading={loading}>새로고침</Button>
-          </div>
-          {error && (
-            <div className="text-red-600 text-sm mb-2">{error}</div>
-          )}
-          <div className="grid grid-cols-3 gap-4">
-            {gridItems.map(item => <ProductCard key={item.id} item={item} />)}
-          </div>
-        </section>
+      <main className="mx-auto max-w-[1280px] px-8 py-10">
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#d6001c]">{error}</div>
+        )}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {items.map(item => (
+            <ProductCard key={item.id} item={item} />
+          ))}
+        </div>
+        {loading && (
+          <div className="mt-8 text-center text-sm text-[var(--text-muted)]">추천 상품을 불러오는 중...</div>
+        )}
       </main>
     </div>
   );
 };
-

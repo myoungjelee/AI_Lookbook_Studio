@@ -244,7 +244,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [addCatalogItemToSlot]);
 
     return (
-        <div className="flex flex-col items-center p-4 sm:p-6 lg:p-8 bg-gray-50">
+        <div className="flex flex-col items-center bg-[var(--page-bg)] pt-[140px] px-4 sm:px-6 lg:px-8 pb-20">
             <div className="w-full">
                 <Header />
                 <main className="mt-8 mx-auto w-full max-w-screen-xl xl:max-w-[1400px] 2xl:max-w-[1600px]">

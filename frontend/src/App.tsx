@@ -5,7 +5,6 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { ToastProvider } from './components/ui/Toast';
 
 function App() {
-    // Persist and restore current page across refreshes
     const PAGE_KEY = 'app:currentPage:v1';
     const allowed = new Set(['home','try-on','likes','my']);
     const getInitial = (): string => {
@@ -51,9 +50,11 @@ function App() {
     return (
         <ErrorBoundary>
             <ToastProvider>
-                <div className="min-h-screen bg-gray-50 pb-16">
+                <div className="min-h-screen bg-[var(--page-bg)] text-[var(--text-base)]">
                     <TopBar onNavigate={(p) => setCurrentPage(p)} />
-                    {renderCurrentPage()}
+                    <div className="pb-20">
+                        {renderCurrentPage()}
+                    </div>
                     <BottomNav activePage={currentPage} setPage={setCurrentPage} />
                 </div>
             </ToastProvider>
