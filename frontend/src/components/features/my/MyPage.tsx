@@ -1,8 +1,58 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button } from '../../ui';
-import { tryOnHistory } from '../../../services/tryon_history.service';
 import type { TryOnInputHistoryItem, TryOnOutputHistoryItem } from '../../../services/tryon_history.service';
+import { tryOnHistory } from '../../../services/tryon_history.service';
+import { Button, Card } from '../../ui';
 import { FullScreenImage } from '../common/FullScreenImage';
+
+interface MyPageHistoryItemProps {
+  item: TryOnInputHistoryItem;
+  getHistoryItemImage: (item: TryOnInputHistoryItem) => Promise<string | null>;
+}
+
+const MyPageHistoryItem: React.FC<MyPageHistoryItemProps> = ({ item, getHistoryItemImage }) => {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadImage = async () => {
+      setLoading(true);
+      try {
+        const image = await getHistoryItemImage(item);
+        setImageUrl(image);
+      } catch (error) {
+        console.warn('이미지 로드 실패:', error);
+        setImageUrl(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadImage();
+  }, [item, getHistoryItemImage]);
+
+  const hasClothing = item.topLabel || item.pantsLabel || item.shoesLabel || item.outerLabel;
+
+  return (
+    <button className="group relative aspect-[4/5] rounded-xl overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200" onClick={() => {}}>
+      {loading ? (
+        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+          로딩...
+        </div>
+      ) : imageUrl ? (
+        <img src={imageUrl} alt="의류 이미지" className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />
+      ) : hasClothing ? (
+        <div className="w-full h-full flex flex-col items-center justify-center text-gray-600 p-2">
+          <span className="text-sm font-medium">의류 조합</span>
+          <span className="text-xs text-gray-500 mt-1">
+            {[item.topLabel, item.pantsLabel, item.shoesLabel, item.outerLabel].filter(Boolean).join(', ')}
+          </span>
+        </div>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">-</div>
+      )}
+    </button>
+  );
+};
 
 export const MyPage: React.FC = () => {
   const [inputs, setInputs] = useState<TryOnInputHistoryItem[]>(tryOnHistory.inputs());
@@ -25,9 +75,22 @@ export const MyPage: React.FC = () => {
     return () => { unsub(); window.removeEventListener('storage', onStorage); };
   }, []);
 
-  const inputThumb = (item: TryOnInputHistoryItem) => {
-    const first = item.topImage || item.pantsImage || item.shoesImage || item.personImage;
-    return first || '';
+  // 상품 데이터는 히스토리에 저장되므로 별도 캐시 불필요
+
+  // 더 이상 API 호출이 필요하지 않음 (상품 데이터가 히스토리에 저장됨)
+
+  // 히스토리 아이템의 대표 이미지를 가져오는 함수 (저장된 상품 데이터 사용)
+  const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
+    // 상의 → 하의 → 신발 → 아우터 순으로 우선순위
+    const products = [item.topProduct, item.pantsProduct, item.shoesProduct, item.outerProduct].filter(Boolean);
+    
+    for (const product of products) {
+      if (product?.imageUrl) {
+        return product.imageUrl;
+      }
+    }
+    
+    return null;
   };
 
   return (
@@ -47,13 +110,7 @@ export const MyPage: React.FC = () => {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {inputs.map((it) => (
-                  <button key={it.id} className="group relative aspect-[4/5] rounded-xl overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200" onClick={() => it.personImage && setView(it.personImage!)}>
-                    {inputThumb(it) ? (
-                      <img src={inputThumb(it)} alt="input" className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">-</div>
-                    )}
-                  </button>
+                  <MyPageHistoryItem key={it.id} item={it} getHistoryItemImage={getHistoryItemImage} />
                 ))}
               </div>
             )}

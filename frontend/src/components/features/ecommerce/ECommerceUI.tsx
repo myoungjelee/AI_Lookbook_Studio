@@ -136,8 +136,11 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   const handleGoToFitting = () => {
     const items = Object.values(selectedItems).filter(Boolean);
     if (items.length > 0) {
-      // 기존 옷들은 유지하고, 새로 선택한 아이템들만 추가
-      localStorage.setItem('pendingVirtualFittingItems', JSON.stringify(items));
+      try {
+        localStorage.setItem('app:pendingVirtualFittingItems', JSON.stringify(items));
+      } catch (error) {
+        console.warn('localStorage 용량 초과, 아이템 저장 실패:', error);
+      }
     }
     
     if (onNavigate) {

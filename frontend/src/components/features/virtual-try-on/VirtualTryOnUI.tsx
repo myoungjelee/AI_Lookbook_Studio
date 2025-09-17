@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../../services/api.service';
 import { imageProxy } from '../../../services/imageProxy.service';
 import { likesService } from '../../../services/likes.service';
+import { manageStorageSpace } from '../../../services/storage.service';
 import { tryOnHistory } from '../../../services/tryon_history.service';
 import { virtualTryOnService } from '../../../services/virtualTryOn.service';
 import type { ApiFile, ClothingItems, RecommendationItem, RecommendationOptions, UploadedImage } from '../../../types';
@@ -102,233 +103,21 @@ export const VirtualTryOnUI: React.FC = () => {
         return () => { unsub(); window.removeEventListener('storage', onStorage); };
     }, []);
 
-    // localStorage에서 이미지 복원 (압축된 이미지 데이터)
-    useEffect(() => {
-        const restoreImages = () => {
-            try {
-                // personImage 복원
-                const savedPersonImage = localStorage.getItem('virtualTryOn_personImage');
-                if (savedPersonImage) {
-                    const personData = JSON.parse(savedPersonImage);
-                    setPersonImage(personData);
-                }
+    // 이미지 복원 비활성화 (용량 문제로 인해)
 
-                // topImage 복원
-                const savedTopImage = localStorage.getItem('virtualTryOn_topImage');
-                if (savedTopImage) {
-                    const topData = JSON.parse(savedTopImage);
-                    setTopImage(topData);
-                }
 
-                // pantsImage 복원
-                const savedPantsImage = localStorage.getItem('virtualTryOn_pantsImage');
-                if (savedPantsImage) {
-                    const pantsData = JSON.parse(savedPantsImage);
-                    setPantsImage(pantsData);
-                }
-
-                // shoesImage 복원
-                const savedShoesImage = localStorage.getItem('virtualTryOn_shoesImage');
-                if (savedShoesImage) {
-                    const shoesData = JSON.parse(savedShoesImage);
-                    setShoesImage(shoesData);
-                }
-
-                // outerImage 복원
-                const savedOuterImage = localStorage.getItem('virtualTryOn_outerImage');
-                if (savedOuterImage) {
-                    const outerData = JSON.parse(savedOuterImage);
-                    setOuterImage(outerData);
-                }
-            } catch (error) {
-                console.error('이미지 복원 실패:', error);
-            }
-        };
-
-        restoreImages();
-    }, []); // 컴포넌트 마운트 시 한 번만 실행
-
-    // localStorage 용량 관리 함수
-    const manageLocalStorageSize = () => {
-        try {
-            // localStorage 사용량 확인
-            let totalSize = 0;
-            for (let key in localStorage) {
-                if (localStorage.hasOwnProperty(key)) {
-                    totalSize += localStorage[key].length;
-                }
-            }
-            
-            // 5MB 제한 (5 * 1024 * 1024 = 5242880)
-            const maxSize = 5 * 1024 * 1024;
-            
-            if (totalSize > maxSize) {
-                console.log('localStorage 용량 초과, 오래된 데이터 삭제 중...');
-                
-                // virtualTryOn 현재 슬롯 이미지들만 수집 (히스토리 제외)
-                const virtualTryOnKeys = Object.keys(localStorage).filter(key => 
-                    key.startsWith('virtualTryOn_') && (
-                        key.includes('Image') || 
-                        key.includes('Label') || 
-                        key.includes('Source') ||
-                        key.includes('selected') ||
-                        key.includes('originalItems')
-                    )
-                );
-                
-                // 키별로 타임스탬프 추출 (파일명이나 저장 시간 기준)
-                const keysWithTime = virtualTryOnKeys.map(key => {
-                    let timestamp = 0;
-                    try {
-                        const data = localStorage.getItem(key);
-                        if (data) {
-                            const parsed = JSON.parse(data);
-                            // ts 필드가 있으면 사용, 없으면 파일명에서 추출
-                            if (parsed.ts) {
-                                timestamp = parsed.ts;
-                            } else if (parsed.file && parsed.file.name) {
-                                // 파일명에서 숫자 추출
-                                const match = parsed.file.name.match(/\d+/);
-                                if (match) timestamp = parseInt(match[0]);
-                            }
-                        }
-                    } catch (e) {
-                        // JSON 파싱 실패시 현재 시간 사용
-                        timestamp = Date.now();
-                    }
-                    return { key, timestamp };
-                });
-                
-                // 오래된 순으로 정렬
-                keysWithTime.sort((a, b) => a.timestamp - b.timestamp);
-                
-                // 용량이 줄어들 때까지 오래된 것부터 삭제
-                let deletedCount = 0;
-                for (const { key } of keysWithTime) {
-                    localStorage.removeItem(key);
-                    deletedCount++;
-                    
-                    // 다시 용량 확인
-                    let newTotalSize = 0;
-                    for (let k in localStorage) {
-                        if (localStorage.hasOwnProperty(k)) {
-                            newTotalSize += localStorage[k].length;
-                        }
-                    }
-                    
-                    if (newTotalSize < maxSize * 0.8) { // 80% 이하로 줄이면 중단
-                        break;
-                    }
-                }
-                
-                console.log(`${deletedCount}개 항목 삭제 완료`);
-            }
-        } catch (error) {
-            console.error('localStorage 용량 관리 실패:', error);
-        }
-    };
-
-    // 상태를 localStorage에 저장 (기존 방식 + 용량 관리)
+    // 상태를 localStorage에 저장 (이미지 제외, 라벨만 저장)
     useEffect(() => {
         if (personImage) {
-            try {
-                localStorage.setItem('virtualTryOn_personImage', JSON.stringify(personImage));
-                manageLocalStorageSize(); // 용량 관리
-            } catch (error) {
-                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
-                manageLocalStorageSize(); // 오래된 데이터 삭제
-                try {
-                    localStorage.setItem('virtualTryOn_personImage', JSON.stringify(personImage));
-                } catch (retryError) {
-                    console.error('이미지 저장 실패:', retryError);
-                }
-            }
+            // 이미지는 저장하지 않고 라벨만 저장
+            localStorage.setItem('virtualTryOn_personSource', personSource);
         } else {
             localStorage.removeItem('virtualTryOn_personImage');
         }
-    }, [personImage]);
+    }, [personImage, personSource]);
 
     useEffect(() => {
-        if (topImage) {
-            try {
-                localStorage.setItem('virtualTryOn_topImage', JSON.stringify(topImage));
-                manageLocalStorageSize();
-            } catch (error) {
-                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
-                manageLocalStorageSize();
-                try {
-                    localStorage.setItem('virtualTryOn_topImage', JSON.stringify(topImage));
-                } catch (retryError) {
-                    console.error('이미지 저장 실패:', retryError);
-                }
-            }
-        } else {
-            localStorage.removeItem('virtualTryOn_topImage');
-        }
-    }, [topImage]);
-
-    useEffect(() => {
-        if (pantsImage) {
-            try {
-                localStorage.setItem('virtualTryOn_pantsImage', JSON.stringify(pantsImage));
-                manageLocalStorageSize();
-            } catch (error) {
-                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
-                manageLocalStorageSize();
-                try {
-                    localStorage.setItem('virtualTryOn_pantsImage', JSON.stringify(pantsImage));
-                } catch (retryError) {
-                    console.error('이미지 저장 실패:', retryError);
-                }
-            }
-        } else {
-            localStorage.removeItem('virtualTryOn_pantsImage');
-        }
-    }, [pantsImage]);
-
-    useEffect(() => {
-        if (shoesImage) {
-            try {
-                localStorage.setItem('virtualTryOn_shoesImage', JSON.stringify(shoesImage));
-                manageLocalStorageSize();
-            } catch (error) {
-                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
-                manageLocalStorageSize();
-                try {
-                    localStorage.setItem('virtualTryOn_shoesImage', JSON.stringify(shoesImage));
-                } catch (retryError) {
-                    console.error('이미지 저장 실패:', retryError);
-                }
-            }
-        } else {
-            localStorage.removeItem('virtualTryOn_shoesImage');
-        }
-    }, [shoesImage]);
-
-    useEffect(() => {
-        if (outerImage) {
-            try {
-                localStorage.setItem('virtualTryOn_outerImage', JSON.stringify(outerImage));
-                manageLocalStorageSize();
-            } catch (error) {
-                console.warn('localStorage 용량 초과, 오래된 데이터 삭제 후 재시도:', error);
-                manageLocalStorageSize();
-                try {
-                    localStorage.setItem('virtualTryOn_outerImage', JSON.stringify(outerImage));
-                } catch (retryError) {
-                    console.error('이미지 저장 실패:', retryError);
-                }
-            }
-        } else {
-            localStorage.removeItem('virtualTryOn_outerImage');
-        }
-    }, [outerImage]);
-
-    useEffect(() => {
-        localStorage.setItem('virtualTryOn_personSource', personSource);
-    }, [personSource]);
-
-    useEffect(() => {
+        // 이미지는 저장하지 않고 라벨만 저장
         if (topLabel) {
             localStorage.setItem('virtualTryOn_topLabel', topLabel);
         } else {
@@ -337,6 +126,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [topLabel]);
 
     useEffect(() => {
+        // 이미지는 저장하지 않고 라벨만 저장
         if (pantsLabel) {
             localStorage.setItem('virtualTryOn_pantsLabel', pantsLabel);
         } else {
@@ -345,6 +135,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [pantsLabel]);
 
     useEffect(() => {
+        // 이미지는 저장하지 않고 라벨만 저장
         if (shoesLabel) {
             localStorage.setItem('virtualTryOn_shoesLabel', shoesLabel);
         } else {
@@ -353,6 +144,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [shoesLabel]);
 
     useEffect(() => {
+        // 이미지는 저장하지 않고 라벨만 저장
         if (outerLabel) {
             localStorage.setItem('virtualTryOn_outerLabel', outerLabel);
         } else {
@@ -360,24 +152,16 @@ export const VirtualTryOnUI: React.FC = () => {
         }
     }, [outerLabel]);
 
+
     // 상품 카드에서 전달된 상품을 자동으로 칸에 넣기
     const hasProcessedRef = useRef(false);
     
     useEffect(() => {
-        console.log('🔥 useEffect 실행됨! hasProcessedRef.current:', hasProcessedRef.current);
-        
         const handlePendingItem = async () => {
-            // 이미 처리했으면 건너뜀
-            if (hasProcessedRef.current) {
-                console.log('이미 처리했으므로 건너뜀');
-                return;
-            }
-            
-            console.log('🔥 handlePendingItem 시작');
             
             try {
                 // 여러 아이템 처리 (새로운 방식)
-                const pendingItemsStr = localStorage.getItem('pendingVirtualFittingItems');
+                const pendingItemsStr = localStorage.getItem('app:pendingVirtualFittingItems');
                 if (pendingItemsStr) {
                     console.log('여러 아이템 처리 시작');
                     const pendingItems = JSON.parse(pendingItemsStr);
@@ -388,38 +172,25 @@ export const VirtualTryOnUI: React.FC = () => {
                     }
 
                     addToast(toast.success(`${pendingItems.length}개 아이템을 자동으로 담았어요`, undefined, { duration: 2000 }));
-                    localStorage.removeItem('pendingVirtualFittingItems');
+                    localStorage.removeItem('app:pendingVirtualFittingItems');
                     return;
                 }
 
                 // 단일 아이템 처리 (기존 방식)
-                const pendingItemStr = localStorage.getItem('pendingVirtualFittingItem');
-                console.log('localStorage에서 읽은 데이터:', pendingItemStr);
-                if (!pendingItemStr) {
-                    console.log('pendingVirtualFittingItem이 없음');
-                    return;
-                }
+                const pendingItemStr = localStorage.getItem('app:pendingVirtualFittingItem');
+                if (!pendingItemStr) return;
 
                 const pendingItem = JSON.parse(pendingItemStr);
-                console.log('전달된 상품 정보:', pendingItem);
 
                 // 5분 이내의 상품만 처리 (오래된 데이터 방지)
                 if (Date.now() - pendingItem.timestamp > 5 * 60 * 1000) {
-                    console.log('상품이 너무 오래됨, 제거');
-                    localStorage.removeItem('pendingVirtualFittingItem');
+                    localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
-                // 카테고리에 따라 적절한 칸에 넣기 (title과 tags도 함께 체크)
+                // 카테고리에 따라 적절한 칸에 넣기
                 const cat = (pendingItem.category || '').toLowerCase();
-                const title = (pendingItem.title || '').toLowerCase();
-                const tags = (pendingItem.tags || []).join(' ').toLowerCase();
-                const allText = `${cat} ${title} ${tags}`;
                 
-                console.log('카테고리:', cat);
-                console.log('제목:', title);
-                console.log('태그:', tags);
-                console.log('전체 텍스트:', allText);
                 
                 // 백엔드와 동일한 카테고리 매핑 로직 사용
                 const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
@@ -432,13 +203,13 @@ export const VirtualTryOnUI: React.FC = () => {
                 console.log('결정된 슬롯:', slot);
                 if (!slot) {
                     console.log('카테고리를 인식할 수 없음:', cat);
-                    localStorage.removeItem('pendingVirtualFittingItem');
+                    localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
                 if (!pendingItem.imageUrl) {
                     console.log('이미지 URL이 없음');
-                    localStorage.removeItem('pendingVirtualFittingItem');
+                    localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
@@ -457,17 +228,24 @@ export const VirtualTryOnUI: React.FC = () => {
                 addToast(toast.success(`자동으로 담았어요: ${pendingItem.title}`, undefined, { duration: 2000 }));
                 
                 // 처리 완료 후 localStorage에서 제거
-                localStorage.removeItem('pendingVirtualFittingItem');
+                localStorage.removeItem('app:pendingVirtualFittingItem');
                 console.log('상품이 자동으로 칸에 들어갔습니다:', slot);
 
             } catch (error) {
                 console.error('자동 상품 추가 실패:', error);
-                localStorage.removeItem('pendingVirtualFittingItem');
+                localStorage.removeItem('app:pendingVirtualFittingItem');
                 hasProcessedRef.current = false; // 실패 시 플래그 리셋
             }
         };
 
         handlePendingItem();
+        
+        // 스토리지 정리 실행
+        manageStorageSpace();
+        
+        return () => {
+            // cleanup
+        };
     }, []); // 의존성 배열을 빈 배열로 변경
 
     // Recommendation filter options
@@ -507,7 +285,7 @@ export const VirtualTryOnUI: React.FC = () => {
     });
 
     // helpers for history
-    const toDataUrl = (img: UploadedImage | null | undefined) => img ? `data:${img.mimeType};base64,${img.base64}` : undefined;
+    // toDataUrl 함수는 더 이상 사용하지 않음 (이미지 저장 안함)
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
     const recordInput = (
         overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
@@ -515,12 +293,9 @@ export const VirtualTryOnUI: React.FC = () => {
         mode: 'delta' | 'snapshot' = 'delta',
         sourceOverride?: 'model' | 'upload' | 'unknown',
         productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
+        products?: Partial<{ top: RecommendationItem; pants: RecommendationItem; shoes: RecommendationItem; outer: RecommendationItem }>,
     ) => {
-        const p = mode === 'delta' ? (overrides?.person ?? null) : (overrides && 'person' in overrides ? overrides.person : personImage);
-        const t = mode === 'delta' ? (overrides?.top ?? null) : (overrides && 'top' in overrides ? overrides.top : topImage);
-        const pa = mode === 'delta' ? (overrides?.pants ?? null) : (overrides && 'pants' in overrides ? overrides.pants : pantsImage);
-        const s = mode === 'delta' ? (overrides?.shoes ?? null) : (overrides && 'shoes' in overrides ? overrides.shoes : shoesImage);
-        const o = mode === 'delta' ? (overrides?.outer ?? null) : (overrides && 'outer' in overrides ? overrides.outer : outerImage);
+        // 이미지 변수들은 더 이상 사용하지 않음 (용량 절약)
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
         if (src === 'model' && overrides && 'person' in overrides) return;
@@ -532,15 +307,16 @@ export const VirtualTryOnUI: React.FC = () => {
             pantsLabel: labels?.pants ?? (mode === 'delta' ? undefined : pantsLabel),
             shoesLabel: labels?.shoes ?? (mode === 'delta' ? undefined : shoesLabel),
             outerLabel: labels?.outer ?? (mode === 'delta' ? undefined : outerLabel),
-            personImage: toDataUrl(p || null),
-            topImage: toDataUrl(t || null),
-            pantsImage: toDataUrl(pa || null),
-            shoesImage: toDataUrl(s || null),
-            outerImage: toDataUrl(o || null),
+            // 이미지는 저장하지 않음 (용량 절약)
             topProductId: productIds?.top,
             pantsProductId: productIds?.pants,
             shoesProductId: productIds?.shoes,
             outerProductId: productIds?.outer,
+            // 상품 데이터도 저장 (이미지 URL 포함)
+            topProduct: products?.top ?? originalItems.top,
+            pantsProduct: products?.pants ?? originalItems.pants,
+            shoesProduct: products?.shoes ?? originalItems.shoes,
+            outerProduct: products?.outer ?? originalItems.outer,
         });
     };
 
@@ -566,19 +342,6 @@ export const VirtualTryOnUI: React.FC = () => {
                 shoes: shoesImage ? convertToApiFile(shoesImage) : null,
             };
 
-            // Record input history with small previews (data URLs)
-            const toDataUrl = (img: UploadedImage | null | undefined) => img ? `data:${img.mimeType};base64,${img.base64}` : undefined;
-            // Snapshot logging: hide 'model' label to avoid AI 모델 히스토리 노출
-            tryOnHistory.addInput({
-                person: personSource === 'upload' ? 'upload' : 'unknown',
-                topLabel,
-                pantsLabel,
-                shoesLabel,
-                personImage: personSource === 'upload' ? toDataUrl(personImage) : undefined,
-                topImage: toDataUrl(topImage),
-                pantsImage: toDataUrl(pantsImage),
-                shoesImage: toDataUrl(shoesImage),
-            });
 
             const result = await virtualTryOnService.combineImages({
                 person: personImage ? convertToApiFile(personImage) : undefined,
@@ -650,10 +413,10 @@ export const VirtualTryOnUI: React.FC = () => {
                 [slot]: item
             }));
             
-            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }); }
-            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }); }
-            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }); }
-            if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }); }
+            if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }, { top: item }); }
+            if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }, { pants: item }); }
+            if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }, { shoes: item }); }
+            if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }, { outer: item }); }
             addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
         } catch (e: any) {
             addToast(toast.error('가져오기에 실패했어요', e?.message));
@@ -823,7 +586,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         isVisible={hoveredSlot === 'outer'}
                                                         onLike={() => handleClothingLike('outer')}
                                                         onBuy={() => handleClothingBuy('outer')}
-                                                        onRemove={() => { setOuterImage(null); setOuterLabel(undefined); setSelectedOuterId(null); }}
+                                                        onRemove={() => { 
+                                                            setOuterImage(null); 
+                                                            setOuterLabel(undefined); 
+                                                            setSelectedOuterId(null);
+                                                            setOriginalItems(prev => ({ ...prev, outer: undefined }));
+                                                        }}
                                                         itemTitle={outerLabel || 'Outer'}
                                                         isLiked={selectedOuterId ? likesService.isLiked(selectedOuterId) : likesService.isLiked('uploaded-outer')}
                                                     />
@@ -846,7 +614,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         isVisible={hoveredSlot === 'top'}
                                                         onLike={() => handleClothingLike('top')}
                                                         onBuy={() => handleClothingBuy('top')}
-                                                        onRemove={() => { setTopImage(null); setTopLabel(undefined); setSelectedTopId(null); }}
+                                                        onRemove={() => { 
+                                                            setTopImage(null); 
+                                                            setTopLabel(undefined); 
+                                                            setSelectedTopId(null);
+                                                            setOriginalItems(prev => ({ ...prev, top: undefined }));
+                                                        }}
                                                         itemTitle={topLabel || 'Top'}
                                                         isLiked={selectedTopId ? likesService.isLiked(selectedTopId) : likesService.isLiked('uploaded-top')}
                                                     />
@@ -869,7 +642,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         isVisible={hoveredSlot === 'pants'}
                                                         onLike={() => handleClothingLike('pants')}
                                                         onBuy={() => handleClothingBuy('pants')}
-                                                        onRemove={() => { setPantsImage(null); setPantsLabel(undefined); setSelectedPantsId(null); }}
+                                                        onRemove={() => { 
+                                                            setPantsImage(null); 
+                                                            setPantsLabel(undefined); 
+                                                            setSelectedPantsId(null);
+                                                            setOriginalItems(prev => ({ ...prev, pants: undefined }));
+                                                        }}
                                                         itemTitle={pantsLabel || 'Pants'}
                                                         isLiked={selectedPantsId ? likesService.isLiked(selectedPantsId) : likesService.isLiked('uploaded-pants')}
                                                     />
@@ -892,7 +670,12 @@ export const VirtualTryOnUI: React.FC = () => {
                                                         isVisible={hoveredSlot === 'shoes'}
                                                         onLike={() => handleClothingLike('shoes')}
                                                         onBuy={() => handleClothingBuy('shoes')}
-                                                        onRemove={() => { setShoesImage(null); setShoesLabel(undefined); setSelectedShoesId(null); }}
+                                                        onRemove={() => { 
+                                                            setShoesImage(null); 
+                                                            setShoesLabel(undefined); 
+                                                            setSelectedShoesId(null);
+                                                            setOriginalItems(prev => ({ ...prev, shoes: undefined }));
+                                                        }}
                                                         itemTitle={shoesLabel || 'Shoes'}
                                                         isLiked={selectedShoesId ? likesService.isLiked(selectedShoesId) : likesService.isLiked('uploaded-shoes')}
                                                     />
@@ -1056,6 +839,8 @@ export const VirtualTryOnUI: React.FC = () => {
                             ) : recommendations ? (
                                 <RecommendationDisplay
                                     recommendations={recommendations}
+                                    mode="fitting"
+                                    onItemClick={addCatalogItemToSlot}
                                 />
                             ) : null}
                         </div>

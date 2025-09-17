@@ -1,21 +1,105 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Button } from '../../ui';
-import { tryOnHistory, TryOnOutputHistoryItem } from '../../../services/tryon_history.service';
+import { tryOnHistory, TryOnInputHistoryItem, TryOnOutputHistoryItem } from '../../../services/tryon_history.service';
+import { Button, Card } from '../../ui';
 import { FullScreenImage } from '../common/FullScreenImage';
 
 interface TryOnHistoryProps {
   onApply?: (payload: { person?: string; top?: string; pants?: string; shoes?: string; topLabel?: string; pantsLabel?: string; shoesLabel?: string }) => void;
 }
 
+interface HistoryItemCardProps {
+  item: TryOnInputHistoryItem;
+  onApply?: (payload: { person?: string; top?: string; pants?: string; shoes?: string; topLabel?: string; pantsLabel?: string; shoesLabel?: string }) => void;
+  getHistoryItemImage: (item: TryOnInputHistoryItem) => Promise<string | null>;
+}
+
+const HistoryItemCard: React.FC<HistoryItemCardProps> = ({ item, onApply, getHistoryItemImage }) => {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadImage = async () => {
+      setLoading(true);
+      try {
+        const image = await getHistoryItemImage(item);
+        setImageUrl(image);
+      } catch (error) {
+        console.warn('이미지 로드 실패:', error);
+        setImageUrl(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadImage();
+  }, [item, getHistoryItemImage]);
+
+  const hasClothing = item.topLabel || item.pantsLabel || item.shoesLabel || item.outerLabel;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onApply?.({ person: undefined, top: undefined, pants: undefined, shoes: undefined, topLabel: item.topLabel, pantsLabel: item.pantsLabel, shoesLabel: item.shoesLabel })}
+      className="relative w-40 aspect-[4/5] rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition"
+      title="클릭하면 입력을 적용합니다"
+    >
+      {loading ? (
+        <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+          로딩...
+        </div>
+      ) : imageUrl ? (
+        <img src={imageUrl} alt="의류 이미지" className="absolute inset-0 w-full h-full object-cover" />
+      ) : hasClothing ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 p-2">
+          <span className="text-xs font-medium">의류 조합</span>
+          <span className="text-xs text-gray-500 mt-1">
+            {[item.topLabel, item.pantsLabel, item.shoesLabel, item.outerLabel].filter(Boolean).join(', ')}
+          </span>
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">-</div>
+      )}
+    </button>
+  );
+};
+
 export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
   const [inputs, setInputs] = useState(tryOnHistory.inputs());
   const [outputs, setOutputs] = useState(tryOnHistory.outputs());
   const [view, setView] = useState<string | null>(null);
-  const [sortMode] = useState<'recent'>('recent');
+  const [viewingItem, setViewingItem] = useState<TryOnOutputHistoryItem | null>(null);
+  const [sortMode, setSortMode] = useState<'recent' | 'rank'>('recent');
+  // 상품 데이터는 히스토리에 저장되므로 별도 캐시 불필요
 
   const refresh = () => {
     setInputs(tryOnHistory.inputs());
     setOutputs(tryOnHistory.outputs());
+  };
+
+  // 더 이상 API 호출이 필요하지 않음 (상품 데이터가 히스토리에 저장됨)
+
+  // 히스토리 아이템의 대표 이미지를 가져오는 함수 (저장된 상품 데이터 사용)
+  const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
+    // 상의 → 하의 → 신발 → 아우터 순으로 우선순위
+    const products = [item.topProduct, item.pantsProduct, item.shoesProduct, item.outerProduct].filter(Boolean);
+    
+    console.log(`히스토리 아이템 상품 데이터들:`, {
+      topProduct: item.topProduct?.title,
+      pantsProduct: item.pantsProduct?.title,
+      shoesProduct: item.shoesProduct?.title,
+      outerProduct: item.outerProduct?.title,
+      filteredProducts: products.length
+    });
+    
+    for (const product of products) {
+      if (product?.imageUrl) {
+        console.log(`이미지 URL 찾음: ${product.imageUrl}`);
+        return product.imageUrl;
+      }
+    }
+    
+    console.log(`모든 상품에서 이미지를 찾지 못함`);
+    return null;
   };
 
   useEffect(() => {
@@ -29,20 +113,21 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
     return () => { unsub(); window.removeEventListener('storage', onStorage); };
   }, []);
 
-  // Lightweight relative time
-  const fmt = (ts: number) => {
-    const d = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-    if (d < 60) return `${d}s ago`;
-    const m = Math.floor(d / 60); if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
-    const day = Math.floor(h / 24); return `${day}d ago`;
-  };
 
   const outputsSorted = useMemo(() => {
     const arr = [...outputs];
-    arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (sortMode === 'recent') {
+      arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    } else {
+      // 랭킹순 정렬 (평가 점수 기준)
+      arr.sort((a, b) => {
+        const scoreA = a.evaluation?.score || 0;
+        const scoreB = b.evaluation?.score || 0;
+        return scoreB - scoreA;
+      });
+    }
     return arr;
-  }, [outputs]);
+  }, [outputs, sortMode]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -59,23 +144,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
             {inputs.length === 0 ? (
               <div className="row-span-2 flex items-center justify-center text-sm text-gray-500 w-80">기록이 없습니다.</div>
             ) : inputs.map(item => {
-              // Prefer clothing thumbnails over person to avoid showing AI model face
-              const first = item.topImage || item.pantsImage || item.shoesImage || item.personImage;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onApply?.({ person: item.personImage, top: item.topImage, pants: item.pantsImage, shoes: item.shoesImage, topLabel: item.topLabel, pantsLabel: item.pantsLabel, shoesLabel: item.shoesLabel })}
-                  className="relative w-40 aspect-[4/5] rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition"
-                  title="클릭하면 입력을 적용합니다"
-                >
-                  {first ? (
-                    <img src={first} alt="input" className="absolute inset-0 w-full h-full object-cover" />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">-</div>
-                  )}
-                </button>
-              );
+              return <HistoryItemCard key={item.id} item={item} onApply={onApply} getHistoryItemImage={getHistoryItemImage} />;
             })}
           </div>
         </div>
@@ -96,8 +165,8 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
           <div className="text-sm text-gray-500">기록이 없습니다.</div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {outputsSorted.map((o: TryOnOutputHistoryItem, idx: number) => (
-              <button key={o.id} onClick={() => setView(o.image)} className="relative group aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
+            {outputsSorted.map((o: TryOnOutputHistoryItem) => (
+              <button key={o.id} onClick={() => { setView(o.image); setViewingItem(o); }} className="relative group aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
                 <img src={o.image} alt="history" className="w-full h-full object-cover" />
                 {typeof o.evaluation?.score === 'number' && (
                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-md">
@@ -110,7 +179,16 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
         )}
       </Card>
 
-      {view && <FullScreenImage src={view} onClose={() => setView(null)} />}
+      {view && (
+        <FullScreenImage 
+          src={view} 
+          onClose={() => { setView(null); setViewingItem(null); }} 
+          onDelete={viewingItem ? () => {
+            tryOnHistory.removeOutput(viewingItem.id);
+            refresh();
+          } : undefined}
+        />
+      )}
     </div>
   );
 };

@@ -8,11 +8,13 @@ import { ProductCardOverlay } from '../ecommerce/ProductCardOverlay';
 interface RecommendationDisplayProps {
     recommendations: CategoryRecommendations;
     onItemClick?: (item: RecommendationItem) => void;
+    mode?: 'main' | 'fitting'; // 메인 페이지용 vs 피팅룸용
 }
 
 export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
     recommendations,
     onItemClick,
+    mode = 'main', // 기본값은 메인 페이지
 }) => {
 
     // Lightweight inline placeholder (SVG) shown when product image fails to load
@@ -74,20 +76,32 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
         };
 
         const handleVirtualFitting = async () => {
-            // 상품 정보를 localStorage에 저장 (모든 필드 포함)
-            try {
+            if (mode === 'fitting') {
+                // 피팅룸 모드: onItemClick으로 부모에게 전달
+                onItemClick?.(item);
+            } else {
+                // 메인 페이지 모드: 사이드바에 등록 (기존 방식)
                 const productData = {
                     ...item, // 모든 원본 필드 포함
                     timestamp: Date.now()
                 };
-                localStorage.setItem('pendingVirtualFittingItem', JSON.stringify(productData));
-            } catch (error) {
-                console.error('상품 정보 저장 실패:', error);
+                
+                try {
+                    localStorage.setItem('app:pendingVirtualFittingItem', JSON.stringify(productData));
+                } catch (error) {
+                    console.warn('localStorage 용량 초과, 상품 정보 저장 실패:', error);
+                }
             }
         };
 
         return (
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow duration-200" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} data-card-id={item.id}>
+            <Card 
+                className="cursor-pointer hover:shadow-lg transition-shadow duration-200" 
+                onMouseEnter={handleMouseEnter} 
+                onMouseLeave={handleMouseLeave} 
+                onClick={() => onItemClick?.(item)}
+                data-card-id={item.id}
+            >
                 <div className="aspect-square bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
                     {item.imageUrl ? (
                         <img

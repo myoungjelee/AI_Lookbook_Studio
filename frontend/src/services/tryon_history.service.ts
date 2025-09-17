@@ -1,3 +1,5 @@
+import type { RecommendationItem } from "../types";
+
 export type TryOnInputHistoryItem = {
   id: string;
   ts: number;
@@ -6,17 +8,16 @@ export type TryOnInputHistoryItem = {
   pantsLabel?: string;
   shoesLabel?: string;
   outerLabel?: string;
-  // optional data URLs for quick preview
-  personImage?: string;
-  topImage?: string;
-  pantsImage?: string;
-  shoesImage?: string;
-  outerImage?: string;
   // 상품 ID로 중복 체크용
   topProductId?: string;
   pantsProductId?: string;
   shoesProductId?: string;
   outerProductId?: string;
+  // 상품 데이터 (이미지 URL 포함)
+  topProduct?: RecommendationItem;
+  pantsProduct?: RecommendationItem;
+  shoesProduct?: RecommendationItem;
+  outerProduct?: RecommendationItem;
 };
 
 export type TryOnOutputHistoryItem = {
@@ -31,9 +32,10 @@ export type TryOnOutputHistoryItem = {
   };
 };
 
+import { safeSetItem } from "./storage.service";
+
 const KEY_INPUTS = "app:tryon:history:inputs:v1";
 const KEY_OUTPUTS = "app:tryon:history:outputs:v1";
-const LIMIT = 8; // keep lightweight
 
 type Listener = () => void;
 const listeners: Set<Listener> = new Set();
@@ -48,9 +50,7 @@ function read<T>(key: string): T[] {
 }
 
 function write<T>(key: string, arr: T[]) {
-  try {
-    localStorage.setItem(key, JSON.stringify(arr));
-  } catch {}
+  safeSetItem(key, arr);
 }
 
 function notify() {
@@ -64,13 +64,13 @@ function notify() {
 
 export const tryOnHistory = {
   addInput(item: Omit<TryOnInputHistoryItem, "id" | "ts">) {
-    // Drop entries that are only AI-model person without any clothing images
+    // Drop entries that are only AI-model person without any clothing labels
     if (
       item.person !== "upload" &&
-      !item.topImage &&
-      !item.pantsImage &&
-      !item.shoesImage &&
-      !item.outerImage
+      !item.topLabel &&
+      !item.pantsLabel &&
+      !item.shoesLabel &&
+      !item.outerLabel
     ) {
       return;
     }
@@ -125,7 +125,7 @@ export const tryOnHistory = {
       ts: Date.now(),
       ...item,
     };
-    const list = [now, ...existingList].slice(0, LIMIT);
+    const list = [now, ...existingList];
     write(KEY_INPUTS, list);
     notify();
   },
@@ -135,10 +135,7 @@ export const tryOnHistory = {
       ts: Date.now(),
       image: imageDataUri,
     };
-    const list = [now, ...read<TryOnOutputHistoryItem>(KEY_OUTPUTS)].slice(
-      0,
-      LIMIT
-    );
+    const list = [now, ...read<TryOnOutputHistoryItem>(KEY_OUTPUTS)];
     write(KEY_OUTPUTS, list);
     notify();
   },
@@ -163,6 +160,18 @@ export const tryOnHistory = {
   },
   clearOutputs() {
     write(KEY_OUTPUTS, []);
+    notify();
+  },
+  removeInput(id: string) {
+    const list = read<TryOnInputHistoryItem>(KEY_INPUTS);
+    const filtered = list.filter((item) => item.id !== id);
+    write(KEY_INPUTS, filtered);
+    notify();
+  },
+  removeOutput(id: string) {
+    const list = read<TryOnOutputHistoryItem>(KEY_OUTPUTS);
+    const filtered = list.filter((item) => item.id !== id);
+    write(KEY_OUTPUTS, filtered);
     notify();
   },
   subscribe(fn: Listener) {

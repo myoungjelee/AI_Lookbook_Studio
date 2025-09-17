@@ -36,7 +36,6 @@ export const ProductCardOverlay: React.FC<ProductCardOverlayProps> = ({
       <div className="flex flex-col gap-3 p-4">
         <Button 
           onClick={(e) => {
-            console.log('입어보기 버튼 클릭됨');
             e.stopPropagation();
             onVirtualFitting();
           }}
