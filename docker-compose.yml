@@ -23,8 +23,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Ensures the built frontend points to the backend service inside the network
-        VITE_API_URL: http://backend:3001
+        # Nginx 프록시 사용: 프런트는 동일 오리진(/api) 호출 → Nginx가 backend로 프록시
+        VITE_API_URL: ""
+        # Select nginx config: nginx.prod.conf | nginx.dev.conf | nginx.local.conf
+        NGINX_CONF: nginx.prod.conf
     container_name: ai-virtual-try-on-frontend
     ports:
       - "8080:8080"
