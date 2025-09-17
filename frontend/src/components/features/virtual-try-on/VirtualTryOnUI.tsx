@@ -342,6 +342,7 @@ export const VirtualTryOnUI: React.FC = () => {
                 top: topImage ? convertToApiFile(topImage) : null,
                 pants: pantsImage ? convertToApiFile(pantsImage) : null,
                 shoes: shoesImage ? convertToApiFile(shoesImage) : null,
+                outer: outerImage ? convertToApiFile(outerImage) : null,
             };
 
 

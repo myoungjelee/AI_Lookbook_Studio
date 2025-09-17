@@ -17,6 +17,7 @@ export interface ClothingItems {
   top?: ApiFile | null;
   pants?: ApiFile | null;
   shoes?: ApiFile | null;
+  outer?: ApiFile | null;
 }
 
 export interface VirtualTryOnRequest {
