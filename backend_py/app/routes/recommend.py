@@ -45,8 +45,14 @@ def status():
 def catalog_stats():
     return get_catalog_service().stats()
 
+
 @router.get("/random")
-def random_products(limit: int = 18, category: str | None = None, gender: str | None = None, response: Response = None):
+def random_products(
+    limit: int = 18,
+    category: str | None = None,
+    gender: str | None = None,
+    response: Response = None,
+):
     # Prefer DB-backed products when available, otherwise use catalog JSON
     if db_pos_recommender.available():
         products = list(db_pos_recommender.products)
@@ -60,7 +66,7 @@ def random_products(limit: int = 18, category: str | None = None, gender: str | 
         c = (s or "").strip().lower()
         if not c:
             return "unknown"
-        
+
         # DB 카테고리 매핑만 사용
         if c in ["man_outer", "woman_outer"]:
             return "outer"
@@ -72,27 +78,45 @@ def random_products(limit: int = 18, category: str | None = None, gender: str | 
             return "shoes"
         elif c == "woman_dress_skirt":
             return "pants"  # 드레스/스커트는 하의로 분류
-        
+
         # 알 수 없는 카테고리는 그대로 반환
         return c
 
     if category:
         req_slot = norm_slot(category)
-        products = [p for p in products if norm_slot(str(p.get("category") or "")) == req_slot]
+        products = [
+            p for p in products if norm_slot(str(p.get("category") or "")) == req_slot
+        ]
 
     if gender:
         gq = (gender or "").strip().lower()
+
         def norm_gender(s: str) -> str:
             c = (s or "").strip().lower()
-            if not c: return "unknown"
-            if any(k in c for k in ["male","man","men","m","남","남성","남자"]): return "male"
-            if any(k in c for k in ["female","woman","women","w","여","여성","여자"]): return "female"
-            if any(k in c for k in ["unisex","uni","男女","공용","유니섹스"]): return "unisex"
-            if any(k in c for k in ["kid","kids","child","children","아동","키즈"]): return "kids"
+            if not c:
+                return "unknown"
+            if any(k in c for k in ["male", "man", "men", "m", "남", "남성", "남자"]):
+                return "male"
+            if any(
+                k in c for k in ["female", "woman", "women", "w", "여", "여성", "여자"]
+            ):
+                return "female"
+            if any(k in c for k in ["unisex", "uni", "男女", "공용", "유니섹스"]):
+                return "unisex"
+            if any(
+                k in c for k in ["kid", "kids", "child", "children", "아동", "키즈"]
+            ):
+                return "kids"
             return c
-        products = [p for p in products if norm_gender(str(p.get("gender") or "")) == norm_gender(gq)]
+
+        products = [
+            p
+            for p in products
+            if norm_gender(str(p.get("gender") or "")) == norm_gender(gq)
+        ]
 
     import random
+
     random.shuffle(products)
     result = []
     for p in products[: min(max(limit, 1), 100)]:
@@ -123,7 +147,9 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
     analysis_method = "fallback"
     if azure_openai_service.available():
         try:
-            analysis = azure_openai_service.analyze_style_from_images(req.person, req.clothingItems)
+            analysis = azure_openai_service.analyze_style_from_images(
+                req.person, req.clothingItems
+            )
             analysis_method = "ai"
         except Exception:
             analysis = {}
@@ -132,7 +158,7 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
         if req.person:
             analysis["overall_style"] = ["casual", "everyday"]
         if req.clothingItems:
-            for k in ("top", "pants", "shoes"):
+            for k in ("top", "pants", "shoes", "outer"):
                 if getattr(req.clothingItems, k) is not None:
                     analysis.setdefault(k, []).extend([k, "basic", "casual"])
 
@@ -141,7 +167,9 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
     # get more candidates for potential LLM rerank
     candidate_recs = svc.find_similar(
         analysis,
-        max_per_category=(opts.maxPerCategory or 3) * 4 if hasattr(opts, "maxPerCategory") else 12,
+        max_per_category=(
+            (opts.maxPerCategory or 3) * 4 if hasattr(opts, "maxPerCategory") else 12
+        ),
         include_score=True,
         min_price=getattr(opts, "minPrice", None),
         max_price=getattr(opts, "maxPrice", None),
@@ -194,10 +222,15 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
 
 
 @router.post("/from-fitting")
-def recommend_from_fitting(req: RecommendationFromFittingRequest) -> RecommendationResponse:
+def recommend_from_fitting(
+    req: RecommendationFromFittingRequest,
+) -> RecommendationResponse:
     # For fitting: prefer Azure analysis on generated image
     analysis_method = "fallback"
-    analysis = {"overall_style": ["casual", "relaxed"], "categories": ["top", "pants", "shoes"]}
+    analysis = {
+        "overall_style": ["casual", "relaxed"],
+        "categories": ["top", "pants", "shoes", "outer"],
+    }
     if azure_openai_service.available() and req.generatedImage:
         try:
             analysis = azure_openai_service.analyze_virtual_try_on(req.generatedImage)
@@ -208,7 +241,9 @@ def recommend_from_fitting(req: RecommendationFromFittingRequest) -> Recommendat
     opts = req.options or {}
     candidate_recs = svc.find_similar(
         analysis,
-        max_per_category=(opts.maxPerCategory or 3) * 4 if hasattr(opts, "maxPerCategory") else 12,
+        max_per_category=(
+            (opts.maxPerCategory or 3) * 4 if hasattr(opts, "maxPerCategory") else 12
+        ),
         include_score=True,
         min_price=getattr(opts, "minPrice", None),
         max_price=getattr(opts, "maxPrice", None),
