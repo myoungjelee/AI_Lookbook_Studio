@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 
 from ..models import (
     CategoryRecommendations,
@@ -23,10 +23,6 @@ router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 def _candidate_budget(opts: RecommendationOptions) -> int:
     base = opts.maxPerCategory if opts.maxPerCategory is not None else 3
     return base * 4
-
-
-def _has_results(recs: dict[str, list[dict]]) -> bool:
-    return any(len(recs.get(cat, [])) > 0 for cat in recs.keys())
 
 
 def _db_products() -> list[dict] | None:
@@ -53,14 +49,14 @@ def _build_candidates(
 ) -> dict[str, list[dict]]:
     kwargs = _candidate_kwargs(opts)
     products_override = _db_products()
-    candidate_recs = svc.find_similar(
+    if products_override is None:
+        raise HTTPException(status_code=503, detail="Recommendation database unavailable")
+
+    return svc.find_similar(
         analysis,
         products=products_override,
         **kwargs,
     )
-    if products_override is not None and not _has_results(candidate_recs):
-        candidate_recs = svc.find_similar(analysis, **kwargs)
-    return candidate_recs
 
 
 @router.get("/status")
@@ -207,7 +203,7 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
                     analysis.setdefault(k, []).extend([k, "basic", "casual"])
 
     svc = get_catalog_service()
-    opts = req.options or RecommendationOptions()
+    opts = req.options if req.options is not None else RecommendationOptions()
     candidate_recs = _build_candidates(analysis, svc, opts)
 
     # Optional LLM rerank (default to Azure OpenAI when configured)
@@ -272,7 +268,7 @@ def recommend_from_fitting(
         except Exception:
             analysis_method = "fallback"
     svc = get_catalog_service()
-    opts = req.options or RecommendationOptions()
+    opts = req.options if req.options is not None else RecommendationOptions()
     candidate_recs = _build_candidates(analysis, svc, opts)
 
     max_k = opts.maxPerCategory or 3
