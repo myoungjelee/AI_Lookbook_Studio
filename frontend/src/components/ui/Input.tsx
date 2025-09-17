@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string;
@@ -20,11 +20,9 @@ const Input: React.FC<InputProps> = ({
 }) => {
     const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
 
-    const baseClasses = 'block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500';
+    const baseClasses = 'block w-full rounded-[12px] border border-[var(--divider)] bg-[var(--surface-bg)] px-3 py-2 text-sm text-[var(--text-base)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:border-[#111111] focus:outline-none focus:ring-1 focus:ring-[#111111] disabled:cursor-not-allowed disabled:bg-[var(--surface-muted)] disabled:text-[var(--text-muted)]';
 
-    const errorClasses = error
-        ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-        : '';
+    const errorClasses = error ? 'border-[#d6001c] focus:border-[#d6001c] focus:ring-[#d6001c]' : '';
 
     const paddingClasses = leftIcon && rightIcon
         ? 'pl-10 pr-10'
@@ -39,14 +37,14 @@ const Input: React.FC<InputProps> = ({
     return (
         <div className="w-full">
             {label && (
-                <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-[var(--text-base)]">
                     {label}
                 </label>
             )}
             <div className="relative">
                 {leftIcon && (
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <div className="h-5 w-5 text-gray-400">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--text-muted)]">
+                        <div className="h-5 w-5">
                             {leftIcon}
                         </div>
                     </div>
@@ -57,18 +55,18 @@ const Input: React.FC<InputProps> = ({
                     {...props}
                 />
                 {rightIcon && (
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <div className="h-5 w-5 text-gray-400">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[var(--text-muted)]">
+                        <div className="h-5 w-5">
                             {rightIcon}
                         </div>
                     </div>
                 )}
             </div>
             {error && (
-                <p className="mt-1 text-sm text-red-600">{error}</p>
+                <p className="mt-1 text-sm text-[#d6001c]">{error}</p>
             )}
             {helperText && !error && (
-                <p className="mt-1 text-sm text-gray-500">{helperText}</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">{helperText}</p>
             )}
         </div>
     );

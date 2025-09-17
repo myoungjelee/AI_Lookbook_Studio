@@ -1,4 +1,0 @@
-uv add fastapi uvicorn[standard] sqlalchemy psycopg2-binary pandas numpy scikit-learn python-dotenv tqdm
-
-pip install fastapi uvicorn[standard] sqlalchemy psycopg2-binary pandas numpy scikit-learn python-dotenv tqdm
-

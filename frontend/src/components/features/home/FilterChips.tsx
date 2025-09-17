@@ -1,14 +1,33 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 
-const chips = ['산뜻하기','얼리 아답터','니트','캠핑','팬츠','노멀룩','로퍼','슈프림','가먼트','하이엔드'];
+const chips = [
+  '러닝화',
+  '헤드보드',
+  '트레이닝',
+  '카핑',
+  '스토츠',
+  '액티브웜',
+  '로퍼',
+  '스니커즈',
+  '가멘트',
+  '라이프스타일'
+];
 
 export const FilterChips: React.FC = () => {
   const [active, setActive] = useState(0);
   return (
     <div className="flex flex-wrap gap-2">
-      {chips.map((c, i) => (
-        <button key={c} onClick={() => setActive(i)} className={`text-xs rounded-full px-3 py-1 border ${active===i ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'}`}>
-          {c}
+      {chips.map((chip, index) => (
+        <button
+          key={chip}
+          onClick={() => setActive(index)}
+          className={`text-xs rounded-full px-4 py-1.5 border transition-colors ${
+            active === index
+              ? 'bg-[#111111] text-white border-[#111111]'
+              : 'bg-white text-[var(--text-muted)] border-[var(--divider)] hover:text-[var(--text-strong)]'
+          }`}
+        >
+          {chip}
         </button>
       ))}
     </div>
@@ -16,4 +35,3 @@ export const FilterChips: React.FC = () => {
 };
 
 export default FilterChips;
-

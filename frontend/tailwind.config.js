@@ -1,29 +1,34 @@
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
-        "./index.html",
-        "./src/**/*.{js,ts,jsx,tsx}",
+        './index.html',
+        './src/**/*.{js,ts,jsx,tsx}',
     ],
     theme: {
         extend: {
             colors: {
                 primary: {
-                    50: '#eff6ff',
-                    100: '#dbeafe',
-                    200: '#bfdbfe',
-                    300: '#93c5fd',
-                    400: '#60a5fa',
-                    500: '#3b82f6',
-                    600: '#2563eb',
-                    700: '#1d4ed8',
-                    800: '#1e40af',
-                    900: '#1e3a8a',
+                    50: '#f5f5f7',
+                    100: '#e8e8eb',
+                    200: '#d1d1d6',
+                    300: '#b1b1b8',
+                    400: '#8c8c92',
+                    500: '#6f6f76',
+                    600: '#525257',
+                    700: '#3a3a3f',
+                    800: '#1f1f21',
+                    900: '#111112',
                 },
+                accent: '#111111',
+                muted: '#6f6f6f',
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', 'sans-serif'],
+                sans: ['\'Noto Sans KR\'', '\'Spoqa Han Sans Neo\'', '\'Apple SD Gothic Neo\'', '\'Malgun Gothic\'', 'Segoe UI', 'sans-serif'],
+            },
+            borderRadius: {
+                xl: '12px',
             },
         },
     },
     plugins: [],
-}
+};

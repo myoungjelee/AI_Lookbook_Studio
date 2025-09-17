@@ -1,241 +1,304 @@
 import React, { useEffect, useState } from 'react';
+
+// UI (양쪽 모두 사용)
+import { toast, useToast } from '../../ui';
+
+// 타입 (중복 금지: 한 줄만 유지)
+import type { RecommendationItem } from '../../../types';
+
+// 서비스
 import { apiClient } from '../../../services/api.service';
 import { likesService } from '../../../services/likes.service';
-import type { RecommendationItem } from '../../../types';
+
+// 아이콘
 import { HeartIcon } from '../../icons/HeartIcon';
-import { Button, Card, toast, useToast } from '../../ui';
-import { CategoryRow } from '../home/CategoryRow';
+
+// 컴포넌트 (양쪽 모두)
 import { FilterChips } from '../home/FilterChips';
-import { HeroBanner } from '../home/HeroBanner';
 import { ProductCardOverlay } from './ProductCardOverlay';
 import { StickySidebar } from './StickySidebar';
 
-function formatPriceKRW(n: number) {
+/* ===========================
+   Utils & Hooks
+   =========================== */
+
+function formatPriceKRW(n?: number) {
+  if (typeof n !== 'number') return '-';
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(n);
 }
 
-const useRandomProducts = (limit: number = 18) => {
+const useRandomProducts = (limit: number = 20) => {
   const [items, setItems] = useState<RecommendationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchItems = async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const data = await apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${limit}`);
+      const data = await apiClient.get<RecommendationItem[]>(
+        `/api/recommend/random?limit=${limit}`
+      );
       setItems(data);
     } catch (e: any) {
-      setError(e?.message || 'failed');
-    } finally { setLoading(false); }
+      setError(e?.message || '추천 상품을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  useEffect(() => {
+    fetchItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return { items, loading, error, refresh: fetchItems };
 };
 
-interface ProductCardProps { 
+/* ===========================
+   ProductCard (심플 카드 + 오버레이)
+   =========================== */
+
+interface ProductCardProps {
   item: RecommendationItem;
   onBuy?: (item: RecommendationItem) => void;
   onVirtualFitting?: (item: RecommendationItem) => void;
 }
+
 const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting }) => {
   const { addToast } = useToast();
   const [liked, setLiked] = useState<boolean>(() => likesService.isLiked(item.id));
   const [showOverlay, setShowOverlay] = useState(false);
 
   const onToggleLike: React.MouseEventHandler = (e) => {
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
     const nowLiked = likesService.toggle(item);
     setLiked(nowLiked);
-    addToast(nowLiked
-      ? toast.success('좋아요에 추가', item.title, { duration: 2000 })
-      : toast.info('좋아요에서 제거', item.title, { duration: 1500 })
+    addToast(
+      nowLiked
+        ? toast.success('좋아요에 추가했어요', item.title, { duration: 2000 })
+        : toast.info('좋아요에서 제거했어요', item.title, { duration: 1500 })
     );
   };
 
-  const handleMouseEnter = () => {
-    setShowOverlay(true);
+  // 카드 클릭 시 상품 새 탭 이동 (reco_merge 동작)
+  const onClick = () => {
+    if (item.productUrl) {
+      window.open(item.productUrl, '_blank', 'noopener,noreferrer');
+    }
   };
 
-  const handleMouseLeave = () => {
-    setShowOverlay(false);
-  };
+  // 오버레이 표시 제어 (HEAD 동작)
+  const handleMouseEnter = () => setShowOverlay(true);
+  const handleMouseLeave = () => setShowOverlay(false);
 
   const handleBuy = () => {
-    if (onBuy) {
-      onBuy(item);
-    }
+    if (onBuy) onBuy(item);
+    else if (item.productUrl) window.open(item.productUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleVirtualFitting = () => {
-    if (onVirtualFitting) {
-      onVirtualFitting(item);
-    }
+    if (onVirtualFitting) onVirtualFitting(item);
   };
 
+  // 할인율 계산 (reco_merge 병합)
+  const discount =
+    typeof item.discountRate === 'number'
+      ? Math.round(item.discountRate * 100)
+      : item.discountPercentage;
+
   return (
-    <Card
-      padding="sm"
-      className="group relative cursor-pointer transition-all duration-200 hover:shadow-xl hover:-translate-y-1 hover:scale-[1.02] ring-1 ring-transparent hover:ring-blue-200 rounded-xl"
+    <article
+      onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      className="group cursor-pointer"
       data-card-id={item.id}
     >
-      <div className="relative aspect-[4/5] bg-gray-100 rounded-lg mb-2 overflow-hidden">
-        {item.imageUrl && (
-          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />
-        )}
-        <div className="pointer-events-none absolute inset-0 rounded-lg ring-0 ring-blue-200/50 opacity-0 group-hover:opacity-100 group-hover:ring-4 transition-opacity" />
-        
-        {/* 오버레이 */}
+      <div className="relative mb-3 overflow-hidden rounded-[var(--radius-card)] border border-[var(--divider)] bg-[var(--surface-bg)]">
+        <div className="aspect-[4/5] bg-[var(--surface-muted)]">
+          {item.imageUrl && (
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              loading="lazy"
+            />
+          )}
+        </div>
+
+        {/* 좋아요 버튼 (reco_merge 스타일) */}
+        <button
+          onClick={onToggleLike}
+          aria-label="좋아요 토글"
+          aria-pressed={liked}
+          className={`absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/90 shadow-sm transition-colors ${
+            liked ? 'text-[#d6001c]' : 'text-gray-500 hover:text-black'
+          }`}
+        >
+          <HeartIcon className="h-4 w-4" />
+        </button>
+
+        {/* 오버레이 CTA (HEAD 기능) */}
         <ProductCardOverlay
           isVisible={showOverlay}
-          onBuy={handleBuy}
-          onVirtualFitting={handleVirtualFitting}
+          onBuy={(e: any) => {
+            e?.stopPropagation?.();
+            handleBuy();
+          }}
+          onVirtualFitting={(e: any) => {
+            e?.stopPropagation?.();
+            handleVirtualFitting();
+          }}
           product={item}
         />
       </div>
-      <p className="font-bold text-sm truncate">{item.tags?.[0] || '브랜드'}</p>
-      <p className="text-xs text-gray-600 truncate h-8">{item.title}</p>
-      <p className="text-sm font-bold">{formatPriceKRW(item.price)}</p>
-      <div className="mt-2 flex gap-2">
-        <Button size="sm" variant={liked ? 'secondary' : 'outline'} onClick={onToggleLike} aria-pressed={liked}>
-          <span className="inline-flex items-center gap-1">
-            <HeartIcon className={liked ? 'w-4 h-4 text-red-500' : 'w-4 h-4'} />
-            {liked ? '좋아요됨' : '좋아요'}
+
+      {/* 메타/텍스트 (reco_merge 베이스 + 브랜드/태그 폴백) */}
+      <div className="space-y-1">
+        <p className="text-[13px] font-semibold text-[var(--text-muted)] truncate uppercase tracking-wide">
+          {item.brandName || item.tags?.[0] || 'MUSINSA'}
+        </p>
+        <p className="text-[15px] font-medium text-[var(--text-strong)] leading-snug h-[44px] overflow-hidden">
+          {item.title}
+        </p>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[15px] font-semibold text-[var(--text-strong)]">
+            {formatPriceKRW(item.price)}
           </span>
-        </Button>
+          {typeof discount === 'number' && discount > 0 && (
+            <span className="text-[13px] font-semibold text-[#d6001c]">{discount}%</span>
+          )}
+        </div>
       </div>
-    </Card>
+    </article>
   );
 };
 
+/* ===========================
+   ECommerceUI (레이아웃: reco_merge, 사이드바 연계: HEAD)
+   =========================== */
 
-interface HomeProps { onNavigate?: (page: 'home' | 'try-on' | 'likes') => void }
+interface HomeProps {
+  onNavigate?: (page: 'home' | 'try-on' | 'likes') => void;
+}
+
 export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { items, loading, error, refresh } = useRandomProducts(18);
-  const gridItems = items.slice(8);
-  
-  // 사이드바 상태
+  // NOTE: limit은 필요에 따라 조절
+  const { items, loading, error, refresh } = useRandomProducts(24);
+
+  // 사이드바 상태 (HEAD)
   const [selectedItems, setSelectedItems] = useState<{
     outer?: RecommendationItem;
     top?: RecommendationItem;
     pants?: RecommendationItem;
     shoes?: RecommendationItem;
   }>({});
-  
-  // 아이템 제거 핸들러
+
   const handleRemoveItem = (category: 'outer' | 'top' | 'pants' | 'shoes') => {
-    setSelectedItems(prev => ({
+    setSelectedItems((prev) => ({
       ...prev,
-      [category]: undefined
+      [category]: undefined,
     }));
   };
 
-  // 피팅룸으로 이동
   const handleGoToFitting = () => {
-    const items = Object.values(selectedItems).filter(Boolean);
-    if (items.length > 0) {
+    const payload = Object.values(selectedItems).filter(Boolean);
+    if (payload.length > 0) {
       try {
-        localStorage.setItem('app:pendingVirtualFittingItems', JSON.stringify(items));
+        localStorage.setItem('app:pendingVirtualFittingItems', JSON.stringify(payload));
       } catch (error) {
         console.warn('localStorage 용량 초과, 아이템 저장 실패:', error);
       }
     }
-    
-    if (onNavigate) {
-      onNavigate('try-on');
-    }
+    onNavigate?.('try-on');
   };
 
-  const handleClearAll = () => {
-    setSelectedItems({});
-  };
-  
-  // 사러가기 핸들러
+  const handleClearAll = () => setSelectedItems({});
+
   const handleBuy = (product: RecommendationItem) => {
-    console.log('사러가기 클릭:', product);
     if (product.productUrl) {
-      console.log('상품 URL로 이동:', product.productUrl);
       window.open(product.productUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      console.log('상품 URL이 없습니다');
     }
   };
 
-  // 상품을 카트에 추가하는 핸들러
+  // 상품을 카트(사이드바 선택)로 추가 (HEAD)
   const handleAddToCart = (product: RecommendationItem) => {
-    const category = product.category.toLowerCase();
-    const cartCategory = category === 'outer' ? 'outer' :
-                        category === 'top' ? 'top' :
-                        category === 'pants' ? 'pants' :
-                        category === 'shoes' ? 'shoes' : null;
-    
+    const category = (product.category || '').toLowerCase();
+    const cartCategory =
+      category === 'outer'
+        ? 'outer'
+        : category === 'top'
+        ? 'top'
+        : category === 'pants'
+        ? 'pants'
+        : category === 'shoes'
+        ? 'shoes'
+        : null;
+
     if (cartCategory) {
-      setSelectedItems(prev => ({
+      setSelectedItems((prev) => ({
         ...prev,
-        [cartCategory]: product
+        [cartCategory]: product,
       }));
     }
   };
 
-  // 아이템 카운트 계산
-
   return (
-    <div className="bg-white font-sans">
-      <header className="sticky top-0 bg-white z-10 shadow-sm">
-        <div className="overflow-x-auto whitespace-nowrap">
-          <nav className="flex items-center space-x-4 p-3 text-sm font-medium">
-            {[
-              { id: 'content', label: '콘텐츠' },
-              { id: 'recommend', label: '추천' },
-              { id: 'ranking', label: '랭킹' },
-              { id: 'sale', label: '세일' },
-              { id: 'brand', label: '브랜드' },
-              { id: 'release', label: '발매' },
-              { id: 'beauty', label: '뷰티' },
-              { id: 'time', label: '시간특가' },
-              { id: 'try-on', label: '사이버피팅', go: 'try-on' as const },
-              { id: 'likes', label: '좋아요', go: 'likes' as const },
-            ].map((item, idx) => (
-              <button
-                key={item.id}
-                onClick={() => item.go && onNavigate?.(item.go)}
-                className={`pb-1 ${idx === 1 ? 'text-black border-b-2 border-black font-bold' : 'text-gray-500'} ${item.go ? 'hover:text-black' : ''}`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+    <div className="pt-[124px]">
+      {/* 상단 바 + 필터 (reco_merge) */}
+      <div className="border-y border-[var(--divider)] bg-[var(--surface-bg)]/70 backdrop-blur">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-8 py-3 text-sm text-[var(--text-muted)]">
+          <span className="font-semibold text-[var(--text-strong)]">스포츠 종목 아이템 추천</span>
+          <span className="text-[var(--text-muted)]">러닝</span>
+          <div className="ml-auto flex items-center gap-3 text-xs">
+            <button
+              onClick={() => onNavigate?.('try-on')}
+              className="rounded-full border border-[var(--divider)] bg-white/40 px-3 py-1 text-[var(--text-strong)] hover:bg-white"
+            >
+              버추얼 피팅 이동
+            </button>
+            <button
+              onClick={refresh}
+              className="rounded-full border border-[var(--divider)] px-3 py-1 text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+            >
+              새로고침
+            </button>
+          </div>
         </div>
-      </header>
-
-      <main className="p-4 space-y-8 max-w-3xl mx-auto">
-        <HeroBanner />
-        <CategoryRow />
-        <section>
-          <h2 className="text-lg font-bold mb-3">인기 신상</h2>
+        <div className="mx-auto max-w-[1280px] px-8 pb-4">
           <FilterChips />
-        </section>
+        </div>
+      </div>
 
-        <Button className="w-full" size="lg" onClick={refresh} loading={loading}>새로고침</Button>
+      {/* 메인 그리드 (reco_merge 스타일) */}
+      <main className="mx-auto max-w-[1280px] px-8 py-10">
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#d6001c]">
+            {error}
+          </div>
+        )}
 
-        <section>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold">오늘 인기 아이템</h2>
-            <Button onClick={refresh} size="sm" loading={loading}>새로고침</Button>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {items.map((item) => (
+            <ProductCard
+              key={item.id}
+              item={item}
+              onBuy={handleBuy}
+              onVirtualFitting={handleAddToCart}
+            />
+          ))}
+        </div>
+
+        {loading && (
+          <div className="mt-8 text-center text-sm text-[var(--text-muted)]">
+            추천 상품을 불러오는 중...
           </div>
-          {error && (
-            <div className="text-red-600 text-sm mb-2">{error}</div>
-          )}
-          <div className="grid grid-cols-3 gap-4">
-            {gridItems.map(item => <ProductCard key={item.id} item={item} onBuy={handleBuy} onVirtualFitting={handleAddToCart} />)}
-          </div>
-        </section>
+        )}
       </main>
-      
-      
-      {/* 스티키 사이드바 */}
+
+      {/* 스티키 사이드바 (HEAD) */}
       <StickySidebar
         selectedItems={selectedItems}
         onRemoveItem={handleRemoveItem}
