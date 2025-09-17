@@ -57,6 +57,8 @@ env:
   AZURE_RESOURCE_GROUP_TEST: ${{ secrets.AZURE_RESOURCE_GROUP }}
   # 🆕 진단 모드 추가
   DIAGNOSTIC_MODE: ${{ github.event.inputs.debug_mode || 'false' }}
+  # 🆕 Discord 알림 추가
+  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
 jobs:
   # ========== 트리거 조건 체크 ==========
@@ -572,6 +574,135 @@ jobs:
         echo "BACKEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
         echo "BACKEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
 
+    # 🆕 여기에 추가
+    - name: 🚨 Discord Notification - Backend Deployment Failed
+      if: failure()
+      run: |
+        echo "🚨 Backend deployment failed, sending Discord notification..."
+        
+        if [ -n "${{ env.DISCORD_WEBHOOK_URL }}" ]; then
+          # Discord 메시지 생성
+          EMBED_COLOR="15158332" # 빨간색
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Discord Webhook 페이로드 생성
+          PAYLOAD=$(cat << EOF
+        {
+          "embeds": [{
+            "title": "🚨 Backend Deployment Failed",
+            "description": "Test environment backend deployment encountered an error",
+            "color": $EMBED_COLOR,
+            "timestamp": "$TIMESTAMP",
+            "fields": [
+              {
+                "name": "🏷️ Job",
+                "value": "${{ github.job }}",
+                "inline": true
+              },
+              {
+                "name": "🌿 Branch",
+                "value": "${{ github.ref_name }}",
+                "inline": true
+              },
+              {
+                "name": "👤 Actor",
+                "value": "${{ github.actor }}",
+                "inline": true
+              },
+              {
+                "name": "💾 Commit",
+                "value": "[\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})",
+                "inline": false
+              },
+              {
+                "name": "🚀 Trigger",
+                "value": "${{ needs.trigger-validation.outputs.deployment_reason }}",
+                "inline": false
+              },
+              {
+                "name": "🔗 Workflow Run",
+                "value": "[View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})",
+                "inline": false
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          # Discord 알림 전송
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "${{ env.DISCORD_WEBHOOK_URL }}" \
+            --silent --show-error || echo "⚠️ Discord notification failed"
+          
+          echo "✅ Discord notification sent for backend deployment failure"
+        else
+          echo "⚠️ DISCORD_WEBHOOK_URL not configured, skipping notification"
+        fi
+
+    # 🆕 성공 시 알림 추가 (기존 실패 알림 다음에)
+    - name: ✅ Discord Notification - Backend Deployment Success
+      if: success()
+      run: |
+        echo "✅ Backend deployment succeeded, sending Discord notification..."
+        
+        if [ -n "${{ env.DISCORD_WEBHOOK_URL }}" ]; then
+          # Discord 메시지 생성 (초록색)
+          EMBED_COLOR="5763719" # 초록색
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          PAYLOAD=$(cat << EOF
+        {
+          "embeds": [{
+            "title": "✅ Backend Deployment Success",
+            "description": "Test environment backend deployed successfully",
+            "color": $EMBED_COLOR,
+            "timestamp": "$TIMESTAMP",
+            "fields": [
+              {
+                "name": "🏷️ Job",
+                "value": "${{ github.job }}",
+                "inline": true
+              },
+              {
+                "name": "🌿 Branch", 
+                "value": "${{ github.ref_name }}",
+                "inline": true
+              },
+              {
+                "name": "👤 Actor",
+                "value": "${{ github.actor }}",
+                "inline": true
+              },
+              {
+                "name": "🐳 Image",
+                "value": "\`${{ steps.build.outputs.image_name }}:${{ steps.build.outputs.image_tag }}\`",
+                "inline": false
+              },
+              {
+                "name": "🌐 Test URL",
+                "value": "[${{ secrets.TEST_BACKEND_URL }}](${{ secrets.TEST_BACKEND_URL }}/health)",
+                "inline": false
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "${{ env.DISCORD_WEBHOOK_URL }}" \
+            --silent --show-error || echo "⚠️ Discord notification failed"
+            
+          echo "✅ Discord success notification sent for backend deployment"
+        else
+          echo "⚠️ DISCORD_WEBHOOK_URL not configured, skipping notification"
+        fi
+
   # ========== 프론트엔드 빌드 & 배포 ==========
   deploy-frontend:
     if: |
@@ -688,6 +819,136 @@ jobs:
         # 6. 실패 정보 저장
         echo "FRONTEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
         echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV        
+
+    # 🆕 여기에 추가
+    - name: 🚨 Discord Notification - Frontend Deployment Failed
+      if: failure()
+      run: |
+        echo "🚨 Frontend deployment failed, sending Discord notification..."
+        
+        if [ -n "${{ env.DISCORD_WEBHOOK_URL }}" ]; then
+          # Discord 메시지 생성
+          EMBED_COLOR="15158332" # 빨간색
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Discord Webhook 페이로드 생성
+          PAYLOAD=$(cat << EOF
+        {
+          "embeds": [{
+            "title": "🚨 Frontend Deployment Failed",
+            "description": "Test environment frontend deployment encountered an error",
+            "color": $EMBED_COLOR,
+            "timestamp": "$TIMESTAMP",
+            "fields": [
+              {
+                "name": "🏷️ Job",
+                "value": "${{ github.job }}",
+                "inline": true
+              },
+              {
+                "name": "🌿 Branch",
+                "value": "${{ github.ref_name }}",
+                "inline": true
+              },
+              {
+                "name": "👤 Actor",
+                "value": "${{ github.actor }}",
+                "inline": true
+              },
+              {
+                "name": "💾 Commit",
+                "value": "[\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})",
+                "inline": false
+              },
+              {
+                "name": "🚀 Trigger",
+                "value": "${{ needs.trigger-validation.outputs.deployment_reason }}",
+                "inline": false
+              },
+              {
+                "name": "🔗 Workflow Run",
+                "value": "[View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})",
+                "inline": false
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          # Discord 알림 전송
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "${{ env.DISCORD_WEBHOOK_URL }}" \
+            --silent --show-error || echo "⚠️ Discord notification failed"
+          
+          echo "✅ Discord notification sent for frontend deployment failure"
+        else
+          echo "⚠️ DISCORD_WEBHOOK_URL not configured, skipping notification"
+        fi
+
+    # 🆕 성공 시 알림 추가 (기존 실패 알림 다음에)
+    - name: ✅ Discord Notification - Frontend Deployment Success
+      if: success()
+      run: |
+        echo "✅ Frontend deployment succeeded, sending Discord notification..."
+        
+        if [ -n "${{ env.DISCORD_WEBHOOK_URL }}" ]; then
+          # Discord 메시지 생성 (초록색)
+          EMBED_COLOR="5763719" # 초록색  
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          PAYLOAD=$(cat << EOF
+        {
+          "embeds": [{
+            "title": "✅ Frontend Deployment Success",
+            "description": "Test environment frontend deployed successfully",
+            "color": $EMBED_COLOR,
+            "timestamp": "$TIMESTAMP",
+            "fields": [
+              {
+                "name": "🏷️ Job",
+                "value": "${{ github.job }}",
+                "inline": true
+              },
+              {
+                "name": "🌿 Branch",
+                "value": "${{ github.ref_name }}",
+                "inline": true
+              },
+              {
+                "name": "👤 Actor",
+                "value": "${{ github.actor }}",
+                "inline": true
+              },
+              {
+                "name": "🌐 Test URL",
+                "value": "[${{ secrets.TEST_FRONTEND_URL }}](${{ secrets.TEST_FRONTEND_URL }})",
+                "inline": false
+              },
+              {
+                "name": "🔗 Workflow Run",
+                "value": "[View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})",
+                "inline": false
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "${{ env.DISCORD_WEBHOOK_URL }}" \
+            --silent --show-error || echo "⚠️ Discord notification failed"
+            
+          echo "✅ Discord success notification sent for frontend deployment"
+        else
+          echo "⚠️ DISCORD_WEBHOOK_URL not configured, skipping notification"
+        fi
+    
 
   # ========== 헬스체크 & 통합 테스트 ==========
   health-check:
@@ -872,6 +1133,143 @@ jobs:
           echo "## 🎉 **Deployment Successful!** 🚀" >> $GITHUB_STEP_SUMMARY
         else
           echo "## ⚠️ **Partial Success** - Check Details Above" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    # 🆕 여기에 추가
+    - name: 🚨 Discord Notification - Health Check Failed
+      if: failure()
+      run: |
+        echo "🚨 Health check failed, sending Discord notification..."
+        
+        if [ -n "${{ env.DISCORD_WEBHOOK_URL }}" ]; then
+          # Discord 메시지 생성
+          EMBED_COLOR="16776960" # 노란색 (경고)
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # 실패한 서비스 확인
+          FAILED_SERVICES=""
+          [ "${{ env.BACKEND_HEALTH }}" = "failed" ] && FAILED_SERVICES="Backend "
+          [ "${{ env.FRONTEND_HEALTH }}" = "failed" ] && FAILED_SERVICES="${FAILED_SERVICES}Frontend"
+          
+          PAYLOAD=$(cat << EOF
+        {
+          "embeds": [{
+            "title": "⚠️ Health Check Failed",
+            "description": "Deployed services are not responding correctly",
+            "color": $EMBED_COLOR,
+            "timestamp": "$TIMESTAMP",
+            "fields": [
+              {
+                "name": "🏥 Failed Services",
+                "value": "$FAILED_SERVICES",
+                "inline": true
+              },
+              {
+                "name": "🌿 Branch",
+                "value": "${{ github.ref_name }}",
+                "inline": true
+              },
+              {
+                "name": "👤 Actor",
+                "value": "${{ github.actor }}",
+                "inline": true
+              },
+              {
+                "name": "🔗 Test URLs",
+                "value": "Backend: ${{ secrets.TEST_BACKEND_URL }}\\nFrontend: ${{ secrets.TEST_FRONTEND_URL }}",
+                "inline": false
+              },
+              {
+                "name": "🔗 Workflow Run",
+                "value": "[View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})",
+                "inline": false
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          # Discord 알림 전송
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "${{ env.DISCORD_WEBHOOK_URL }}" \
+            --silent --show-error || echo "⚠️ Discord notification failed"
+          
+          echo "✅ Discord notification sent for health check failure"
+        else
+          echo "⚠️ DISCORD_WEBHOOK_URL not configured, skipping notification"
+        fi
+
+    # 🆕 전체 배포 완료 알림 추가
+    - name: 🎉 Discord Notification - Full Deployment Complete
+      if: success()
+      run: |
+        echo "🎉 Full deployment completed successfully, sending Discord notification..."
+        
+        if [ -n "${{ env.DISCORD_WEBHOOK_URL }}" ]; then
+          # 배포된 서비스 확인
+          DEPLOYED_SERVICES=""
+          [ "${{ needs.deploy-backend.result }}" = "success" ] && DEPLOYED_SERVICES="Backend "
+          [ "${{ needs.deploy-frontend.result }}" = "success" ] && DEPLOYED_SERVICES="${DEPLOYED_SERVICES}Frontend"
+          
+          # 성공률 계산
+          SUCCESS_COUNT=0
+          TOTAL_COUNT=0
+          [ "${{ needs.deploy-backend.result }}" = "success" ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+          [ "${{ needs.deploy-frontend.result }}" = "success" ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+          [ "${{ needs.trigger-validation.outputs.should_deploy_backend }}" = "true" ] && TOTAL_COUNT=$((TOTAL_COUNT + 1))
+          [ "${{ needs.trigger-validation.outputs.should_deploy_frontend }}" = "true" ] && TOTAL_COUNT=$((TOTAL_COUNT + 1))
+          
+          SUCCESS_RATE=$(( (SUCCESS_COUNT * 100) / TOTAL_COUNT ))
+          
+          EMBED_COLOR="5763719" # 초록색
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          PAYLOAD=$(cat << EOF
+        {
+          "embeds": [{
+            "title": "🎉 Test Environment Deployment Complete",
+            "description": "All services deployed and health checks passed",
+            "color": $EMBED_COLOR,
+            "timestamp": "$TIMESTAMP",
+            "fields": [
+              {
+                "name": "📊 Success Rate",
+                "value": "${SUCCESS_RATE}% (${SUCCESS_COUNT}/${TOTAL_COUNT})",
+                "inline": true
+              },
+              {
+                "name": "🎯 Deployed Services",
+                "value": "$DEPLOYED_SERVICES",
+                "inline": true
+              },
+              {
+                "name": "👤 Actor",
+                "value": "${{ github.actor }}",
+                "inline": true
+              },
+              {
+                "name": "🔗 Test Environment",
+                "value": "Backend: [${{ secrets.TEST_BACKEND_URL }}](${{ secrets.TEST_BACKEND_URL }}/health)\\nFrontend: [${{ secrets.TEST_FRONTEND_URL }}](${{ secrets.TEST_FRONTEND_URL }})",
+                "inline": false
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "${{ env.DISCORD_WEBHOOK_URL }}" \
+            --silent --show-error || echo "⚠️ Discord notification failed"
+            
+          echo "✅ Discord completion notification sent"
+        else
+          echo "⚠️ DISCORD_WEBHOOK_URL not configured, skipping notification"
         fi
 
 
