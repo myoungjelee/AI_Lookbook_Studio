@@ -31,11 +31,17 @@ Write-Ok "Python environment prepared"
 Write-Step "Ingesting CSVs from real_data into data/catalog.json (if present)"
 $ingest = 'python backend_py/tools/ingest_csv_to_catalog.py'
 if (Test-Path 'real_data') {
-  # Known male datasets with force category
-  if (Test-Path 'real_data/man/musinsa_man_top.csv')    { iex "$ingest --input 'real_data/man/musinsa_man_top.csv' --output data/catalog.json --merge-existing --force-category top" }
-  if (Test-Path 'real_data/man/musinsa_man_bottom.csv') { iex "$ingest --input 'real_data/man/musinsa_man_bottom.csv' --output data/catalog.json --merge-existing --force-category pants" }
-  if (Test-Path 'real_data/man/musinsa_man_shoes.csv')  { iex "$ingest --input 'real_data/man/musinsa_man_shoes.csv' --output data/catalog.json --merge-existing --force-category shoes" }
-  if (Test-Path 'real_data/man/musinsa_man_outer.csv')  { iex "$ingest --input 'real_data/man/musinsa_man_outer.csv' --output data/catalog.json --merge-existing --force-category top" }
+  # Known male datasets (파일명 기반 자동 카테고리 매핑)
+  if (Test-Path 'real_data/man/musinsa_man_top.csv')    { iex "$ingest --input 'real_data/man/musinsa_man_top.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/man/musinsa_man_bottom.csv') { iex "$ingest --input 'real_data/man/musinsa_man_bottom.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/man/musinsa_man_shoes.csv')  { iex "$ingest --input 'real_data/man/musinsa_man_shoes.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/man/musinsa_man_outer.csv')  { iex "$ingest --input 'real_data/man/musinsa_man_outer.csv' --output data/catalog.json --merge-existing" }
+  # Known female datasets (파일명 기반 자동 카테고리 매핑)
+  if (Test-Path 'real_data/woman/musinsa_woman_top.csv')    { iex "$ingest --input 'real_data/woman/musinsa_woman_top.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/woman/musinsa_woman_bottom.csv') { iex "$ingest --input 'real_data/woman/musinsa_woman_bottom.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/woman/musinsa_woman_shoes.csv')  { iex "$ingest --input 'real_data/woman/musinsa_woman_shoes.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/woman/musinsa_woman_outer.csv')  { iex "$ingest --input 'real_data/woman/musinsa_woman_outer.csv' --output data/catalog.json --merge-existing" }
+  if (Test-Path 'real_data/woman/musinsa_woman_dress_skirt.csv') { iex "$ingest --input 'real_data/woman/musinsa_woman_dress_skirt.csv' --output data/catalog.json --merge-existing" }
   # Fallback: scan any remaining CSVs recursively
   iex $ingest
   Write-Ok "Ingest complete"

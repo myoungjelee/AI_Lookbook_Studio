@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
     children: React.ReactNode;
@@ -12,7 +12,7 @@ const Card: React.FC<CardProps> = ({
     children,
     className = '',
     padding = 'md',
-    shadow = 'md',
+    shadow = 'sm',
     rounded = 'lg',
     ...rest
 }) => {
@@ -21,23 +21,23 @@ const Card: React.FC<CardProps> = ({
         sm: 'p-3',
         md: 'p-4',
         lg: 'p-6',
-    };
+    } as const;
 
     const shadowClasses = {
         none: '',
         sm: 'shadow-sm',
         md: 'shadow-md',
         lg: 'shadow-lg',
-    };
+    } as const;
 
     const roundedClasses = {
         none: '',
         sm: 'rounded-sm',
         md: 'rounded-md',
-        lg: 'rounded-lg',
-    };
+        lg: 'rounded-[var(--radius-card)]',
+    } as const;
 
-    const classes = `bg-white border border-gray-200 ${paddingClasses[padding]} ${shadowClasses[shadow]} ${roundedClasses[rounded]} ${className}`;
+    const classes = `bg-[var(--surface-bg)] border border-[var(--divider)] ${paddingClasses[padding]} ${shadowClasses[shadow]} ${roundedClasses[rounded]} ${className}`;
 
     return (
         <div className={classes} {...rest}>
