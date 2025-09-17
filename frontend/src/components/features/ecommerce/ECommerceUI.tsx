@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import './ECommerceUI.css';
 import { apiClient } from '../../../services/api.service';
 import { likesService } from '../../../services/likes.service';
 import type { RecommendationItem } from '../../../types';
@@ -6,7 +7,6 @@ import { HeartIcon } from '../../icons/HeartIcon';
 import { Button, toast, useToast } from '../../ui';
 import { CategoryRow } from '../home/CategoryRow';
 import { FilterChips } from '../home/FilterChips';
-import { HeroBanner } from '../home/HeroBanner';
 import { ProductCardOverlay } from './ProductCardOverlay';
 import { StickySidebar } from './StickySidebar';
 
@@ -89,18 +89,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
       onClick={handleNavigate}
       onMouseEnter={() => setShowOverlay(true)}
       onMouseLeave={() => setShowOverlay(false)}
-      className="group cursor-pointer"
+      className="product-card"
     >
-      <div className="relative mb-3 overflow-hidden rounded-[var(--radius-card)] border border-[var(--divider)] bg-[var(--surface-bg)]">
-        <div className="aspect-[4/5] bg-[var(--surface-muted)]">
-          {item.imageUrl && (
-            <img
-              src={item.imageUrl}
-              alt={item.title}
-              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-            />
-          )}
-        </div>
+      <div className="product-card__image">
+        {item.imageUrl && (
+          <img src={item.imageUrl} alt={item.title} />
+        )}
         <ProductCardOverlay
           isVisible={showOverlay}
           onBuy={handleBuy}
@@ -110,22 +104,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
         <button
           onClick={onToggleLike}
           aria-label="좋아요 토글"
-          className={`absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/90 shadow-sm transition-colors ${liked ? 'text-[#d6001c]' : 'text-gray-500 hover:text-black'}`}
+          className={`product-card__like ${liked ? 'is-liked' : ''}`}
         >
           <HeartIcon className="h-4 w-4" />
         </button>
       </div>
-      <div className="space-y-1">
-        <p className="text-[13px] font-semibold text-[var(--text-muted)] truncate uppercase tracking-wide">
-          {item.brandName || item.tags?.[0] || 'MUSINSA'}
-        </p>
-        <p className="text-[15px] font-medium text-[var(--text-strong)] leading-snug h-[44px] overflow-hidden">
-          {item.title}
-        </p>
-        <div className="flex items-baseline gap-2">
-          <span className="text-[15px] font-semibold text-[var(--text-strong)]">{formatPriceKRW(item.price)}</span>
+      <div className="product-card__meta">
+        <p className="product-card__brand">{item.brandName || item.tags?.[0] || 'MUSINSA'}</p>
+        <p className="product-card__title">{item.title}</p>
+        <div className="product-card__pricing">
+          <span className="product-card__price">{formatPriceKRW(item.price)}</span>
           {typeof discount === 'number' && discount > 0 && (
-            <span className="text-[13px] font-semibold text-[#d6001c]">{discount}%</span>
+            <span className="product-card__discount">{discount}%</span>
           )}
         </div>
       </div>
@@ -133,8 +123,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
   );
 };
 
+type HomePage = 'home' | 'try-on' | 'likes';
+
 interface HomeProps {
-  onNavigate?: (page: 'home' | 'try-on' | 'likes') => void;
+  onNavigate?: (page: HomePage) => void;
 }
 
 const resolveCartCategory = (product: RecommendationItem): 'outer' | 'top' | 'pants' | 'shoes' | null => {
@@ -157,9 +149,117 @@ const resolveCartCategory = (product: RecommendationItem): 'outer' | 'top' | 'pa
   return null;
 };
 
+interface PromoSlide {
+  id: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  image: string;
+  ctaLabel: string;
+  background: string;
+}
+
+const promoSlides: PromoSlide[] = [
+  {
+    id: 'run-lab',
+    eyebrow: 'RUN CLUB',
+    title: '새벽 러닝을 위한 테크웨어 컬렉션',
+    description: '땀을 빠르게 배출하고 체온을 유지해 주는 고기능성 자켓과 러닝 슈즈를 만나보세요.',
+    image: 'https://images.unsplash.com/photo-1600965962361-9035dbfd1c50?auto=format&fit=crop&w=900&q=80',
+    ctaLabel: '버추얼 피팅 바로가기',
+    background: 'radial-gradient(circle at 15% 20%, #4f46e590, transparent 60%), linear-gradient(120deg, #111827 0%, #1e1b4b 60%, #111827 100%)'
+  },
+  {
+    id: 'studio-fit',
+    eyebrow: 'STUDIO FIT',
+    title: '필라테스를 위한 우먼스 퍼포먼스웨어',
+    description: '섬세하게 잡아주는 텐션과 부드러운 촉감을 갖춘 크롭탑 & 레깅스 셋업을 엄선했습니다.',
+    image: 'https://images.unsplash.com/photo-1527718641255-324f8e2d0421?auto=format&fit=crop&w=900&q=80',
+    ctaLabel: '추천 상품 둘러보기',
+    background: 'radial-gradient(circle at 80% 20%, #f472b63d, transparent 65%), linear-gradient(135deg, #312e81 0%, #4c1d95 55%, #312e81 100%)'
+  },
+  {
+    id: 'street-play',
+    eyebrow: 'STREET PLAY',
+    title: '주말 농구에 어울리는 스트리트 무드',
+    description: '로우탑 스니커즈와 와이드 팬츠, 오버핏 아우터로 완성하는 여유로운 실루엣.',
+    image: 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=900&q=80',
+    ctaLabel: '코디 가이드 확인하기',
+    background: 'radial-gradient(circle at 20% 80%, #f9731633, transparent 60%), linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%)'
+  }
+];
+
+interface PromoCarouselProps {
+  onTryOn?: () => void;
+}
+
+const PromoCarousel: React.FC<PromoCarouselProps> = ({ onTryOn }) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    if (isPaused) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % promoSlides.length);
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, [isPaused]);
+
+  const handleDotClick = (index: number) => {
+    setActiveIndex(index);
+  };
+
+  return (
+    <div
+      className="banner-slider"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div
+        className="banner-slider__frame"
+        style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+      >
+        {promoSlides.map((slide) => (
+          <div key={slide.id} className="banner-slider__slide" style={{ background: slide.background }}>
+            <div className="banner-slider__content">
+              <span className="banner-slider__eyebrow">{slide.eyebrow}</span>
+              <h3 className="banner-slider__title">{slide.title}</h3>
+              <p className="banner-slider__desc">{slide.description}</p>
+              <button
+                type="button"
+                className="banner-slider__cta"
+                onClick={() => onTryOn?.()}
+              >
+                {slide.ctaLabel}
+              </button>
+            </div>
+            <div className="banner-slider__visual">
+              <img src={slide.image} alt={slide.title} loading="lazy" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="banner-slider__dots" role="tablist" aria-label="프로모션 슬라이더">
+        {promoSlides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            className={`banner-slider__dot ${activeIndex === index ? 'is-active' : ''}`}
+            onClick={() => handleDotClick(index)}
+            aria-label={`${slide.title} 보기`}
+            aria-selected={activeIndex === index}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   const { items, loading, error, refresh } = useRandomProducts(24);
-  const gridItems = items;
+  const gridItems = useMemo(() => items, [items]);
   const [selectedItems, setSelectedItems] = useState<{
     outer?: RecommendationItem;
     top?: RecommendationItem;
@@ -209,48 +309,56 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="pt-[124px] bg-white font-sans">
-      <div className="border-y border-[var(--divider)] bg-[var(--surface-bg)]/70 backdrop-blur">
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-8 py-3 text-sm text-[var(--text-muted)]">
-          <span className="font-semibold text-[var(--text-strong)]">스포츠 종목 아이템 추천</span>
-          <span className="text-[var(--text-muted)]">러닝</span>
-          <div className="ml-auto flex items-center gap-3 text-xs">
-            <button
-              onClick={() => onNavigate?.('try-on')}
-              className="rounded-full border border-[var(--divider)] bg-white/40 px-3 py-1 text-[var(--text-strong)] hover:bg-white"
-            >
-              버추얼 피팅 이동
-            </button>
-            <button
-              onClick={refresh}
-              className="rounded-full border border-[var(--divider)] px-3 py-1 text-[var(--text-muted)] hover:text-[var(--text-strong)]"
-            >
-              새로고침
-            </button>
+    <div className="main-wrap">
+      <div className="main-container">
+        <section className="headline-strip">
+          <div>
+            <div className="headline-strip__title">스포츠 종목 아이템 추천</div>
+            <div className="headline-strip__meta">
+              <span>러닝</span>
+              <span>바디밸런스</span>
+              <span>에어플로 테크</span>
+            </div>
           </div>
-        </div>
-        <div className="mx-auto max-w-[1280px] px-8 pb-4">
-          <FilterChips />
-        </div>
-      </div>
-
-      <main className="mx-auto max-w-[1280px] px-8 py-10 space-y-10">
-        <section className="grid gap-8 lg:grid-cols-[1.35fr_1fr]">
-          <HeroBanner />
-          <CategoryRow />
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[var(--text-strong)]">오늘 인기 아이템</h2>
-            <Button onClick={refresh} size="sm" loading={loading}>
+          <div className="headline-strip__actions">
+            <Button variant="outline" size="sm" onClick={() => onNavigate?.('try-on')}>
+              버추얼 피팅 이동
+            </Button>
+            <Button variant="ghost" size="sm" onClick={refresh} loading={loading}>
               새로고침
             </Button>
           </div>
+        </section>
+
+        <section className="hero-section" aria-label="프로모션 영역">
+          <PromoCarousel onTryOn={() => onNavigate?.('try-on')} />
+        </section>
+
+        <section className="category-showcase" aria-label="카테고리 탐색">
+          <CategoryRow />
+        </section>
+
+        <section className="filter-panel" aria-label="필터 영역">
+          <div className="filter-panel__chips">
+            <FilterChips />
+          </div>
+          <div className="filter-panel__refresh">
+            <Button onClick={refresh} size="sm" variant="outline" loading={loading}>
+              추천 다시 받기
+            </Button>
+          </div>
+        </section>
+
+        <section className="product-section" aria-label="추천 상품 목록">
+          <div className="section-title">
+            <h2 className="section-title__heading">오늘의 인기 아이템</h2>
+          </div>
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#d6001c]">{error}</div>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#d6001c]">
+              {error}
+            </div>
           )}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="product-grid">
             {gridItems.map((item) => (
               <ProductCard
                 key={item.id}
@@ -261,10 +369,12 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
             ))}
           </div>
           {loading && (
-            <div className="mt-6 text-center text-sm text-[var(--text-muted)]">추천 상품을 불러오는 중...</div>
+            <div className="mt-6 text-center text-sm text-[var(--text-muted)]">
+              추천 상품을 불러오는 중입니다...
+            </div>
           )}
         </section>
-      </main>
+      </div>
 
       <StickySidebar
         selectedItems={selectedItems}
