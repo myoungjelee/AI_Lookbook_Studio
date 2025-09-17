@@ -26,7 +26,7 @@ const useRandomProducts = (limit: number = 24) => {
       const data = await apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${limit}`);
       setItems(data);
     } catch (e: any) {
-      setError(e?.message || 'Failed to load recommendations.');
+      setError(e?.message || '추천 상품을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -57,8 +57,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
     setLiked(nowLiked);
     addToast(
       nowLiked
-        ? toast.success('Added to favorites', item.title, { duration: 2000 })
-        : toast.info('Removed from favorites', item.title, { duration: 1500 })
+        ? toast.success('좋아요에 추가했어요', item.title, { duration: 2000 })
+        : toast.info('좋아요에서 제거했어요', item.title, { duration: 1500 })
     );
   };
 
@@ -110,7 +110,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
         <button
           onClick={onToggleLike}
           aria-label="좋아요 토글"
-          aria-label="Toggle favorite"
+          className={`absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/90 shadow-sm transition-colors ${liked ? 'text-[#d6001c]' : 'text-gray-500 hover:text-black'}`}
         >
           <HeartIcon className="h-4 w-4" />
         </button>
@@ -211,22 +211,21 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   return (
     <div className="pt-[124px] bg-white font-sans">
       <div className="border-y border-[var(--divider)] bg-[var(--surface-bg)]/70 backdrop-blur">
-      <div className="border-y border-[var(--divider)] bg-[var(--surface-bg)]/70 backdrop-blur">
         <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-8 py-3 text-sm text-[var(--text-muted)]">
-          <span className="font-semibold text-[var(--text-strong)]">Sports category picks</span>
-          <span className="text-[var(--text-muted)]">Running</span>
+          <span className="font-semibold text-[var(--text-strong)]">스포츠 종목 아이템 추천</span>
+          <span className="text-[var(--text-muted)]">러닝</span>
           <div className="ml-auto flex items-center gap-3 text-xs">
             <button
               onClick={() => onNavigate?.('try-on')}
               className="rounded-full border border-[var(--divider)] bg-white/40 px-3 py-1 text-[var(--text-strong)] hover:bg-white"
             >
-              Go to virtual fitting
+              버추얼 피팅 이동
             </button>
             <button
               onClick={refresh}
               className="rounded-full border border-[var(--divider)] px-3 py-1 text-[var(--text-muted)] hover:text-[var(--text-strong)]"
             >
-              Refresh
+              새로고침
             </button>
           </div>
         </div>
@@ -243,9 +242,9 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[var(--text-strong)]">Today's popular items</h2>
+            <h2 className="text-lg font-bold text-[var(--text-strong)]">오늘 인기 아이템</h2>
             <Button onClick={refresh} size="sm" loading={loading}>
-              Refresh
+              새로고침
             </Button>
           </div>
           {error && (
@@ -262,10 +261,11 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
             ))}
           </div>
           {loading && (
-            <div className="mt-6 text-center text-sm text-[var(--text-muted)]">Loading recommended items...</div>
+            <div className="mt-6 text-center text-sm text-[var(--text-muted)]">추천 상품을 불러오는 중...</div>
           )}
         </section>
       </main>
+
       <StickySidebar
         selectedItems={selectedItems}
         onRemoveItem={handleRemoveItem}
