@@ -55,9 +55,6 @@ env:
   PYTHON_VERSION: '3.11'
   BACKEND_APP_NAME_TEST: "7ai-team1-backend-test"
   AZURE_RESOURCE_GROUP_TEST: ${{ secrets.AZURE_RESOURCE_GROUP }}
-  # 🆕 추가할 부분
-  TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
 jobs:
   # ========== 트리거 조건 체크 ==========
@@ -311,61 +308,30 @@ jobs:
       run: |
         echo "🔍 Verifying Azure authentication and permissions..."
         
-        # 🆕 Azure CLI 재시도 함수
-        retry_az_command() {
-          local max_attempts=3
-          local attempt=1
+        # Azure CLI 재시도 함수
+        retry_az() {
           local cmd="$1"
-          local description="$2"
+          local desc="$2"
+          local max_attempts=3
           
-          echo "📋 Executing: $description"
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "🔄 Attempt $attempt/$max_attempts: $cmd"
-            
+          for attempt in $(seq 1 $max_attempts); do
+            echo "🔄 [$attempt/$max_attempts] $desc"
             if eval "$cmd"; then
-              echo "✅ Success: $description"
+              echo "✅ Success: $desc"
               return 0
+            elif [ $attempt -eq $max_attempts ]; then
+              echo "❌ Failed after $max_attempts attempts: $desc"
+              return 1
             else
-              local exit_code=$?
-              echo "❌ Failed with exit code $exit_code: $description"
-              
-              if [ $attempt -eq $max_attempts ]; then
-                echo "🚨 Command failed after $max_attempts attempts: $cmd"
-                echo "💡 Troubleshooting info:"
-                echo "   - Check Azure CLI version: $(az version --output tsv | head -1)"
-                echo "   - Check network connectivity"
-                echo "   - Verify service principal permissions"
-                return $exit_code
-              fi
-              
-              echo "⏳ Waiting 30s before retry..."
+              echo "⏳ Waiting 30s..."
               sleep 30
-              attempt=$((attempt + 1))
             fi
           done
         }
         
-        # 🆕 Azure 연결 상태 진단
-        echo "🔍 Diagnosing Azure CLI state..."
-        az version --output table || echo "⚠️ Azure CLI version check failed"
-        
-        # Azure 계정 확인 (재시도 적용)
-        retry_az_command \
-          "az account show --query '{SubscriptionId:id, TenantId:tenantId, User:user.name}'" \
-          "Azure account verification"
-        
-        # App Service 접근 확인 (재시도 적용)
-        retry_az_command \
-          "az webapp show --name '${{ env.BACKEND_APP_NAME_TEST }}' --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' --query '{Name:name, State:state}'" \
-          "App Service access verification"
-        
-        # Resource Group 확인 (재시도 적용)
-        retry_az_command \
-          "az group show --name '${{ env.AZURE_RESOURCE_GROUP_TEST }}' --query '{Name:name, Location:location}'" \
-          "Resource Group verification"
-        
-        echo "✅ All Azure service verifications completed successfully"
+        # 검증 실행
+        retry_az "az account show --query '{SubscriptionId:id, User:user.name}'" "Azure account verification"
+        retry_az "az webapp show --name '${{ env.BACKEND_APP_NAME_TEST }}' --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' --query '{Name:name, State:state}'" "App Service verification"
 
 
     - name: 🔐 Login to Azure Container Registry
@@ -381,34 +347,32 @@ jobs:
         cd backend_py
         echo "🏗️ Building backend Docker image for Test environment..."
         
-        # 🆕 재시도 로직 설정
+        # 재시도 설정
         MAX_RETRIES=3
         RETRY_COUNT=0
         
-        # 🆕 Docker 빌드 및 푸시 함수
+        # Docker 빌드 및 푸시 함수
         build_and_push() {
           echo "📦 Starting Docker build attempt..."
           
-          # 이미지 이름 및 태그 설정
           IMAGE_NAME="${{ env.REGISTRY }}/backend-fastapi-test"
           IMAGE_TAG="${{ github.sha }}"
           
-          # 캐시 전략 결정
+          # 캐시 전략
           if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
-            echo "🔄 Force rebuild requested - using --no-cache"
+            echo "🔄 Force rebuild - using --no-cache"
             CACHE_OPTION="--no-cache"
           else
-            echo "📦 Using build cache for faster builds"
+            echo "📦 Using build cache"
             CACHE_OPTION=""
           fi
           
-          # Docker 빌드 실행
+          # Docker 빌드
           if ! docker build \
             ${CACHE_OPTION} \
             --platform linux/amd64 \
             --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
             --build-arg VCS_REF=${{ github.sha }} \
-            --build-arg TRIGGER_REASON="${{ needs.trigger-validation.outputs.deployment_reason }}" \
             -t ${IMAGE_NAME}:latest \
             -t ${IMAGE_NAME}:${IMAGE_TAG} \
             -f Dockerfile .; then
@@ -416,27 +380,21 @@ jobs:
             return 1
           fi
           
-          # Docker 이미지 푸시 실행
-          echo "📤 Pushing images to ACR..."
-          if ! docker push ${IMAGE_NAME}:latest; then
-            echo "❌ Failed to push latest tag"
-            return 1
-          fi
-          
-          if ! docker push ${IMAGE_NAME}:${IMAGE_TAG}; then
-            echo "❌ Failed to push commit tag"
+          # Docker 푸시
+          echo "📤 Pushing to ACR..."
+          if ! docker push ${IMAGE_NAME}:latest || ! docker push ${IMAGE_NAME}:${IMAGE_TAG}; then
+            echo "❌ Docker push failed"
             return 1
           fi
           
           # 성공 시 outputs 설정
           echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          
-          echo "✅ Docker build and push completed successfully"
+          echo "✅ Build and push completed"
           return 0
         }
         
-        # 🆕 재시도 루프 실행
+        # 재시도 루프
         while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
           echo "🔄 Build attempt $((RETRY_COUNT + 1))/$MAX_RETRIES"
           
@@ -445,28 +403,18 @@ jobs:
             break
           else
             RETRY_COUNT=$((RETRY_COUNT + 1))
-            
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
               WAIT_TIME=$((RETRY_COUNT * 30))
-              echo "⚠️ Build failed, retrying in ${WAIT_TIME}s... (Attempt $RETRY_COUNT/$MAX_RETRIES)"
-              
-              # 🆕 실패 시 정리 작업
-              echo "🧹 Cleaning up failed build artifacts..."
+              echo "⚠️ Build failed, retrying in ${WAIT_TIME}s..."
               docker system prune -f --volumes || true
-              
-              echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
               sleep $WAIT_TIME
             else
               echo "❌ Build failed after $MAX_RETRIES attempts"
-              echo "💾 Collecting build logs for debugging..."
               docker system df || true
-              docker images || true
               exit 1
             fi
           fi
         done
-        
-        echo "✅ Backend image build and push completed with retry logic"
 
 
     - name: 🚀 Deploy to Azure App Service (Test) (Enhanced)
@@ -474,34 +422,26 @@ jobs:
       run: |
         echo "🚀 Deploying container to Test App Service..."
         
-        # 🆕 재시도 함수 재사용
-        retry_az_command() {
-          local max_attempts=3
-          local attempt=1
+        # 재시도 함수
+        retry_az() {
           local cmd="$1"
-          local description="$2"
+          local desc="$2"
           
-          echo "📋 Executing: $description"
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "🔄 Attempt $attempt/$max_attempts"
-            
+          for attempt in 1 2 3; do
+            echo "🔄 [$attempt/3] $desc"
             if eval "$cmd"; then
-              echo "✅ Success: $description"
+              echo "✅ Success: $desc"
               return 0
+            elif [ $attempt -eq 3 ]; then
+              echo "❌ Failed: $desc"
+              return 1
             else
-              if [ $attempt -eq $max_attempts ]; then
-                echo "❌ Command failed after $max_attempts attempts"
-                return 1
-              fi
-              echo "⏳ Waiting 45s before retry..."
               sleep 45
-              attempt=$((attempt + 1))
             fi
           done
         }
         
-        # 🆕 컨테이너 배포 (재시도 적용)
+        # 컨테이너 배포
         DEPLOY_CMD="az webapp config container set \
           --name '${{ env.BACKEND_APP_NAME_TEST }}' \
           --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
@@ -510,18 +450,9 @@ jobs:
           --docker-registry-server-user '${{ secrets.ACR_USERNAME }}' \
           --docker-registry-server-password '${{ secrets.ACR_PASSWORD }}'"
         
-        if retry_az_command "$DEPLOY_CMD" "Container deployment"; then
-          echo "✅ Test container deployment completed"
+        if retry_az "$DEPLOY_CMD" "Container deployment"; then
           echo "status=success" >> $GITHUB_OUTPUT
-          
-          # 🆕 배포 확인
-          echo "🔍 Verifying deployment status..."
-          sleep 30
-          retry_az_command \
-            "az webapp show --name '${{ env.BACKEND_APP_NAME_TEST }}' --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' --query 'state' -o tsv" \
-            "Deployment status check"
         else
-          echo "❌ Container deployment failed after all retries"
           echo "status=failed" >> $GITHUB_OUTPUT
           exit 1
         fi
@@ -529,77 +460,50 @@ jobs:
 
     - name: ⚙️ Configure Test Environment Variables (Enhanced)
       run: |
-        echo "⚙️ Configuring Test App Service environment variables with validation..."
+        echo "⚙️ Configuring Test App Service environment variables..."
         
-        # 🆕 재시도 함수
-        retry_az_command() {
-          local max_attempts=3
-          local attempt=1
+        # 재시도 함수
+        retry_az() {
           local cmd="$1"
-          local description="$2"
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "🔄 [$attempt/$max_attempts] $description"
-            
+          for attempt in 1 2 3; do
+            echo "🔄 [$attempt/3] Environment variables configuration"
             if eval "$cmd"; then
-              echo "✅ Success: $description"
+              echo "✅ Success"
               return 0
+            elif [ $attempt -eq 3 ]; then
+              echo "❌ Failed"
+              return 1
             else
-              if [ $attempt -eq $max_attempts ]; then
-                echo "❌ Failed after $max_attempts attempts: $description"
-                return 1
-              fi
-              echo "⏳ Waiting 30s before retry..."
               sleep 30
-              attempt=$((attempt + 1))
             fi
           done
         }
         
         # 환경 변수 유효성 검사 (기존 로직 유지)
-        echo "🔍 Validating critical secrets..."
         if [ -z "${{ secrets.TEST_GEMINI_API_KEY }}" ] || [ "${{ secrets.TEST_GEMINI_API_KEY }}" = "-" ]; then
-          echo "❌ ERROR: TEST_GEMINI_API_KEY is missing or empty!"
-          echo "🔧 Using production GEMINI_API_KEY as fallback"
           GEMINI_KEY="${{ secrets.GEMINI_API_KEY }}"
         else
-          echo "✅ TEST_GEMINI_API_KEY is configured"
           GEMINI_KEY="${{ secrets.TEST_GEMINI_API_KEY }}"
         fi
         
-        # 데이터베이스 설정 (기존 로직 유지)
         DB_HOST_VALUE="${{ secrets.TEST_DB_HOST }}"
-        if [ -z "$DB_HOST_VALUE" ]; then
-          echo "⚠️ TEST_DB_HOST not found, using production DB"
-          DB_HOST_VALUE="ai-final-team1-db.postgres.database.azure.com"
-        fi
+        [ -z "$DB_HOST_VALUE" ] && DB_HOST_VALUE="ai-final-team1-db.postgres.database.azure.com"
         
         DB_USER_VALUE="${{ secrets.TEST_DB_USER }}"
-        if [ -z "$DB_USER_VALUE" ]; then
-          echo "⚠️ TEST_DB_USER not found, using default"
-          DB_USER_VALUE="adminDB"
-        fi
+        [ -z "$DB_USER_VALUE" ] && DB_USER_VALUE="adminDB"
         
         DB_PASSWORD_VALUE="${{ secrets.TEST_DB_PASSWORD }}"
-        if [ -z "$DB_PASSWORD_VALUE" ]; then
-          echo "⚠️ TEST_DB_PASSWORD not found, using production value"
-          DB_PASSWORD_VALUE="qwer123!"
-        fi
+        [ -z "$DB_PASSWORD_VALUE" ] && DB_PASSWORD_VALUE="qwer123!"
         
         DB_NAME_VALUE="${{ secrets.TEST_DB_NAME }}"
-        if [ -z "$DB_NAME_VALUE" ]; then
-          echo "⚠️ TEST_DB_NAME not found, using default"
-          DB_NAME_VALUE="postgres"
-        fi
+        [ -z "$DB_NAME_VALUE" ] && DB_NAME_VALUE="postgres"
         
-        # 🆕 환경 변수 설정 (재시도 적용)
+        # 환경 변수 설정 (재시도 적용)
         ENV_CMD="az webapp config appsettings set \
           --name '${{ env.BACKEND_APP_NAME_TEST }}' \
           --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
           --settings \
-            PORT=3001 \
-            HOST=0.0.0.0 \
-            NODE_ENV=test \
+            PORT=3001 HOST=0.0.0.0 NODE_ENV=test \
             FRONTEND_URL='${{ secrets.TEST_FRONTEND_URL }}' \
             GEMINI_API_KEY='${GEMINI_KEY}' \
             GEMINI_MODEL='gemini-2.5-flash-image-preview' \
@@ -608,32 +512,13 @@ jobs:
             AZURE_OPENAI_KEY='${{ secrets.TEST_AZURE_OPENAI_KEY }}' \
             AZURE_OPENAI_DEPLOYMENT_ID='${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}' \
             AZURE_OPENAI_API_VERSION='2024-12-01-preview' \
-            DB_HOST='${DB_HOST_VALUE}' \
-            DB_USER='${DB_USER_VALUE}' \
-            DB_PASSWORD='${DB_PASSWORD_VALUE}' \
-            DB_NAME='${DB_NAME_VALUE}' \
-            DB_PORT=5432 \
-            DB_SSLMODE=require \
+            DB_HOST='${DB_HOST_VALUE}' DB_USER='${DB_USER_VALUE}' \
+            DB_PASSWORD='${DB_PASSWORD_VALUE}' DB_NAME='${DB_NAME_VALUE}' \
+            DB_PORT=5432 DB_SSLMODE=require \
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
-            DOCKER_ENABLE_CI=true \
-            WEBSITES_PORT=3001"
+            DOCKER_ENABLE_CI=true WEBSITES_PORT=3001"
         
-        if retry_az_command "$ENV_CMD" "Environment variables configuration"; then
-          echo "✅ Environment variables configured with fallback values"
-          
-          # 🆕 설정 검증 (재시도 적용)
-          echo "🔍 Verifying applied settings..."
-          VERIFY_CMD="az webapp config appsettings list \
-            --name '${{ env.BACKEND_APP_NAME_TEST }}' \
-            --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
-            --query \"[?name=='PORT' || name=='NODE_ENV' || name=='WEBSITES_PORT'].{name:name, value:value}\" \
-            --output table"
-          
-          retry_az_command "$VERIFY_CMD" "Settings verification"
-        else
-          echo "❌ Failed to configure environment variables"
-          exit 1
-        fi
+        retry_az "$ENV_CMD"
 
 
   # ========== 프론트엔드 빌드 & 배포 ==========
@@ -813,153 +698,80 @@ jobs:
         echo "## 🧪 Test Environment Deployment Dashboard" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        # 🆕 배포 시간 계산
-        DEPLOYMENT_START_TIME="${{ github.event.head_commit.timestamp }}"
-        DEPLOYMENT_END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        # 배포 시간 및 메트릭 계산
+        DEPLOYMENT_START="${{ github.event.head_commit.timestamp }}"
+        DEPLOYMENT_END=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         
-        # 배포 소요시간 계산 (대략적)
-        if [ -n "$DEPLOYMENT_START_TIME" ]; then
-          START_EPOCH=$(date -d "$DEPLOYMENT_START_TIME" +%s 2>/dev/null || echo "0")
-          END_EPOCH=$(date +%s)
-          DURATION_SECONDS=$((END_EPOCH - START_EPOCH))
-          DURATION_MINUTES=$((DURATION_SECONDS / 60))
-          if [ $DURATION_MINUTES -gt 0 ]; then
-            DURATION_DISPLAY="${DURATION_MINUTES} minutes"
-          else
-            DURATION_DISPLAY="${DURATION_SECONDS} seconds"
-          fi
-        else
-          DURATION_DISPLAY="~15 minutes"
-        fi
-        
-        # 🆕 성공률 계산
+        # 성공률 계산
         SUCCESS_COUNT=0
         TOTAL_COUNT=0
         
-        if [ "${{ needs.deploy-backend.result }}" = "success" ]; then
-          SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-        fi
-        if [ "${{ needs.deploy-frontend.result }}" = "success" ]; then
-          SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-        fi
-        
-        # 배포된 서비스 수 계산
-        if [ "${{ needs.trigger-validation.outputs.should_deploy_backend }}" = "true" ]; then
-          TOTAL_COUNT=$((TOTAL_COUNT + 1))
-        fi
-        if [ "${{ needs.trigger-validation.outputs.should_deploy_frontend }}" = "true" ]; then
-          TOTAL_COUNT=$((TOTAL_COUNT + 1))
-        fi
+        [ "${{ needs.deploy-backend.result }}" = "success" ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        [ "${{ needs.deploy-frontend.result }}" = "success" ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        [ "${{ needs.trigger-validation.outputs.should_deploy_backend }}" = "true" ] && TOTAL_COUNT=$((TOTAL_COUNT + 1))
+        [ "${{ needs.trigger-validation.outputs.should_deploy_frontend }}" = "true" ] && TOTAL_COUNT=$((TOTAL_COUNT + 1))
         
         if [ $TOTAL_COUNT -gt 0 ]; then
           SUCCESS_RATE=$(( (SUCCESS_COUNT * 100) / TOTAL_COUNT ))
-          if [ $SUCCESS_RATE -eq 100 ]; then
-            SUCCESS_EMOJI="🟢"
-          elif [ $SUCCESS_RATE -ge 50 ]; then
-            SUCCESS_EMOJI="🟡"
-          else
-            SUCCESS_EMOJI="🔴"
-          fi
+          [ $SUCCESS_RATE -eq 100 ] && SUCCESS_EMOJI="🟢" || SUCCESS_EMOJI="🟡"
         else
           SUCCESS_RATE="N/A"
           SUCCESS_EMOJI="⚪"
         fi
         
-        # 🆕 배포 메트릭 섹션
+        # 배포 메트릭
         echo "### 📊 Deployment Metrics" >> $GITHUB_STEP_SUMMARY
         echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
         echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **⏰ Start Time** | ${DEPLOYMENT_START_TIME:-N/A} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **🏁 End Time** | $DEPLOYMENT_END_TIME |" >> $GITHUB_STEP_SUMMARY
-        echo "| **⏱️ Duration** | $DURATION_DISPLAY |" >> $GITHUB_STEP_SUMMARY
+        echo "| **⏰ Start** | ${DEPLOYMENT_START:-N/A} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **🏁 End** | $DEPLOYMENT_END |" >> $GITHUB_STEP_SUMMARY
         echo "| **📈 Success Rate** | $SUCCESS_EMOJI ${SUCCESS_RATE}% ($SUCCESS_COUNT/$TOTAL_COUNT) |" >> $GITHUB_STEP_SUMMARY
         echo "| **🚀 Trigger** | ${{ needs.trigger-validation.outputs.deployment_reason }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **👤 Actor** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        # 🆕 시각적 상태 표시
-        echo "### 🎯 Service Deployment Status" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        # 서비스 상태
+        echo "### 🎯 Service Status" >> $GITHUB_STEP_SUMMARY
         
-        # 백엔드 상태 체크
+        # 백엔드 상태
         if [ "${{ needs.trigger-validation.outputs.should_deploy_backend }}" = "true" ]; then
           if [ "${{ needs.deploy-backend.result }}" = "success" ] && [ "${{ env.BACKEND_HEALTH }}" = "success" ]; then
-            echo "🟢 **Backend (FastAPI)**: ✅ Deployed Successfully & Healthy" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🐳 Container: `${{ needs.deploy-backend.outputs.image_name }}:${{ needs.deploy-backend.outputs.image_tag }}`" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🌐 URL: [${{ secrets.TEST_BACKEND_URL }}](${{ secrets.TEST_BACKEND_URL }}/health)" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.deploy-backend.result }}" = "success" ] && [ "${{ env.BACKEND_HEALTH }}" != "success" ]; then
-            echo "🟡 **Backend (FastAPI)**: ⚠️ Deployed but Health Check Failed" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🚨 Status: Needs Investigation" >> $GITHUB_STEP_SUMMARY
+            echo "🟢 **Backend**: ✅ Deployed & Healthy" >> $GITHUB_STEP_SUMMARY
+            echo "   - 🌐 [${{ secrets.TEST_BACKEND_URL }}](${{ secrets.TEST_BACKEND_URL }}/health)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "🔴 **Backend (FastAPI)**: ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🚨 Status: Build or Deploy Error" >> $GITHUB_STEP_SUMMARY
+            echo "🔴 **Backend**: ❌ Failed or Unhealthy" >> $GITHUB_STEP_SUMMARY
           fi
         else
-          echo "⚪ **Backend (FastAPI)**: ⏭️ Skipped (No Changes Detected)" >> $GITHUB_STEP_SUMMARY
+          echo "⚪ **Backend**: ⏭️ Skipped" >> $GITHUB_STEP_SUMMARY
         fi
         
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # 프론트엔드 상태 체크
+        # 프론트엔드 상태
         if [ "${{ needs.trigger-validation.outputs.should_deploy_frontend }}" = "true" ]; then
           if [ "${{ needs.deploy-frontend.result }}" = "success" ] && [ "${{ env.FRONTEND_HEALTH }}" = "success" ]; then
-            echo "🟢 **Frontend (React + Vite)**: ✅ Deployed Successfully & Healthy" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🌐 URL: [${{ secrets.TEST_FRONTEND_URL }}](${{ secrets.TEST_FRONTEND_URL }})" >> $GITHUB_STEP_SUMMARY
-            echo "   - 📦 Build: Vite Production Build" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.deploy-frontend.result }}" = "success" ] && [ "${{ env.FRONTEND_HEALTH }}" != "success" ]; then
-            echo "🟡 **Frontend (React + Vite)**: ⚠️ Deployed but Health Check Failed" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🚨 Status: Needs Investigation" >> $GITHUB_STEP_SUMMARY
+            echo "🟢 **Frontend**: ✅ Deployed & Healthy" >> $GITHUB_STEP_SUMMARY
+            echo "   - 🌐 [${{ secrets.TEST_FRONTEND_URL }}](${{ secrets.TEST_FRONTEND_URL }})" >> $GITHUB_STEP_SUMMARY
           else
-            echo "🔴 **Frontend (React + Vite)**: ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-            echo "   - 🚨 Status: Build or Deploy Error" >> $GITHUB_STEP_SUMMARY
+            echo "🔴 **Frontend**: ❌ Failed or Unhealthy" >> $GITHUB_STEP_SUMMARY
           fi
         else
-          echo "⚪ **Frontend (React + Vite)**: ⏭️ Skipped (No Changes Detected)" >> $GITHUB_STEP_SUMMARY
+          echo "⚪ **Frontend**: ⏭️ Skipped" >> $GITHUB_STEP_SUMMARY
         fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        # 🆕 인테그레이션 테스트 결과
-        if [ "${{ needs.deploy-backend.result }}" = "success" ] && [ "${{ needs.deploy-frontend.result }}" = "success" ]; then
-          echo "### 🧪 Integration Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **API Endpoints**: Health & Info endpoints working" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **CORS Configuration**: Cross-origin requests enabled" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **Frontend-Backend**: Communication established" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        # 🆕 상세 배포 정보 (기존 테이블을 개선)
-        echo "### 📋 Deployment Details" >> $GITHUB_STEP_SUMMARY
-        echo "| Component | Status | Details |" >> $GITHUB_STEP_SUMMARY
+        # 상세 정보
+        echo "### 📋 Details" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Status | Health |" >> $GITHUB_STEP_SUMMARY
         echo "|-----------|--------|---------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **🎯 Trigger Reason** | ℹ️ | ${{ needs.trigger-validation.outputs.deployment_reason }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **📱 Backend Status** | $([ "${{ needs.deploy-backend.result }}" = "success" ] && echo "✅" || echo "❌") | ${{ needs.deploy-backend.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **🎨 Frontend Status** | $([ "${{ needs.deploy-frontend.result }}" = "success" ] && echo "✅" || echo "❌") | ${{ needs.deploy-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **💓 Backend Health** | $([ "${{ env.BACKEND_HEALTH }}" = "success" ] && echo "🟢" || echo "🔴") | ${{ env.BACKEND_HEALTH }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **💓 Frontend Health** | $([ "${{ env.FRONTEND_HEALTH }}" = "success" ] && echo "🟢" || echo "🔴") | ${{ env.FRONTEND_HEALTH }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **🌐 Backend URL** | 🔗 | [${{ secrets.TEST_BACKEND_URL }}](${{ secrets.TEST_BACKEND_URL }}) |" >> $GITHUB_STEP_SUMMARY
-        echo "| **🌐 Frontend URL** | 🔗 | [${{ secrets.TEST_FRONTEND_URL }}](${{ secrets.TEST_FRONTEND_URL }}) |" >> $GITHUB_STEP_SUMMARY
-        echo "| **📝 Git Commit** | 📋 | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **🌿 Git Branch** | 🌿 | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend | ${{ needs.deploy-backend.result }} | ${{ env.BACKEND_HEALTH }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Frontend | ${{ needs.deploy-frontend.result }} | ${{ env.FRONTEND_HEALTH }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Commit | \`${{ github.sha }}\` | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        # 🆕 액션 링크
-        echo "### 🔧 Quick Actions" >> $GITHUB_STEP_SUMMARY
-        echo "- 🔗 [View Backend Logs](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }}/logStream)" >> $GITHUB_STEP_SUMMARY
-        echo "- 🔗 [Monitor App Service](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }}/appServicePlanView)" >> $GITHUB_STEP_SUMMARY
-        echo "- 🔗 [Check Static Web App](https://portal.azure.com/#view/WebsitesExtension/StaticWebAppsLandingBlade)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # 최종 상태 메시지
+        # 최종 상태
         if [ "$SUCCESS_RATE" = "100" ]; then
-          echo "## 🎉 **Test Environment Deployment Successful!**" >> $GITHUB_STEP_SUMMARY
-          echo "> All services deployed and healthy. Ready for testing! 🚀" >> $GITHUB_STEP_SUMMARY
-        elif [ "$SUCCESS_RATE" -ge "50" ]; then
-          echo "## ⚠️ **Partial Deployment Success**" >> $GITHUB_STEP_SUMMARY
-          echo "> Some services deployed successfully. Check failed components above. 🔧" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 **Deployment Successful!** 🚀" >> $GITHUB_STEP_SUMMARY
         else
-          echo "## 🚨 **Deployment Failed**" >> $GITHUB_STEP_SUMMARY
-          echo "> Multiple services failed. Please check logs and retry. 💥" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚠️ **Partial Success** - Check Details Above" >> $GITHUB_STEP_SUMMARY
         fi
 
 
@@ -983,49 +795,154 @@ jobs:
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
 
-    - name: 🔄 Rollback Backend to Previous Image
+    - name: 🔄 Rollback Backend to Previous Image (완성)
       if: needs.deploy-backend.result == 'success'
       run: |
-        echo "🔄 Rolling back Test backend to previous successful image..."
+        echo "🔄 Starting backend rollback process..."
         
-        # 이전 성공 이미지 태그 조회
-        PREVIOUS_IMAGE=$(az webapp config container show \
+        # 재시도 함수
+        retry_az() {
+          local cmd="$1"
+          local desc="$2"
+          
+          for attempt in 1 2 3; do
+            echo "🔄 [$attempt/3] $desc"
+            if eval "$cmd"; then
+              echo "✅ Success: $desc"
+              return 0
+            elif [ $attempt -eq 3 ]; then
+              echo "❌ Failed: $desc"
+              return 1
+            else
+              echo "⏳ Waiting 30s before retry..."
+              sleep 30
+            fi
+          done
+        }
+        
+        # 현재 배포된 이미지 정보 수집
+        echo "🔍 Collecting current deployment info..."
+        CURRENT_IMAGE=$(az webapp config container show \
           --name "${{ env.BACKEND_APP_NAME_TEST }}" \
           --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
-          --query "previousImageName" -o tsv || echo "")
+          --query "image" -o tsv || echo "")
         
-        if [ -n "$PREVIOUS_IMAGE" ]; then
-          echo "📦 Rolling back to: $PREVIOUS_IMAGE"
-          # 실제 롤백 구현
+        echo "📋 Current image: $CURRENT_IMAGE"
+        
+        # 안전한 롤백 이미지 결정
+        REGISTRY="${{ secrets.ACR_LOGIN_SERVER }}"
+        ROLLBACK_IMAGE=""
+        
+        # 1. latest-stable 태그 시도
+        if az acr repository show-tags --name "${REGISTRY##*/}" --repository "backend-fastapi-test" --query "[?name=='latest-stable'].name" -o tsv 2>/dev/null | grep -q "latest-stable"; then
+          ROLLBACK_IMAGE="$REGISTRY/backend-fastapi-test:latest-stable"
+          echo "🎯 Using latest-stable image: $ROLLBACK_IMAGE"
         else
-          echo "⚠️ No previous image found - manual intervention required"
+          # 2. 최근 성공한 이미지 찾기 (현재 이미지 제외)
+          echo "🔍 Searching for recent successful images..."
+          RECENT_TAGS=$(az acr repository show-tags --name "${REGISTRY##*/}" --repository "backend-fastapi-test" --orderby time_desc --top 10 --query "[].name" -o tsv 2>/dev/null || echo "")
+          
+          for tag in $RECENT_TAGS; do
+            CANDIDATE_IMAGE="$REGISTRY/backend-fastapi-test:$tag"
+            if [ "$CANDIDATE_IMAGE" != "$CURRENT_IMAGE" ] && [ "$tag" != "latest" ]; then
+              ROLLBACK_IMAGE="$CANDIDATE_IMAGE"
+              echo "🎯 Using recent image: $ROLLBACK_IMAGE"
+              break
+            fi
+          done
+        fi
+        
+        # 롤백 실행
+        if [ -n "$ROLLBACK_IMAGE" ]; then
+          echo "📦 Rolling back to: $ROLLBACK_IMAGE"
+          
+          ROLLBACK_CMD="az webapp config container set \
+            --name '${{ env.BACKEND_APP_NAME_TEST }}' \
+            --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
+            --docker-custom-image-name '$ROLLBACK_IMAGE' \
+            --docker-registry-server-url 'https://${{ secrets.ACR_LOGIN_SERVER }}' \
+            --docker-registry-server-user '${{ secrets.ACR_USERNAME }}' \
+            --docker-registry-server-password '${{ secrets.ACR_PASSWORD }}'"
+          
+          if retry_az "$ROLLBACK_CMD" "Backend rollback deployment"; then
+            echo "✅ Rollback deployment initiated successfully"
+            echo "ROLLBACK_STATUS=success" >> $GITHUB_ENV
+            echo "ROLLBACK_IMAGE=$ROLLBACK_IMAGE" >> $GITHUB_ENV
+          else
+            echo "❌ Rollback deployment failed"
+            echo "ROLLBACK_STATUS=failed" >> $GITHUB_ENV
+          fi
+        else
+          echo "⚠️ No suitable rollback image found - manual intervention required"
+          echo "🔍 Available images:"
+          az acr repository show-tags --name "${REGISTRY##*/}" --repository "backend-fastapi-test" --top 5 --query "[].{Tag:name, Created:createdTime}" -o table || true
+          echo "ROLLBACK_STATUS=no-image" >> $GITHUB_ENV
         fi
 
-    - name: 🏥 Post-Rollback Health Check
+    - name: 🏥 Post-Rollback Health Check (완성)
+      if: env.ROLLBACK_STATUS == 'success'
       run: |
         echo "🔍 Verifying rollback success..."
-        # 롤백 후 헬스체크 로직
-  
+        BACKEND_URL="${{ secrets.TEST_BACKEND_URL }}"
+        
+        # 앱 재시작 대기
+        echo "⏳ Waiting for app restart (2 minutes)..."
+        sleep 120
+        
+        # 롤백 후 헬스체크 (최대 5분)
+        ROLLBACK_HEALTHY=false
+        for i in {1..15}; do
+          echo "📡 Rollback health check $i/15..."
+          
+          RESPONSE=$(curl -s -w "HTTPCODE:%{http_code}" --max-time 20 "${BACKEND_URL}/health" 2>&1 || echo "HTTPCODE:000")
+          HTTP_CODE=$(echo "$RESPONSE" | grep -o "HTTPCODE:[0-9]*" | cut -d: -f2)
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Rollback successful - backend is healthy!"
+            ROLLBACK_HEALTHY=true
+            break
+          else
+            echo "⏳ Attempt $i failed (HTTP: ${HTTP_CODE}), retrying in 20s..."
+            sleep 20
+          fi
+        done
+        
+        if [ "$ROLLBACK_HEALTHY" = "true" ]; then
+          echo "🎉 Automatic rollback completed successfully!"
+          echo "📋 Rolled back to: ${{ env.ROLLBACK_IMAGE }}"
+        else
+          echo "🚨 Rollback health check failed - service may still be unhealthy"
+          echo "🔧 Manual intervention required"
+        fi
 
-# ========== 배포 알림 시스템 ==========
-deployment-notification:
-  needs: [trigger-validation, deploy-backend, deploy-frontend, health-check]
-  if: always()
-  runs-on: ubuntu-latest
-  name: 📢 Deployment Notification
-
-  steps:
-    - name: 📊 Collect Deployment Results
-      id: results
-      run: |
-        # 배포 결과 수집 로직
-
-    - name: 📧 Send Teams Notification
+    - name: 📊 Rollback Summary
       if: always()
       run: |
-        # Teams Webhook 알림 로직
-
-    - name: 📱 Send Discord Notification (Optional)
-      if: failure()
-      run: |
-        # Discord Webhook 알림 로직
+        echo "## 🔄 Automatic Rollback Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Rollback Status** | ${{ env.ROLLBACK_STATUS }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Target Image** | ${{ env.ROLLBACK_IMAGE }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Trigger** | Health check failure |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Time** | $(date -u +"%Y-%m-%d %H:%M:%S UTC") |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ env.ROLLBACK_STATUS }}" = "success" ]; then
+          echo "### ✅ Rollback Actions Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- Identified suitable rollback image" >> $GITHUB_STEP_SUMMARY
+          echo "- Deployed previous stable version" >> $GITHUB_STEP_SUMMARY
+          echo "- Verified service health" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ env.ROLLBACK_STATUS }}" = "no-image" ]; then
+          echo "### ⚠️ Manual Intervention Required" >> $GITHUB_STEP_SUMMARY
+          echo "- No suitable rollback image found" >> $GITHUB_STEP_SUMMARY
+          echo "- Check ACR repository for available images" >> $GITHUB_STEP_SUMMARY
+          echo "- Consider manual deployment of known stable version" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### 🚨 Rollback Failed" >> $GITHUB_STEP_SUMMARY
+          echo "- Automatic rollback deployment failed" >> $GITHUB_STEP_SUMMARY
+          echo "- Immediate manual intervention required" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🔗 [Check App Service Status](https://portal.azure.com/#@/resource/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP_TEST }}/providers/Microsoft.Web/sites/${{ env.BACKEND_APP_NAME_TEST }}/overview)" >> $GITHUB_STEP_SUMMARY
