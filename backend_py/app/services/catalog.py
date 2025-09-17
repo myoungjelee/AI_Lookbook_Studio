@@ -107,12 +107,20 @@ class CatalogService:
                     score += self.config.partial_weight
         return score
 
-    def search(self, keywords: List[str], *, categories: Optional[List[str]] = None, max_results: int = 10,
-               score_threshold: float = 0.0) -> List[Dict]:
+    def search(
+        self,
+        keywords: List[str],
+        *,
+        categories: Optional[List[str]] = None,
+        max_results: int = 10,
+        score_threshold: float = 0.0,
+        products: Optional[List[Dict]] = None,
+    ) -> List[Dict]:
         categories = categories or list(self.config.categories)
         normalized = [k.strip().lower() for k in keywords if k and k.strip()]
         results: List[Tuple[float, Dict]] = []
-        for product in self._catalog:
+        dataset = products if products is not None else self._catalog
+        for product in dataset:
             if product.get("category") not in categories:
                 continue
             s = self._score_product(product, normalized)
@@ -123,9 +131,17 @@ class CatalogService:
         results.sort(key=lambda t: t[0], reverse=True)
         return [p for _, p in results[:max_results]]
 
-    def find_similar(self, analysis: Dict, *, max_per_category: int = 3, include_score: bool = True,
-                      min_price: Optional[int] = None, max_price: Optional[int] = None,
-                      exclude_tags: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
+    def find_similar(
+        self,
+        analysis: Dict,
+        *,
+        max_per_category: int = 3,
+        include_score: bool = True,
+        min_price: Optional[int] = None,
+        max_price: Optional[int] = None,
+        exclude_tags: Optional[List[str]] = None,
+        products: Optional[List[Dict]] = None,
+    ) -> Dict[str, List[Dict]]:
         keywords: List[str] = []
         # collect keywords from analysis structure
         for key in ("tags", "captions", "top", "pants", "shoes", "overall_style", "detected_style", "colors", "categories"):
@@ -135,7 +151,12 @@ class CatalogService:
 
         recs = {c: [] for c in self.config.categories}
         for cat in self.config.categories:
-            cat_products = self.search(keywords, categories=[cat], max_results=max_per_category * 3)
+            cat_products = self.search(
+                keywords,
+                categories=[cat],
+                max_results=max_per_category * 3,
+                products=products,
+            )
             # filters
             if min_price is not None or max_price is not None:
                 cat_products = [p for p in cat_products if (min_price or 0) <= int(p.get("price", 0)) <= (max_price or 1_000_000_000)]

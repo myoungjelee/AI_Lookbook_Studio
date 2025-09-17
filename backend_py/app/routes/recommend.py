@@ -8,6 +8,7 @@ from ..models import (
     CategoryRecommendations,
     RecommendationFromFittingRequest,
     RecommendationItem,
+    RecommendationOptions,
     RecommendationRequest,
     RecommendationResponse,
 )
@@ -17,6 +18,49 @@ from ..services.db_recommender import db_pos_recommender
 from ..services.llm_ranker import llm_ranker
 
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
+
+
+def _candidate_budget(opts: RecommendationOptions) -> int:
+    base = opts.maxPerCategory if opts.maxPerCategory is not None else 3
+    return base * 4
+
+
+def _has_results(recs: dict[str, list[dict]]) -> bool:
+    return any(len(recs.get(cat, [])) > 0 for cat in recs.keys())
+
+
+def _db_products() -> list[dict] | None:
+    if not db_pos_recommender.available():
+        return None
+    db_products = list(db_pos_recommender.products)
+    return db_products if db_products else None
+
+
+def _candidate_kwargs(opts: RecommendationOptions) -> dict:
+    return {
+        "max_per_category": _candidate_budget(opts),
+        "include_score": True,
+        "min_price": opts.minPrice,
+        "max_price": opts.maxPrice,
+        "exclude_tags": opts.excludeTags,
+    }
+
+
+def _build_candidates(
+    analysis: dict,
+    svc,
+    opts: RecommendationOptions,
+) -> dict[str, list[dict]]:
+    kwargs = _candidate_kwargs(opts)
+    products_override = _db_products()
+    candidate_recs = svc.find_similar(
+        analysis,
+        products=products_override,
+        **kwargs,
+    )
+    if products_override is not None and not _has_results(candidate_recs):
+        candidate_recs = svc.find_similar(analysis, **kwargs)
+    return candidate_recs
 
 
 @router.get("/status")
@@ -163,22 +207,12 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
                     analysis.setdefault(k, []).extend([k, "basic", "casual"])
 
     svc = get_catalog_service()
-    opts = req.options or {}
-    # get more candidates for potential LLM rerank
-    candidate_recs = svc.find_similar(
-        analysis,
-        max_per_category=(
-            (opts.maxPerCategory or 3) * 4 if hasattr(opts, "maxPerCategory") else 12
-        ),
-        include_score=True,
-        min_price=getattr(opts, "minPrice", None),
-        max_price=getattr(opts, "maxPrice", None),
-        exclude_tags=getattr(opts, "excludeTags", None),
-    )
+    opts = req.options or RecommendationOptions()
+    candidate_recs = _build_candidates(analysis, svc, opts)
 
     # Optional LLM rerank (default to Azure OpenAI when configured)
-    max_k = (opts.maxPerCategory or 3) if hasattr(opts, "maxPerCategory") else 3
-    user_llm_pref = getattr(opts, "useLLMRerank", None)
+    max_k = opts.maxPerCategory or 3
+    user_llm_pref = opts.useLLMRerank
     use_llm = user_llm_pref if user_llm_pref is not None else llm_ranker.available()
     if use_llm and llm_ranker.available():
         ids = llm_ranker.rerank(analysis, candidate_recs, top_k=max_k)
@@ -238,20 +272,11 @@ def recommend_from_fitting(
         except Exception:
             analysis_method = "fallback"
     svc = get_catalog_service()
-    opts = req.options or {}
-    candidate_recs = svc.find_similar(
-        analysis,
-        max_per_category=(
-            (opts.maxPerCategory or 3) * 4 if hasattr(opts, "maxPerCategory") else 12
-        ),
-        include_score=True,
-        min_price=getattr(opts, "minPrice", None),
-        max_price=getattr(opts, "maxPrice", None),
-        exclude_tags=getattr(opts, "excludeTags", None),
-    )
+    opts = req.options or RecommendationOptions()
+    candidate_recs = _build_candidates(analysis, svc, opts)
 
-    max_k = (opts.maxPerCategory or 3) if hasattr(opts, "maxPerCategory") else 3
-    user_llm_pref = getattr(opts, "useLLMRerank", None)
+    max_k = opts.maxPerCategory or 3
+    user_llm_pref = opts.useLLMRerank
     use_llm = user_llm_pref if user_llm_pref is not None else llm_ranker.available()
     if use_llm and llm_ranker.available():
         ids = llm_ranker.rerank(analysis, candidate_recs, top_k=max_k)
