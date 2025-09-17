@@ -64,6 +64,7 @@ const HistoryItemCard: React.FC<HistoryItemCardProps> = ({ item, onApply, getHis
 };
 
 export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
+  console.log('🔔 TryOnHistory 컴포넌트 렌더링됨');
   const [inputs, setInputs] = useState(tryOnHistory.inputs());
   const [outputs, setOutputs] = useState(tryOnHistory.outputs());
   const [view, setView] = useState<string | null>(null);
@@ -78,39 +79,70 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
 
   // 더 이상 API 호출이 필요하지 않음 (상품 데이터가 히스토리에 저장됨)
 
-  // 히스토리 아이템의 대표 이미지를 가져오는 함수 (저장된 상품 데이터 사용)
+  // 히스토리 아이템의 대표 이미지를 가져오는 함수 (실제 선택된 아이템 우선)
   const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
-    // 상의 → 하의 → 신발 → 아우터 순으로 우선순위
-    const products = [item.topProduct, item.pantsProduct, item.shoesProduct, item.outerProduct].filter(Boolean);
-    
-    console.log(`히스토리 아이템 상품 데이터들:`, {
+    console.log('🔍 getHistoryItemImage 호출:', {
       topProduct: item.topProduct?.title,
       pantsProduct: item.pantsProduct?.title,
       shoesProduct: item.shoesProduct?.title,
-      outerProduct: item.outerProduct?.title,
-      filteredProducts: products.length
+      outerProduct: item.outerProduct?.title
     });
     
-    for (const product of products) {
+    // 실제로 선택된 아이템들만 필터링 (라벨이 있는 것들)
+    const selectedProducts = [];
+    if (item.topLabel && item.topProduct) selectedProducts.push(item.topProduct);
+    if (item.pantsLabel && item.pantsProduct) selectedProducts.push(item.pantsProduct);
+    if (item.shoesLabel && item.shoesProduct) selectedProducts.push(item.shoesProduct);
+    if (item.outerLabel && item.outerProduct) selectedProducts.push(item.outerProduct);
+    
+    console.log('🔍 선택된 상품들:', selectedProducts.map(p => p.title));
+    
+    // 선택된 상품 중 첫 번째 이미지 반환
+    for (const product of selectedProducts) {
       if (product?.imageUrl) {
-        console.log(`이미지 URL 찾음: ${product.imageUrl}`);
+        console.log('🔍 이미지 찾음:', product.title, product.imageUrl);
         return product.imageUrl;
       }
     }
     
-    console.log(`모든 상품에서 이미지를 찾지 못함`);
+    console.log('🔍 이미지를 찾지 못함');
     return null;
   };
 
   useEffect(() => {
-    const unsub = tryOnHistory.subscribe(() => refresh());
+    console.log('🔔 TryOnHistory useEffect 실행, 리스너 구독 시작');
+    
+    // 구독 전에 현재 listeners 수 확인
+    console.log('🔔 구독 전 listeners 수:', tryOnHistory.listeners.size);
+    
+    const unsub = tryOnHistory.subscribe(() => {
+      console.log('🔔 TryOnHistory 리스너 호출됨, refresh 실행');
+      refresh();
+    });
+    
+    // 구독 후 listeners 수 확인
+    console.log('🔔 구독 후 listeners 수:', tryOnHistory.listeners.size);
+    
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'app:tryon:history:inputs:v1' || e.key === 'app:tryon:history:outputs:v1') {
+        console.log('🔔 TryOnHistory storage 이벤트 감지, refresh 실행');
         refresh();
       }
     };
     window.addEventListener('storage', onStorage);
-    return () => { unsub(); window.removeEventListener('storage', onStorage); };
+    
+    // 구독이 제대로 되었는지 확인
+    if (tryOnHistory.listeners.size === 0) {
+      console.error('❌ TryOnHistory 구독 실패! listeners 수가 0입니다.');
+    } else {
+      console.log('✅ TryOnHistory 구독 성공!');
+    }
+    
+    return () => { 
+      console.log('🔔 TryOnHistory 컴포넌트 언마운트, 리스너 해제');
+      unsub(); 
+      window.removeEventListener('storage', onStorage); 
+    };
   }, []);
 
 

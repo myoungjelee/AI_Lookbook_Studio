@@ -51,6 +51,7 @@ function read<T>(key: string): T[] {
 
 function write<T>(key: string, arr: T[]) {
   safeSetItem(key, arr);
+  notify();
 }
 
 function notify() {
@@ -63,6 +64,19 @@ function notify() {
 }
 
 export const tryOnHistory = {
+  // 디버깅용: listeners에 접근 가능하도록
+  get listeners() {
+    return listeners;
+  },
+
+  // 임시: 모든 히스토리 데이터 클리어 (개발용)
+  clearAll() {
+    console.log("🗑️ 모든 히스토리 데이터 클리어 중...");
+    localStorage.removeItem(KEY_INPUTS);
+    localStorage.removeItem(KEY_OUTPUTS);
+    notify();
+    console.log("✅ 히스토리 데이터 클리어 완료");
+  },
   addInput(item: Omit<TryOnInputHistoryItem, "id" | "ts">) {
     // Drop entries that are only AI-model person without any clothing labels
     if (
@@ -127,7 +141,6 @@ export const tryOnHistory = {
     };
     const list = [now, ...existingList];
     write(KEY_INPUTS, list);
-    notify();
   },
   addOutput(imageDataUri: string) {
     const now: TryOnOutputHistoryItem = {
@@ -137,7 +150,6 @@ export const tryOnHistory = {
     };
     const list = [now, ...read<TryOnOutputHistoryItem>(KEY_OUTPUTS)];
     write(KEY_OUTPUTS, list);
-    notify();
   },
   updateOutput(id: string, patch: Partial<TryOnOutputHistoryItem>) {
     const list = read<TryOnOutputHistoryItem>(KEY_OUTPUTS);
@@ -145,7 +157,6 @@ export const tryOnHistory = {
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...patch };
       write(KEY_OUTPUTS, list);
-      notify();
     }
   },
   inputs(): TryOnInputHistoryItem[] {
@@ -156,23 +167,19 @@ export const tryOnHistory = {
   },
   clearInputs() {
     write(KEY_INPUTS, []);
-    notify();
   },
   clearOutputs() {
     write(KEY_OUTPUTS, []);
-    notify();
   },
   removeInput(id: string) {
     const list = read<TryOnInputHistoryItem>(KEY_INPUTS);
     const filtered = list.filter((item) => item.id !== id);
     write(KEY_INPUTS, filtered);
-    notify();
   },
   removeOutput(id: string) {
     const list = read<TryOnOutputHistoryItem>(KEY_OUTPUTS);
     const filtered = list.filter((item) => item.id !== id);
     write(KEY_OUTPUTS, filtered);
-    notify();
   },
   subscribe(fn: Listener) {
     listeners.add(fn);

@@ -287,7 +287,7 @@ export const VirtualTryOnUI: React.FC = () => {
     // helpers for history
     // toDataUrl 함수는 더 이상 사용하지 않음 (이미지 저장 안함)
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
-    const recordInput = (
+    const recordInput = useCallback((
         overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
         labels?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         mode: 'delta' | 'snapshot' = 'delta',
@@ -295,6 +295,7 @@ export const VirtualTryOnUI: React.FC = () => {
         productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         products?: Partial<{ top: RecommendationItem; pants: RecommendationItem; shoes: RecommendationItem; outer: RecommendationItem }>,
     ) => {
+        console.log('🔔 recordInput 호출됨:', { overrides, labels, mode, productIds });
         // 이미지 변수들은 더 이상 사용하지 않음 (용량 절약)
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
@@ -318,7 +319,8 @@ export const VirtualTryOnUI: React.FC = () => {
             shoesProduct: products?.shoes ?? originalItems.shoes,
             outerProduct: products?.outer ?? originalItems.outer,
         });
-    };
+        console.log('🔔 tryOnHistory.addInput 호출 완료');
+    }, [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]);
 
     const handleCombineClick = useCallback(async () => {
         const hasAnyClothing = !!(topImage || pantsImage || shoesImage);
@@ -390,7 +392,16 @@ export const VirtualTryOnUI: React.FC = () => {
 
     // Helper: add a catalog/recommendation item into proper slot
     const addCatalogItemToSlot = useCallback(async (item: RecommendationItem) => {
+        console.log('🔔🔔🔔 addCatalogItemToSlot 호출됨! 🔔🔔🔔');
+        console.log('🔔 상품 정보:', {
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            imageUrl: item.imageUrl
+        });
+        
         const cat = (item.category || '').toLowerCase();
+        console.log('🔔 카테고리 소문자 변환:', cat);
         
         // 백엔드와 동일한 카테고리 매핑 로직 사용
         const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
@@ -399,13 +410,21 @@ export const VirtualTryOnUI: React.FC = () => {
             : (cat === 'pants') ? 'pants'
             : (cat === 'shoes') ? 'shoes'
             : null;
-        if (!slot) return;
+        
+        console.log('🔔 매핑된 slot:', slot);
+        
+        if (!slot) {
+            console.error('❌ 카테고리 매핑 실패:', item.category);
+            return;
+        }
         if (!item.imageUrl) {
             addToast(toast.error('이미지 URL이 없어 담을 수 없어요'));
             return;
         }
         try {
+            console.log('🔔 이미지 변환 시작...');
             const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
+            console.log('🔔 이미지 변환 완료:', up);
             
             // 원본 상품 데이터 저장
             setOriginalItems(prev => ({
@@ -413,18 +432,25 @@ export const VirtualTryOnUI: React.FC = () => {
                 [slot]: item
             }));
             
+            console.log('🔔 recordInput 호출 전:', { slot, item });
+            
             if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }, { top: item }); }
             if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }, { pants: item }); }
             if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }, { shoes: item }); }
             if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }, { outer: item }); }
+            
+            console.log('🔔 recordInput 호출 완료');
             addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
         } catch (e: any) {
+            console.error('❌ 이미지 처리 실패:', e);
             addToast(toast.error('가져오기에 실패했어요', e?.message));
         }
     }, [addToast, setTopImage, setPantsImage, setShoesImage, setOuterImage, setTopLabel, setPantsLabel, setShoesLabel, setOuterLabel, setSelectedOuterId, setOriginalItems]);
 
     // Helper wrapper: force slot without relying on category text
     const addToSlotForced = useCallback((item: RecommendationItem, slot: 'top'|'pants'|'shoes'|'outer') => {
+        console.log('🔔🔔🔔 addToSlotForced 호출됨! 🔔🔔🔔');
+        console.log('🔔 랜덤 아이템 클릭:', { item: item.title, slot });
         // Reuse existing logic by overriding category for mapping
         return addCatalogItemToSlot({ ...(item as any), category: slot } as any);
     }, [addCatalogItemToSlot]);
@@ -688,7 +714,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         </div>
                         {/* Histories section separated from upload card */}
                         <div className="lg:col-span-8 order-3">
-                            <TryOnHistory onApply={(payload) => {
+                            <TryOnHistory onApply={useCallback((payload) => {
                                 const parse = (data?: string, title?: string): UploadedImage | null => {
                                     if (!data) return null;
                                     const m = data.match(/^data:([^;]+);base64,(.*)$/);
@@ -717,7 +743,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                 if (pa) { setPantsImage(pa); setPantsLabel(payload.pantsLabel || '히스토리'); }
                                 if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || '히스토리'); }
                                 addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1200 }));
-                            }} />
+                            }, [setPersonImage, setPersonSource, setTopImage, setTopLabel, setPantsImage, setPantsLabel, setShoesImage, setShoesLabel, addToast])} />
                         </div>
 
                         {/* Action and Result Section */}
