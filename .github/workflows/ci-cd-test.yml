@@ -238,7 +238,7 @@ jobs:
         
         # 서비스 계정 인증 테스트
         echo "🔐 Testing service account authentication..."
-        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' > /tmp/test-gcp-key.json
+        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}'
         gcloud auth activate-service-account --key-file=/tmp/test-gcp-key.json
         gcloud config set project ${{ secrets.VERTEX_PROJECT_ID }}
         
@@ -252,7 +252,7 @@ jobs:
         echo "🐍 Testing Python Vertex AI integration..."
         python -c "
         import os
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/tmp/test-gcp-key.json'
+        #os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}'
         os.environ['VERTEX_PROJECT_ID'] = '${{ secrets.VERTEX_PROJECT_ID }}'
         os.environ['VERTEX_LOCATION'] = '${{ secrets.VERTEX_LOCATION }}'
         
@@ -360,30 +360,6 @@ jobs:
             "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
-
-    - name: 🔐 Setup Google Cloud Authentication
-      run: |
-        echo "🔐 Setting up Google Cloud service account for Vertex AI..."
-        
-        # 서비스 계정 키 파일 생성
-        mkdir -p /tmp/gcp
-        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' > /tmp/gcp/service-account-key.json
-        
-        # Google Cloud SDK 설치 (Ubuntu runners에 기본 포함)
-        # gcloud 인증 설정
-        gcloud auth activate-service-account --key-file=/tmp/gcp/service-account-key.json
-        gcloud config set project ${{ secrets.VERTEX_PROJECT_ID }}
-        
-        # 인증 테스트
-        echo "🔍 Testing Google Cloud authentication..."
-        gcloud auth list --filter=status:ACTIVE
-        
-        # Vertex AI 권한 테스트
-        gcloud services list --enabled --filter="name:aiplatform.googleapis.com" || \
-          echo "⚠️ Vertex AI API may not be enabled"
-        
-        echo "✅ Google Cloud authentication configured"
-        echo "GCP_KEY_PATH=/tmp/gcp/service-account-key.json" >> $GITHUB_ENV
 
     - name: 🔍 Verify Permissions and Resources (Enhanced)
       run: |
@@ -579,7 +555,7 @@ jobs:
         DB_NAME_VALUE="${{ secrets.TEST_DB_NAME }}"
         [ -z "$DB_NAME_VALUE" ] && DB_NAME_VALUE="postgres"
         
-        # 🆕 Vertex AI 환경 변수 추가
+        # ✅ 간소화된 환경 변수 설정 (JSON을 환경 변수로 직접 전달)
         ENV_CMD="az webapp config appsettings set \
           --name '${{ env.BACKEND_APP_NAME_TEST }}' \
           --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
@@ -602,7 +578,7 @@ jobs:
             VERTEX_LOCATION='${{ secrets.VERTEX_LOCATION }}' \
             VERTEX_MODEL_ID='${{ secrets.VERTEX_MODEL_ID }}' \
             VERTEX_API_ENDPOINT='${{ secrets.VERTEX_API_ENDPOINT }}' \
-            GOOGLE_APPLICATION_CREDENTIALS='/home/site/wwwroot/gcp-key.json' \
+            GOOGLE_APPLICATION_CREDENTIALS_JSON='${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' \
             VERTEX_VIDEO_SAMPLE_COUNT=1 \
             VERTEX_VIDEO_PERSON_GENERATION=allow_all \
             VERTEX_VIDEO_ADD_WATERMARK=true \
@@ -611,25 +587,8 @@ jobs:
         
         retry_az "$ENV_CMD"
         
-        # 🆕 Google Cloud 키 파일을 App Service에 업로드
-        echo "🔑 Uploading Google Cloud credentials to App Service..."
+        echo "✅ Vertex AI environment variables configured (JSON in env var)"        
         
-        # Azure App Service에 파일 업로드 (Kudu API 사용)
-        KUDU_URL="https://${{ env.BACKEND_APP_NAME_TEST }}.scm.azurewebsites.net"
-        PUBLISH_PROFILE=$(az webapp deployment list-publishing-profiles \
-          --name "${{ env.BACKEND_APP_NAME_TEST }}" \
-          --resource-group "${{ env.AZURE_RESOURCE_GROUP_TEST }}" \
-          --query "[?publishMethod=='FTP'].{username:userName,password:userPWD}" \
-          --output json | jq -r '.[0]')
-        
-        # 서비스 계정 키를 App Service 파일 시스템에 저장
-        curl -X PUT "$KUDU_URL/api/vfs/site/wwwroot/gcp-key.json" \
-          -u "$(echo $PUBLISH_PROFILE | jq -r '.username'):$(echo $PUBLISH_PROFILE | jq -r '.password')" \
-          -H "Content-Type: application/json" \
-          -T /tmp/gcp/service-account-key.json \
-          --silent || echo "⚠️ GCP key upload failed, using env var fallback"
-        
-        echo "✅ Vertex AI environment variables and credentials configured"        
 
     # 🆕 여기에 추가 (기존 마지막 스텝 다음)
     - name: 📋 Collect Backend Deployment Logs (On Failure)

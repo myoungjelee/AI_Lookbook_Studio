@@ -9,6 +9,8 @@ import httpx
 from fastapi import HTTPException
 from google.auth import default
 from google.auth.transport.requests import Request
+import json
+from google.oauth2 import service_account
 
 
 logger = logging.getLogger(__name__)
@@ -45,15 +47,16 @@ class VertexVideoService:
                 return self._token_cache[0]
 
             try:
-                credentials, _ = default(scopes=self._scopes)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Failed to load default Google credentials")
+                # 🆕 로컬과 CI/CD 모두 지원하는 인증 방식
+                credentials = self._get_credentials()
+            except Exception as exc:
+                logger.exception("Failed to load Google credentials")
                 raise HTTPException(status_code=503, detail="Unable to load Google credentials") from exc
 
             if not credentials.valid or not getattr(credentials, "token", None):
                 try:
                     credentials.refresh(Request())
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.exception("Failed to refresh Google credentials")
                     raise HTTPException(status_code=503, detail="Unable to refresh Google credentials") from exc
 
@@ -66,11 +69,40 @@ class VertexVideoService:
             if expiry is not None:
                 try:
                     expiry_ts = expiry.timestamp()
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
 
             self._token_cache = (token, expiry_ts)
             return token
+
+    def _get_credentials(self):
+        """로컬과 CI/CD 모두 호환되는 Google Cloud 인증"""
+        import json
+        from google.oauth2 import service_account
+        from google.auth import default
+
+        # 1. 환경변수에서 JSON 직접 읽기 (CI/CD용)
+        credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        if credentials_json:
+            try:
+                credentials_info = json.loads(credentials_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    credentials_info,
+                    scopes=self._scopes
+                )
+                logger.info("✅ Google credentials loaded from JSON environment variable")
+                return credentials
+            except Exception as e:
+                logger.warning(f"Failed to load credentials from JSON env var: {e}")
+
+        # 2. 기본 방식 (로컬 개발용 - 파일 경로)
+        try:
+            credentials, _ = default(scopes=self._scopes)
+            logger.info("✅ Google credentials loaded via default method")
+            return credentials
+        except Exception as e:
+            logger.error(f"Failed to load credentials via default method: {e}")
+            raise
 
     @staticmethod
     def _sanitize_parameters(parameters: Optional[Dict[str, Any]]) -> Dict[str, Any]:
