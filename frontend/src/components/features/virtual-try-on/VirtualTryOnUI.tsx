@@ -6,6 +6,7 @@ import { manageStorageSpace } from '../../../services/storage.service';
 import { tryOnHistory } from '../../../services/tryon_history.service';
 import { virtualTryOnService } from '../../../services/virtualTryOn.service';
 import type { ApiFile, ClothingItems, RecommendationItem, RecommendationOptions, UploadedImage } from '../../../types';
+import { normalizeCategoryLoose } from '../../../utils/category';
 import { Button, Card, Input, toast, useToast } from '../../ui';
 import { Header } from '../layout/Header';
 import { RecommendationDisplay } from '../recommendations/RecommendationDisplay';
@@ -406,21 +407,46 @@ export const VirtualTryOnUI: React.FC = () => {
                     const toCategoryRecs = (arr: RecommendationItem[]) => {
                         const buckets: any = { top: [], pants: [], shoes: [], outer: [], accessories: [] };
                         for (const it of arr) {
-                            const c = (it.category || '').toLowerCase();
-                            const key = c === 'outer' ? 'outer' : c === 'top' ? 'top' : c === 'pants' ? 'pants' : c === 'shoes' ? 'shoes' : 'accessories';
+                            const key = normalizeCategoryLoose(String(it.category || ''));
                             buckets[key].push(it);
                         }
                         return buckets;
                     };
 
                     if (positions.length > 0) {
-                        const byPos = await virtualTryOnService.getRecommendationsByPositions({
-                            positions,
-                            items: itemsPayload,
-                            final_k: 3,
-                            use_llm_rerank: true,
-                        });
-                        setRecommendations(toCategoryRecs(byPos));
+                        try {
+                            const byPos = await virtualTryOnService.getRecommendationsByPositions({
+                                positions,
+                                items: itemsPayload,
+                                // Explicitly pass dressed categories to ensure all appear
+                                categories: selected.map(s => s.slot),
+                                final_k: 3,
+                                use_llm_rerank: true,
+                            });
+                            setRecommendations(toCategoryRecs(byPos));
+                        } catch (e) {
+                            // Fallback to image-based when vector recommender is unavailable
+                            const options: RecommendationOptions = {};
+                            if (minPrice) options.minPrice = Number(minPrice);
+                            if (maxPrice) options.maxPrice = Number(maxPrice);
+                            const trimmed = excludeTagsInput.trim();
+                            if (trimmed) options.excludeTags = trimmed.split(',').map(t => t.trim()).filter(Boolean);
+
+                            const usedClothingItems: any = {};
+                            if (topImage) usedClothingItems.top = clothingItems.top;
+                            if (pantsImage) usedClothingItems.pants = clothingItems.pants;
+                            if (shoesImage) usedClothingItems.shoes = clothingItems.shoes;
+                            if (outerImage) usedClothingItems.outer = clothingItems.outer;
+
+                            const recommendationsResult = await virtualTryOnService.getRecommendationsFromFitting({
+                                person: null,
+                                clothingItems: usedClothingItems,
+                                generatedImage: result.generatedImage,
+                                options,
+                                selectedProductIds: null,
+                            });
+                            setRecommendations(recommendationsResult.recommendations as any);
+                        }
                     } else {
                         // 2) Fallback to image-based from-fitting when pos not available (uploaded images etc.)
                         const options: RecommendationOptions = {};

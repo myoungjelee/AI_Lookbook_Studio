@@ -175,9 +175,16 @@ def _build_candidates(
     kwargs = _candidate_kwargs(opts)
     products_override = _db_products()
     if products_override is None:
-        raise HTTPException(
-            status_code=503, detail="Recommendation database unavailable"
-        )
+        # Fallback to catalog.json when DB is not available
+        try:
+            return svc.find_similar(
+                analysis,
+                products=None,  # use internal catalog dataset
+                **kwargs,
+            )
+        except Exception:
+            # last resort – empty buckets
+            return {c: [] for c in svc.config.categories}
 
     return svc.find_similar(
         analysis,
