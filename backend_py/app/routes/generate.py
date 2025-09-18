@@ -194,6 +194,13 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
                     timestamp=datetime.utcnow().isoformat() + "Z",
                 )
 
+    if req.person is not None:
+        # Person 이미지가 있는데도 위 단계에서 결과를 만들지 못했으면 실패로 처리
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to generate with provided person image. Please retry with a different image or later.",
+        )
+
     # Option B: Proxy to existing Node backend if configured (recommended during migration)
     proxy_target = os.getenv("GENERATE_PROXY_TARGET")
     if proxy_target:

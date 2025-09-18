@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 from ..models import (
     CategoryRecommendations,
+    ClothingItems,
     RecommendationFromFittingRequest,
     RecommendationItem,
     RecommendationOptions,
@@ -23,6 +24,130 @@ router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 def _candidate_budget(opts: RecommendationOptions) -> int:
     base = opts.maxPerCategory if opts.maxPerCategory is not None else 3
     return base * 4
+
+
+def _requested_slots(
+    clothing: ClothingItems | None = None,
+    selected_ids: dict[str, str] | None = None,
+) -> set[str]:
+    slots: set[str] = set()
+    print(f"[_requested_slots] clothing 객체: {clothing}")
+    print(f"[_requested_slots] clothing 타입: {type(clothing)}")
+    if clothing:
+        # clothing이 딕셔너리인 경우 처리
+        if isinstance(clothing, dict):
+            for key in ["top", "pants", "shoes", "outer"]:
+                item = clothing.get(key)
+                if item and item.get("base64"):
+                    slots.add(key)
+                    print(f"[_requested_slots] {key}: 추가됨")
+        else:
+            # Pydantic 모델인 경우 처리
+            top = getattr(clothing, "top", None)
+            if top is not None and getattr(top, "base64", ""):
+                slots.add("top")
+            pants = getattr(clothing, "pants", None)
+            if pants is not None and getattr(pants, "base64", ""):
+                slots.add("pants")
+            shoes = getattr(clothing, "shoes", None)
+            if shoes is not None and getattr(shoes, "base64", ""):
+                slots.add("shoes")
+            outer = getattr(clothing, "outer", None)
+            if outer is not None and getattr(outer, "base64", ""):
+                slots.add("outer")
+    if selected_ids:
+        for cat, val in selected_ids.items():
+            if val is None or not str(val).strip():
+                continue
+            slots.add(_normalize_category(cat))
+    print(f"[_requested_slots] 최종 슬롯: {slots}")
+    return slots
+
+
+def _normalize_category(raw: str | None) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return "unknown"
+    if "outer" in value or "jacket" in value or "coat" in value:
+        return "outer"
+    if "top" in value or "shirt" in value or "tee" in value or "상의" in value:
+        return "top"
+    if (
+        "pant" in value
+        or "bottom" in value
+        or "하의" in value
+        or "denim" in value
+        or "skirt" in value
+    ):
+        return "pants"
+    if "shoe" in value or "sneaker" in value or "신발" in value:
+        return "shoes"
+    if "access" in value:
+        return "accessories"
+    return value
+
+def _infer_slots_from_analysis(analysis: dict | None) -> set[str]:
+    slots: set[str] = set()
+    if not analysis:
+        return slots
+    # explicit categories list
+    cats = analysis.get("categories") if isinstance(analysis, dict) else None
+    if isinstance(cats, list):
+        for c in cats:
+            slots.add(_normalize_category(str(c)))
+    # presence of per-slot keys with any content
+    for key in ("top", "pants", "shoes", "outer"):
+        val = analysis.get(key) if isinstance(analysis, dict) else None
+        if val:
+            slots.add(key)
+    # keep only known slots
+    return {s for s in slots if s in {"top", "pants", "shoes", "outer"}}
+
+
+def _embedded_recommendations(
+    selected_ids: dict[str, str], max_per_category: int
+) -> dict[str, list[dict]]:
+    if not selected_ids or not db_pos_recommender.available():
+        return {}
+
+    by_category: dict[str, list[dict]] = {
+        "top": [],
+        "pants": [],
+        "shoes": [],
+        "outer": [],
+        "accessories": [],
+    }
+    for slot_cat, value in selected_ids.items():
+        slot_norm = _normalize_category(slot_cat)
+        if slot_norm not in by_category:
+            continue
+        try:
+            pos = int(value)
+        except (TypeError, ValueError):
+            continue
+
+        pool_size = max_per_category * 6 if max_per_category > 0 else 18
+        try:
+            pool = db_pos_recommender.recommend(positions=[pos], top_k=pool_size)
+        except Exception:
+            continue
+
+        for item in pool:
+            cat = _normalize_category(item.get("category"))
+            if cat != slot_norm:
+                continue
+            item_id = (
+                str(item.get("id"))
+                if item.get("id") is not None
+                else str(item.get("pos"))
+            )
+            if item_id == str(pos):
+                continue
+            if len(by_category[slot_norm]) >= max_per_category:
+                break
+            by_category[slot_norm].append(item)
+
+    return {k: v for k, v in by_category.items() if v}
 
 
 def _db_products() -> list[dict] | None:
@@ -171,6 +296,17 @@ def random_products(
             "tags": p.get("tags") or [],
             "category": p.get("category") or "top",
         }
+        # propagate pos if available; otherwise derive from numeric id
+        if p.get("pos") is not None:
+            try:
+                item["pos"] = int(p.get("pos"))
+            except Exception:
+                pass
+        else:
+            try:
+                item["pos"] = int(item["id"]) if item.get("id") else None
+            except Exception:
+                pass
         result.append(item)
     try:
         if response is not None:
@@ -208,6 +344,25 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
     opts = req.options if req.options is not None else RecommendationOptions()
     candidate_recs = _build_candidates(analysis, svc, opts)
 
+    selected_ids = dict(req.selectedProductIds or {})
+    active_slots = _requested_slots(
+        req.clothingItems, selected_ids if selected_ids else None
+    )
+
+    embed_recs = _embedded_recommendations(
+        selected_ids,
+        opts.maxPerCategory or 3,
+    )
+    if embed_recs:
+        for cat, items in embed_recs.items():
+            if items:
+                candidate_recs[cat] = items
+    # Strict slot gating: only return categories the user actually provided
+    # If no slots are active, suppress all category recommendations
+    for cat in list(candidate_recs.keys()):
+        if not active_slots or cat not in active_slots:
+            candidate_recs[cat] = []
+
     # Optional LLM rerank (default to Azure OpenAI when configured)
     max_k = opts.maxPerCategory or 3
     user_llm_pref = opts.useLLMRerank
@@ -241,6 +396,7 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
         top=[RecommendationItem(**p) for p in recs.get("top", [])],
         pants=[RecommendationItem(**p) for p in recs.get("pants", [])],
         shoes=[RecommendationItem(**p) for p in recs.get("shoes", [])],
+        outer=[RecommendationItem(**p) for p in recs.get("outer", [])],
         accessories=[RecommendationItem(**p) for p in recs.get("accessories", [])],
     )
 
@@ -273,6 +429,34 @@ def recommend_from_fitting(
     opts = req.options if req.options is not None else RecommendationOptions()
     candidate_recs = _build_candidates(analysis, svc, opts)
 
+    selected_ids = dict(req.selectedProductIds or {})
+    # originalClothingItems 대신 clothingItems 사용 (프론트엔드에서 전송하는 필드명)
+    clothing_items = getattr(req, "clothingItems", None) or getattr(
+        req, "originalClothingItems", None
+    )
+    active_slots = _requested_slots(
+        clothing_items, selected_ids if selected_ids else None
+    )
+    # If user didn't explicitly provide slots, infer from analysis of generated image
+    if not active_slots:
+        inferred = _infer_slots_from_analysis(analysis)
+        if inferred:
+            active_slots = inferred
+
+    embed_recs = _embedded_recommendations(
+        selected_ids,
+        opts.maxPerCategory or 3,
+    )
+    if embed_recs:
+        for cat, items in embed_recs.items():
+            if items:
+                candidate_recs[cat] = items
+    # Strict slot gating: only return categories the user actually provided
+    # If no slots are active, suppress all category recommendations
+    for cat in list(candidate_recs.keys()):
+        if not active_slots or cat not in active_slots:
+            candidate_recs[cat] = []
+
     max_k = opts.maxPerCategory or 3
     user_llm_pref = opts.useLLMRerank
     use_llm = user_llm_pref if user_llm_pref is not None else llm_ranker.available()
@@ -299,6 +483,7 @@ def recommend_from_fitting(
         top=[RecommendationItem(**p) for p in recs.get("top", [])],
         pants=[RecommendationItem(**p) for p in recs.get("pants", [])],
         shoes=[RecommendationItem(**p) for p in recs.get("shoes", [])],
+        outer=[RecommendationItem(**p) for p in recs.get("outer", [])],
         accessories=[RecommendationItem(**p) for p in recs.get("accessories", [])],
     )
 

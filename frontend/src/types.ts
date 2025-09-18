@@ -14,15 +14,15 @@ export interface ApiFile {
 }
 
 export interface ClothingItems {
-  top?: ApiFile | null;
-  pants?: ApiFile | null;
-  shoes?: ApiFile | null;
-  outer?: ApiFile | null;
+  top: ApiFile | null;
+  pants: ApiFile | null;
+  shoes: ApiFile | null;
+  outer: ApiFile | null;
 }
 
 export interface VirtualTryOnRequest {
   // Person image is now optional to allow outfit-only composition
-  person?: ApiFile | null;
+  person: ApiFile | null;
   clothingItems: ClothingItems;
 }
 
@@ -32,14 +32,21 @@ export interface VirtualTryOnResponse {
 }
 
 export interface RecommendationRequest {
-  person?: ApiFile;
-  clothingItems?: ClothingItems;
-  generatedImage?: string;
-  options?: RecommendationOptions;
+  person: ApiFile | null;
+  clothingItems: ClothingItems | null;
+  generatedImage: string | null;
+  options: RecommendationOptions | null;
+  selectedProductIds: {
+    top: string | null;
+    pants: string | null;
+    shoes: string | null;
+    outer: string | null;
+  } | null;
 }
 
 export interface RecommendationItem {
   id: string;
+  pos?: number; // embedding index when known
   title: string;
   price: number;
   imageUrl?: string;
@@ -56,6 +63,7 @@ export interface CategoryRecommendations {
   top: RecommendationItem[];
   pants: RecommendationItem[];
   shoes: RecommendationItem[];
+  outer: RecommendationItem[];
   accessories: RecommendationItem[];
 }
 
@@ -90,6 +98,7 @@ export interface VirtualTryOnState {
     top: UploadedImage | null;
     pants: UploadedImage | null;
     shoes: UploadedImage | null;
+    outer: UploadedImage | null;
   };
   generatedImage: string | null;
   recommendations: CategoryRecommendations | null;

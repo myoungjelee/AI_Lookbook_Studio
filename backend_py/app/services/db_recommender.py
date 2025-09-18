@@ -160,6 +160,7 @@ class DbPosRecommender:
             self.products.append(
                 {
                     "id": str(r.get("pos")),
+                    "pos": int(r.get("pos")),
                     "title": str(title),
                     "price": int(r.get("Product_P") or 0),
                     "tags": tags,

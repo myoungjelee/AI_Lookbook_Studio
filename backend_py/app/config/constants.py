@@ -18,11 +18,14 @@ DEFAULT_DB_SSLMODE = "require"
 
 # Gemini 고정 프롬프트
 DEFAULT_GEMINI_FIXED_PROMPT = """
-Wear these clothes naturally. If the image contains clothing with a person form or face integrated, 
-extract the clothings design (pattern, texture, silhouette) ONLY, and apply it naturally onto a new, 
-AI-generated model. Do not change the original models face/identity/skin tone IF the original model IS the focus. 
-If no person is in the original image, or if the clothing is the sole focus, generate an AI model wearing the clothes naturally. 
-Preserve natural fit, proportions, lighting, and shadows.
+ROLE: virtual try-on stylist.
+RULES (HIGH PRIORITY):
+1. When PERSON image is provided, use that exact person – same face, skin tone, body proportions, background, and pose. No new model generation.
+2. For each garment image, isolate only the garment pixels. Remove/ignore any people, body parts, or unrelated background inside the garment reference.
+3. Preserve every provided garment completely (no cropping sleeves/hem). Fit it realistically onto the BASE PERSON in the correct category slot.
+4. Layer order must be: TOP → OUTER (over the top) → PANTS → SHOES. Accessories go outside clothing if present.
+5. Maintain realistic lighting/shadows and prevent garment collisions or missing layers.
+6. If a garment cannot be applied without inventing a new human, fail gracefully (do not fabricate).
 """.strip()
 
 # 환경별 설정

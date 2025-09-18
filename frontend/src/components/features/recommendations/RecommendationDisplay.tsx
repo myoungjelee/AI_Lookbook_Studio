@@ -14,6 +14,12 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
     onItemClick,
 }) => {
 
+    const safeTop = recommendations.top ?? [];
+    const safePants = recommendations.pants ?? [];
+    const safeOuter = recommendations.outer ?? [];
+    const safeShoes = recommendations.shoes ?? [];
+    const safeAccessories = recommendations.accessories ?? [];
+
     // Lightweight inline placeholder (SVG) shown when product image fails to load
     const fallbackImage =
         'data:image/svg+xml;utf8,' +
@@ -108,6 +114,7 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
         if (items.length === 0) return null;
 
         const categoryNames: Record<string, string> = {
+            outer: '아우터',
             top: '상의',
             pants: '하의',
             shoes: '신발',
@@ -128,9 +135,8 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
         );
     };
 
-    const hasAnyRecommendations = Object.values(recommendations).some(
-        (items: RecommendationItem[]) => items.length > 0
-    );
+    const hasAnyRecommendations = [safeTop, safePants, safeOuter, safeShoes, safeAccessories]
+        .some((items) => items.length > 0);
 
     if (!hasAnyRecommendations) {
         return (
@@ -145,10 +151,11 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
         <Card>
             <h2 className="text-2xl font-bold text-gray-800 mb-6">유사 상품 추천</h2>
             <div>
-                {renderCategory('top', recommendations.top)}
-                {renderCategory('pants', recommendations.pants)}
-                {renderCategory('shoes', recommendations.shoes)}
-                {renderCategory('accessories', recommendations.accessories)}
+                {renderCategory('top', safeTop)}
+                {renderCategory('pants', safePants)}
+                {renderCategory('outer', safeOuter)}
+                {renderCategory('shoes', safeShoes)}
+                {renderCategory('accessories', safeAccessories)}
             </div>
         </Card>
     );

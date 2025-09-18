@@ -42,16 +42,19 @@ class RecommendationRequest(BaseModel):
     clothingItems: Optional[ClothingItems] = None
     generatedImage: Optional[str] = None
     options: Optional[RecommendationOptions] = None
+    selectedProductIds: Optional[Dict[str, str]] = None
 
 
 class RecommendationFromFittingRequest(BaseModel):
     generatedImage: str
     originalClothingItems: Optional[ClothingItems] = None
     options: Optional[RecommendationOptions] = None
+    selectedProductIds: Optional[Dict[str, str]] = None
 
 
 class RecommendationItem(BaseModel):
     id: str
+    pos: Optional[int] = None
     title: str
     price: int
     tags: List[str]
@@ -65,6 +68,7 @@ class CategoryRecommendations(BaseModel):
     top: List[RecommendationItem]
     pants: List[RecommendationItem]
     shoes: List[RecommendationItem]
+    outer: List[RecommendationItem]
     accessories: List[RecommendationItem]
 
 

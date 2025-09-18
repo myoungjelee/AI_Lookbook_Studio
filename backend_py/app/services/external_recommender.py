@@ -56,6 +56,7 @@ class ExternalRecommender:
             pos = row.get("pos")
             items.append({
                 "id": str(pos) if pos is not None else "",
+                "pos": int(pos) if isinstance(pos, (int, float, str)) and str(pos).isdigit() else None,
                 "title": row.get("Product_Desc") or "",
                 "price": int(row.get("Product_P") or 0),
                 "tags": [],

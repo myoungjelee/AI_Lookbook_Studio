@@ -163,7 +163,10 @@ class GeminiImageService:
                 person.get("base64"), person.get("mimeType")
             )
             parts.append(
-                {"text": "BASE PERSON: keep same person and face; keep background."}
+                {"text": (
+                    "BASE PERSON: use this exact person, face, body proportions, skin tone, and background. "
+                    "Do NOT invent or substitute another model. Only change clothing items as instructed."
+                )}
             )
             parts.append(
                 {
@@ -174,9 +177,25 @@ class GeminiImageService:
                 }
             )
 
+        if clothing_items:
+            parts.append(
+                {
+                    "text": (
+                        "LAYERING RULES: apply garments in this order—TOP first, then OUTER on top of the top,"
+                        " then PANTS, then SHOES. Outerwear must always be the outermost layer covering the top."
+                    )
+                }
+            )
+
         # Clothing images
         has_any_clothing = False
         print(f"[gemini] _build_parts 시작 - clothing_items: {clothing_items}")
+        garment_guidance = {
+            "top": "Extract the entire top (shirts, tees, knitwear) including sleeves and collars.",
+            "outer": "Extract the full outerwear (jackets, coats, cardigans). It must cover the top entirely without cropping hems or sleeves.",
+            "pants": "Extract trousers/bottoms from waist to hem. Keep waistband and full length intact.",
+            "shoes": "Extract the full pair of shoes with soles. Maintain orientation for both feet.",
+        }
         for key in ("top", "pants", "shoes", "outer"):
             item = clothing_items.get(key)
             print(f"[gemini] {key} 아이템 확인: {item}")
@@ -188,7 +207,11 @@ class GeminiImageService:
                 # Minimal role hint per garment image
                 parts.append(
                     {
-                        "text": f"GARMENT {key}: clothing only; ignore person and background."
+                        "text": (
+                            f"GARMENT {key.upper()}: {garment_guidance.get(key, 'Use as-is.')} "
+                            "Ignore/remove any person, mannequin, limbs, or background in this reference. "
+                            "Apply the garment onto the BASE PERSON exactly according to the layering rules without cropping."
+                        )
                     }
                 )
                 parts.append(

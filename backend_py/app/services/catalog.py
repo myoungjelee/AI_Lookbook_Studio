@@ -34,10 +34,13 @@ class CatalogService:
         try:
             data = json.loads(Path(self.config.catalog_path).read_text(encoding="utf-8"))
             # Basic normalization
-            for p in data:
+            for idx, p in enumerate(data):
                 p.setdefault("tags", [])
                 p.setdefault("title", "")
                 p.setdefault("category", "")
+                # Enforce index-based identity across the stack
+                p["pos"] = int(idx)
+                p["id"] = str(idx)
             self._catalog = data
             print(f"[CatalogService] Loaded {len(self._catalog)} products from {self.config.catalog_path}")
         except Exception as e:
@@ -127,6 +130,12 @@ class CatalogService:
             if s > score_threshold:
                 copy = dict(product)
                 copy["score"] = s
+                pid = copy.get("id")
+                if pid is not None:
+                    try:
+                        copy["pos"] = int(pid)
+                    except (TypeError, ValueError):
+                        copy["pos"] = pid
                 results.append((s, copy))
         results.sort(key=lambda t: t[0], reverse=True)
         return [p for _, p in results[:max_results]]
@@ -168,6 +177,13 @@ class CatalogService:
             if not include_score:
                 for p in cat_products:
                     p.pop("score", None)
+            for p in cat_products:
+                pid = p.get("id") if isinstance(p, dict) else None
+                if pid is not None:
+                    try:
+                        p["pos"] = int(pid)
+                    except (TypeError, ValueError):
+                        p.setdefault("pos", pid)
             recs[cat] = cat_products
 
         return recs

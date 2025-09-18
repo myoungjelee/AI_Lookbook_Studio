@@ -156,6 +156,7 @@ test.httpㅇ
 # === Local-only: mise & uv ===
 # mise: keep local-only runtime/tool settings untracked
 mise.toml
+agents.md
 
 # uv: local caches and venvs (per-developer)
 .uv/

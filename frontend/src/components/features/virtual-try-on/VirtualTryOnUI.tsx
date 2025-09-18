@@ -365,7 +365,7 @@ export const VirtualTryOnUI: React.FC = () => {
 
 
             const result = await virtualTryOnService.combineImages({
-                person: personImage ? convertToApiFile(personImage) : undefined,
+                person: personImage ? convertToApiFile(personImage) : null,
                 clothingItems,
             });
 
@@ -377,19 +377,75 @@ export const VirtualTryOnUI: React.FC = () => {
                 // Fetch recommendations after virtual fitting
                 setIsLoadingRecommendations(true);
                 try {
-                    const options: RecommendationOptions = {};
-                    if (minPrice) options.minPrice = Number(minPrice);
-                    if (maxPrice) options.maxPrice = Number(maxPrice);
-                    const trimmed = excludeTagsInput.trim();
-                    if (trimmed) options.excludeTags = trimmed.split(',').map(t => t.trim()).filter(Boolean);
+                    // 1) Try pos-based recommendation when originalItems are available
+                    const selected: Array<{ slot: 'top'|'pants'|'shoes'|'outer'; item: RecommendationItem }> = [] as any;
+                    if (originalItems.top) selected.push({ slot: 'top', item: originalItems.top! });
+                    if (originalItems.pants) selected.push({ slot: 'pants', item: originalItems.pants! });
+                    if (originalItems.shoes) selected.push({ slot: 'shoes', item: originalItems.shoes! });
+                    if (originalItems.outer) selected.push({ slot: 'outer', item: originalItems.outer! });
 
-                    const recommendationsResult = await virtualTryOnService.getRecommendationsFromFitting({
-                        generatedImage: result.generatedImage,
-                        clothingItems,
-                        options,
-                    });
+                    const positions: number[] = [];
+                    const itemsPayload: any[] = [];
+                    for (const s of selected) {
+                        const idNum = Number(s.item.id);
+                        const posNum = Number.isFinite(s.item.pos as any) ? Number(s.item.pos) : (Number.isFinite(idNum) ? idNum : NaN);
+                        if (!Number.isFinite(posNum)) continue; // skip if no numeric pos
+                        positions.push(posNum as number);
+                        itemsPayload.push({
+                            pos: posNum as number,
+                            category: s.item.category,
+                            title: s.item.title,
+                            tags: s.item.tags,
+                            price: s.item.price,
+                            brand: (s.item as any).brandName,
+                            productUrl: s.item.productUrl,
+                            imageUrl: s.item.imageUrl,
+                        });
+                    }
 
-                    setRecommendations(recommendationsResult.recommendations as any);
+                    const toCategoryRecs = (arr: RecommendationItem[]) => {
+                        const buckets: any = { top: [], pants: [], shoes: [], outer: [], accessories: [] };
+                        for (const it of arr) {
+                            const c = (it.category || '').toLowerCase();
+                            const key = c === 'outer' ? 'outer' : c === 'top' ? 'top' : c === 'pants' ? 'pants' : c === 'shoes' ? 'shoes' : 'accessories';
+                            buckets[key].push(it);
+                        }
+                        return buckets;
+                    };
+
+                    if (positions.length > 0) {
+                        const byPos = await virtualTryOnService.getRecommendationsByPositions({
+                            positions,
+                            items: itemsPayload,
+                            final_k: 3,
+                            use_llm_rerank: true,
+                        });
+                        setRecommendations(toCategoryRecs(byPos));
+                    } else {
+                        // 2) Fallback to image-based from-fitting when pos not available (uploaded images etc.)
+                        const options: RecommendationOptions = {};
+                        if (minPrice) options.minPrice = Number(minPrice);
+                        if (maxPrice) options.maxPrice = Number(maxPrice);
+                        const trimmed = excludeTagsInput.trim();
+                        if (trimmed) options.excludeTags = trimmed.split(',').map(t => t.trim()).filter(Boolean);
+
+                        // 입힌 아이템만 추천하도록 필터링 (아예 필드를 제외)
+                        const usedClothingItems: any = {};
+                        if (topImage) usedClothingItems.top = clothingItems.top;
+                        if (pantsImage) usedClothingItems.pants = clothingItems.pants;
+                        if (shoesImage) usedClothingItems.shoes = clothingItems.shoes;
+                        if (outerImage) usedClothingItems.outer = clothingItems.outer;
+
+                        const recommendationsResult = await virtualTryOnService.getRecommendationsFromFitting({
+                            person: null,
+                            clothingItems: usedClothingItems,
+                            generatedImage: result.generatedImage,
+                            options,
+                            selectedProductIds: null,
+                        });
+
+                        setRecommendations(recommendationsResult.recommendations as any);
+                    }
                 } catch (recError) {
                     console.error('Failed to get recommendations:', recError);
                 } finally {
@@ -423,12 +479,23 @@ export const VirtualTryOnUI: React.FC = () => {
         console.log('🔔 카테고리 소문자 변환:', cat);
         
         // 백엔드와 동일한 카테고리 매핑 로직 사용
-        const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
-            (cat === 'outer') ? 'outer'
-            : (cat === 'top') ? 'top'
-            : (cat === 'pants') ? 'pants'
-            : (cat === 'shoes') ? 'shoes'
-            : null;
+        const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = (() => {
+            const match = (keywordList: string[]): boolean => keywordList.some(keyword => cat.includes(keyword));
+
+            if (match(['outer', 'coat', 'jacket', 'outerwear', '맨투맨', '아우터', '패딩'])) {
+                return 'outer';
+            }
+            if (match(['top', 'tee', 'shirt', 'sweater', '상의', '블라우스'])) {
+                return 'top';
+            }
+            if (match(['pants', 'bottom', 'skirt', 'trouser', '하의', '데님', '슬랙스'])) {
+                return 'pants';
+            }
+            if (match(['shoe', 'sneaker', 'boots', '신발', '스니커즈'])) {
+                return 'shoes';
+            }
+            return null;
+        })();
         
         console.log('🔔 매핑된 slot:', slot);
         
@@ -587,7 +654,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         onPick={(img) => { setPersonImage(img); setPersonSource('model'); recordInput({ person: img }, undefined, 'delta', 'model'); }}
                                     />
                                 </div>
-                                
+
                                 {/* 오른쪽 영역: 의류 4개 */}
                                 <div className="md:col-span-2 pl-4">
                                     <div className="flex justify-between items-center mb-2">
@@ -741,10 +808,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                                     />
                                                 }
                                             />
-                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
                         </div>
                         {/* Histories section separated from upload card */}
                         <div className="lg:col-span-8 order-3">
