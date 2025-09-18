@@ -72,6 +72,14 @@ export const VirtualTryOnUI: React.FC = () => {
     
     // 호버 오버레이 상태
     const [hoveredSlot, setHoveredSlot] = useState<'outer' | 'top' | 'pants' | 'shoes' | null>(null);
+    const [isFullScreen, setIsFullScreen] = useState(false); // 풀스크린 상태 추가
+    
+    // 풀스크린이 열릴 때 hoveredSlot 초기화
+    useEffect(() => {
+        if (isFullScreen) {
+            setHoveredSlot(null);
+        }
+    }, [isFullScreen]);
     
     // 원본 상품 데이터 저장
     const [originalItems, setOriginalItems] = useState<{
@@ -711,6 +719,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                         onImageUpload={(img) => { setPersonImage(img); setPersonSource(img ? 'upload' : 'unknown'); setSelectedModelId(null); recordInput({ person: img }, undefined, 'delta', img ? 'upload' : 'unknown'); }}
                                         externalImage={personImage}
                                         active={!!personImage && personSource === 'upload'}
+                                        isFullScreen={isFullScreen}
                                     />
                                     <ModelPicker
                                         direction="vertical"
@@ -760,9 +769,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 onImageUpload={(img) => { setOuterImage(img); setOuterLabel(img ? '업로드' : undefined); recordInput({ outer: img }, { outer: img ? '업로드' : undefined }, 'delta'); }}
                                                 externalImage={outerImage}
                                                 active={!!outerImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'outer'}
+                                                        isVisible={hoveredSlot === 'outer' && !isFullScreen}
                                                         onLike={() => handleClothingLike('outer')}
                                                         onBuy={() => handleClothingBuy('outer')}
                                                         onRemove={() => { 
@@ -792,9 +802,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 onImageUpload={(img) => { setTopImage(img); setTopLabel(img ? '업로드' : undefined); recordInput({ top: img }, { top: img ? '업로드' : undefined }, 'delta'); }}
                                                 externalImage={topImage}
                                                 active={!!topImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'top'}
+                                                        isVisible={hoveredSlot === 'top' && !isFullScreen}
                                                         onLike={() => handleClothingLike('top')}
                                                         onBuy={() => handleClothingBuy('top')}
                                                         onRemove={() => { 
@@ -823,9 +834,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 onImageUpload={(img) => { setPantsImage(img); setPantsLabel(img ? '업로드' : undefined); recordInput({ pants: img }, { pants: img ? '업로드' : undefined }, 'delta'); }}
                                                 externalImage={pantsImage}
                                                 active={!!pantsImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'pants'}
+                                                        isVisible={hoveredSlot === 'pants' && !isFullScreen}
                                                         onLike={() => handleClothingLike('pants')}
                                                         onBuy={() => handleClothingBuy('pants')}
                                                         onRemove={() => { 
@@ -854,9 +866,10 @@ export const VirtualTryOnUI: React.FC = () => {
                                                 onImageUpload={(img) => { setShoesImage(img); setShoesLabel(img ? '업로드' : undefined); recordInput({ shoes: img }, { shoes: img ? '업로드' : undefined }, 'delta'); }}
                                                 externalImage={shoesImage}
                                                 active={!!shoesImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'shoes'}
+                                                        isVisible={hoveredSlot === 'shoes' && !isFullScreen}
                                                         onLike={() => handleClothingLike('shoes')}
                                                         onBuy={() => handleClothingBuy('shoes')}
                                                         onRemove={() => { 
@@ -932,6 +945,7 @@ export const VirtualTryOnUI: React.FC = () => {
                                 isLoading={isLoading}
                                 error={error}
                                 score={currentScore ?? undefined}
+                                onFullScreenChange={setIsFullScreen}
                             />
                             {/* Style Tips below result */}
                             <StyleTipsCard generatedImage={generatedImage || undefined} />

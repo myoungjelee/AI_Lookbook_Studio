@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Response
 
 from ..models import (
     CategoryRecommendations,
@@ -31,8 +31,6 @@ def _requested_slots(
     selected_ids: dict[str, str] | None = None,
 ) -> set[str]:
     slots: set[str] = set()
-    print(f"[_requested_slots] clothing 객체: {clothing}")
-    print(f"[_requested_slots] clothing 타입: {type(clothing)}")
     if clothing:
         # clothing이 딕셔너리인 경우 처리
         if isinstance(clothing, dict):
@@ -40,7 +38,6 @@ def _requested_slots(
                 item = clothing.get(key)
                 if item and item.get("base64"):
                     slots.add(key)
-                    print(f"[_requested_slots] {key}: 추가됨")
         else:
             # Pydantic 모델인 경우 처리
             top = getattr(clothing, "top", None)
@@ -60,7 +57,6 @@ def _requested_slots(
             if val is None or not str(val).strip():
                 continue
             slots.add(_normalize_category(cat))
-    print(f"[_requested_slots] 최종 슬롯: {slots}")
     return slots
 
 
@@ -85,6 +81,7 @@ def _normalize_category(raw: str | None) -> str:
     if "access" in value:
         return "accessories"
     return value
+
 
 def _infer_slots_from_analysis(analysis: dict | None) -> set[str]:
     slots: set[str] = set()

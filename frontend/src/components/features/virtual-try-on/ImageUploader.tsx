@@ -11,6 +11,7 @@ interface ImageUploaderProps {
     externalImage?: UploadedImage | null;
     active?: boolean; // highlight when currently used in composition
     overlay?: React.ReactNode; // 오버레이 컴포넌트
+    isFullScreen?: boolean; // 풀스크린 상태 추가
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
@@ -21,6 +22,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     externalImage,
     active = false,
     overlay,
+    isFullScreen = false
 }) => {
     const [preview, setPreview] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -127,18 +129,20 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                                 }
                             }}
                         />
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleRemoveImage(e);
-                            }}
-                            className="absolute top-2 right-2 p-1 bg-white/70 rounded-full text-gray-600 hover:bg-white hover:text-red-500 transition-all duration-200 z-10"
-                            aria-label="Remove image"
-                        >
-                            <XCircleIcon className="w-6 h-6" />
-                        </button>
+                        {!isFullScreen && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleRemoveImage(e);
+                                }}
+                                className="absolute top-2 right-2 p-1 bg-white/70 rounded-full text-gray-600 hover:bg-white hover:text-red-500 transition-all duration-200 z-10"
+                                aria-label="Remove image"
+                            >
+                                <XCircleIcon className="w-6 h-6" />
+                            </button>
+                        )}
                     </>
                 ) : (
                     <div className="flex flex-col items-center gap-1 text-gray-500">
