@@ -81,6 +81,45 @@ export const VirtualTryOnUI: React.FC = () => {
         shoes?: RecommendationItem;
     }>({});
 
+    // Restore slot selections from localStorage snapshot when coming back (catalog items only)
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('app:tryon:slots:v1');
+            if (!raw) return;
+            const snap: Partial<Record<'outer'|'top'|'pants'|'shoes', RecommendationItem|null>> = JSON.parse(raw);
+            const tasks: Array<Promise<any>> = [];
+            if (!outerImage && snap.outer) tasks.push(addToSlotForced(snap.outer as RecommendationItem, 'outer'));
+            if (!topImage && snap.top) tasks.push(addToSlotForced(snap.top as RecommendationItem, 'top'));
+            if (!pantsImage && snap.pants) tasks.push(addToSlotForced(snap.pants as RecommendationItem, 'pants'));
+            if (!shoesImage && snap.shoes) tasks.push(addToSlotForced(snap.shoes as RecommendationItem, 'shoes'));
+            if (tasks.length) Promise.allSettled(tasks).then(() => console.log('✅ 슬롯 스냅샷 복원 완료'));
+        } catch (e) {
+            console.warn('슬롯 스냅샷 복원 실패:', e);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Persist slot selections (catalog items only) to localStorage
+    // Guard: avoid writing an all-null snapshot on initial mount
+    useEffect(() => {
+        try {
+            const hasAny = !!(originalItems.outer || originalItems.top || originalItems.pants || originalItems.shoes);
+            if (hasAny) {
+                const snapshot = {
+                    outer: originalItems.outer || null,
+                    top: originalItems.top || null,
+                    pants: originalItems.pants || null,
+                    shoes: originalItems.shoes || null,
+                };
+                localStorage.setItem('app:tryon:slots:v1', JSON.stringify(snapshot));
+            } else {
+                localStorage.removeItem('app:tryon:slots:v1');
+            }
+        } catch {
+            // ignore storage errors
+        }
+    }, [originalItems]);
+
     // Reflect history evaluations (scores) for current generated image
     const [historyTick, setHistoryTick] = useState<number>(0);
     useEffect(() => {
@@ -324,7 +363,7 @@ export const VirtualTryOnUI: React.FC = () => {
     }, [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]);
 
     const handleCombineClick = useCallback(async () => {
-        const hasAnyClothing = !!(topImage || pantsImage || shoesImage);
+        const hasAnyClothing = !!(topImage || pantsImage || shoesImage || outerImage);
         const hasAllClothing = !!(topImage && pantsImage && shoesImage);
         const allowWithoutPerson = !personImage && hasAllClothing;
         const allowWithPerson = !!personImage && hasAnyClothing;
