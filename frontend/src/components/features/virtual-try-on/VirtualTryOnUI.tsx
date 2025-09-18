@@ -934,7 +934,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         </div>
 
                         {/* Action and Result Section */}
-                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-0 self-start">
+                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-32 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto self-start">
                             <CombineButton
                                 onClick={handleCombineClick}
                                 disabled={!canCombine || isLoading}
