@@ -110,7 +110,6 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
   const [view, setView] = useState<string | null>(null);
   const [viewingItem, setViewingItem] = useState<TryOnOutputHistoryItem | null>(null);
   const [sortMode, setSortMode] = useState<'recent' | 'rank'>('recent');
-<<<<<<< HEAD
   
   // 슬라이드 관련 상태
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -118,9 +117,6 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
   const itemsPerSlide = 2; // 한 번에 보여줄 아이템 수
   
   // 상품 데이터는 히스토리에 저장되므로 별도 캐시 불필요
-=======
-  // 상품 메타데이터는 히스토리에 저장되므로 별도 캐시 불필요
->>>>>>> 8e33230 ([14:15] 한글 인코딩 정상화)
 
   const refresh = () => {
     const newInputs = tryOnHistory.inputs();
@@ -132,18 +128,9 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
 
   // 추가 API 호출이 필요 없는 구조 (상품 메타데이터가 히스토리에 포함됨)
 
-<<<<<<< HEAD
   // 히스토리 아이템의 대표 이미지를 가져오는 함수 (실제 선택된 아이템 우선)
   const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
     console.log('🔍 getHistoryItemImage 호출:', {
-=======
-  // 히스토리 아이템에서 의류 이미지를 가져오는 함수 (업로드한 상품 우선)
-  const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
-    // 상의 → 하의 → 신발 → 아우터 순으로 우선순위
-    const products = [item.topProduct, item.pantsProduct, item.shoesProduct, item.outerProduct].filter(Boolean);
-    
-    console.log(`히스토리 입력의 상품 메타데이터:`, {
->>>>>>> 8e33230 ([14:15] 한글 인코딩 정상화)
       topProduct: item.topProduct?.title,
       pantsProduct: item.pantsProduct?.title,
       shoesProduct: item.shoesProduct?.title,

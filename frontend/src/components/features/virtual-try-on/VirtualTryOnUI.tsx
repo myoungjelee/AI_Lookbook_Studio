@@ -432,8 +432,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         mimeType: uploadedImage.mimeType,
     });
 
-    // helpers for history
-    // toDataUrl 함수는 품질 문제로 사용하지 않음 (이미지 왜곡 방지)
+    // toDataUrl 함수는 품질 저하 때문에 사용하지 않음 (이미지 데이터는 그대로 유지)
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
     const recordInput = useCallback((
         overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
@@ -443,13 +442,6 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         products?: Partial<{ top: RecommendationItem; pants: RecommendationItem; shoes: RecommendationItem; outer: RecommendationItem }>,
     ) => {
-<<<<<<< HEAD
-
-        console.log('🔔 recordInput 호출됨:', { overrides, labels, mode, productIds });
-        // 이미지 변수들은 더 이상 사용하지 않음 (용량 절약)
-=======
-        // 변환된 이미지는 품질 저하가 없도록 검사 (추가 검증)
->>>>>>> 8e33230 ([14:15] 한글 인코딩 정상화)
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
         if (src === 'model' && overrides && 'person' in overrides) return;
@@ -461,18 +453,17 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             pantsLabel: labels?.pants ?? (mode === 'delta' ? undefined : pantsLabel),
             shoesLabel: labels?.shoes ?? (mode === 'delta' ? undefined : shoesLabel),
             outerLabel: labels?.outer ?? (mode === 'delta' ? undefined : outerLabel),
-            // 인물 이미지는 변환본을 저장하지 않고 출처만 기록 (용량 제한)
+            // 이미지 메타데이터는 히스토리에만 저장해 용량 사용을 줄임
             topProductId: productIds?.top,
             pantsProductId: productIds?.pants,
             shoesProductId: productIds?.shoes,
             outerProductId: productIds?.outer,
-            // 상품 메타데이터도 함께 기록 (이미지 URL 포함)
+            // 추천된 상품 정보도 함께 보존 (이미지 URL 포함)
             topProduct: products?.top ?? originalItems.top,
             pantsProduct: products?.pants ?? originalItems.pants,
             shoesProduct: products?.shoes ?? originalItems.shoes,
             outerProduct: products?.outer ?? originalItems.outer,
         });
-        console.log('🔔 tryOnHistory.addInput 호출 완료');
     }, [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]);
 
     const handleCombineClick = useCallback(async () => {
@@ -921,47 +912,6 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         </div>
                         {/* Histories section separated from upload card */}
                         <div className="lg:col-span-8 order-3">
-<<<<<<< HEAD
-
-                            <TryOnHistory onApply={useCallback(async (payload: {
-                                person?: string;
-                                top?: string;
-                                pants?: string;
-                                shoes?: string;
-                                topLabel?: string;
-                                pantsLabel?: string;
-                                shoesLabel?: string;
-                                outerLabel?: string;
-                                topProduct?: RecommendationItem;
-                                pantsProduct?: RecommendationItem;
-                                shoesProduct?: RecommendationItem;
-                                outerProduct?: RecommendationItem;
-                            }) => {
-                                console.log('🔔 히스토리에서 적용 시도:', payload);
-                                
-                                // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
-                                
-                                if (payload.topProduct) {
-                                    console.log('🔔 상의 적용:', payload.topProduct.title);
-                                    await addCatalogItemToSlot(payload.topProduct, false);
-                                }
-                                if (payload.pantsProduct) {
-                                    console.log('🔔 하의 적용:', payload.pantsProduct.title);
-                                    await addCatalogItemToSlot(payload.pantsProduct, false);
-                                }
-                                if (payload.shoesProduct) {
-                                    console.log('🔔 신발 적용:', payload.shoesProduct.title);
-                                    await addCatalogItemToSlot(payload.shoesProduct, false);
-                                }
-                                if (payload.outerProduct) {
-                                    console.log('🔔 아우터 적용:', payload.outerProduct.title);
-                                    await addCatalogItemToSlot(payload.outerProduct, false);
-                                }
-                                
-                                // 히스토리에서 적용 완료 토스트
-                                addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1500 }));
-                            }, [addCatalogItemToSlot, addToast])} />
-=======
                             <TryOnHistory onApply={(payload) => {
                                 const parse = (data?: string, title?: string): UploadedImage | null => {
                                     if (!data) return null;
@@ -993,7 +943,6 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                 if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || 'shoes'); }
                                 addToast(toast.success('히스토리에서 불러왔습니다', undefined, { duration: 1200 }));
                             }} />
->>>>>>> 8e33230 ([14:15] 한글 인코딩 정상화)
                         </div>
 
                         {/* Action and Result Section */}
@@ -1234,7 +1183,6 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         </div>
     );
 };
-
 
 
 
