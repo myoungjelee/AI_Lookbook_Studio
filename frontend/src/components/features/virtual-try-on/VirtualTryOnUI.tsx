@@ -25,7 +25,7 @@ const isFeatureEnabled = (value: unknown): boolean => {
 };
 
 export const VirtualTryOnUI: React.FC = () => {
-    // ?곹깭瑜?localStorage?먯꽌 蹂듭썝
+    // 상태를 localStorage에서 복원
     const [personImage, setPersonImage] = useState<UploadedImage | null>(null);
     const [topImage, setTopImage] = useState<UploadedImage | null>(null);
     const [pantsImage, setPantsImage] = useState<UploadedImage | null>(null);
@@ -99,10 +99,10 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     const [selectedShoesId, setSelectedShoesId] = useState<string | null>(null);
     const [selectedOuterId, setSelectedOuterId] = useState<string | null>(null);
     
-    // ?몃쾭 ?ㅻ쾭?덉씠 ?곹깭
+    // 슬롯 hover 상태
     const [hoveredSlot, setHoveredSlot] = useState<'outer' | 'top' | 'pants' | 'shoes' | null>(null);
     
-    // ?먮낯 ?곹뭹 ?곗씠?????
+    // 원본 의류 아이템 저장
     const [originalItems, setOriginalItems] = useState<{
         outer?: RecommendationItem;
         top?: RecommendationItem;
@@ -251,13 +251,13 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         return () => { unsub(); window.removeEventListener('storage', onStorage); };
     }, []);
 
-    // ?대?吏 蹂듭썝 鍮꾪솢?깊솕 (?⑸웾 臾몄젣濡??명빐)
+    // 인물 이미지는 복원하지 않음 (용량 문제로 비활성)
 
 
-    // ?곹깭瑜?localStorage?????(?대?吏 ?쒖쇅, ?쇰꺼留????
+    // 상태는 localStorage에 메타데이터만 저장 (인물 이미지는 제외)
     useEffect(() => {
         if (personImage) {
-            // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
+            // 인물 이미지를 업로드한 경우 출처를 저장
             localStorage.setItem('virtualTryOn_personSource', personSource);
         } else {
             localStorage.removeItem('virtualTryOn_personImage');
@@ -265,7 +265,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [personImage, personSource]);
 
     useEffect(() => {
-        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
+        // 라벨이 있으면 localStorage에 저장
         if (topLabel) {
             localStorage.setItem('virtualTryOn_topLabel', topLabel);
         } else {
@@ -274,7 +274,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [topLabel]);
 
     useEffect(() => {
-        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
+        // 라벨이 있으면 localStorage에 저장
         if (pantsLabel) {
             localStorage.setItem('virtualTryOn_pantsLabel', pantsLabel);
         } else {
@@ -283,7 +283,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [pantsLabel]);
 
     useEffect(() => {
-        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
+        // 라벨이 있으면 localStorage에 저장
         if (shoesLabel) {
             localStorage.setItem('virtualTryOn_shoesLabel', shoesLabel);
         } else {
@@ -292,7 +292,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [shoesLabel]);
 
     useEffect(() => {
-        // ?대?吏????ν븯吏 ?딄퀬 ?쇰꺼留????
+        // 라벨이 있으면 localStorage에 저장
         if (outerLabel) {
             localStorage.setItem('virtualTryOn_outerLabel', outerLabel);
         } else {
@@ -301,17 +301,17 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [outerLabel]);
 
 
-    // ?곹뭹 移대뱶?먯꽌 ?꾨떖???곹뭹???먮룞?쇰줈 移몄뿉 ?ｊ린
+    // 카탈로그 카드에서 전달된 상품을 자동으로 슬롯에 배치
     const hasProcessedRef = useRef(false);
     
     useEffect(() => {
         const handlePendingItem = async () => {
             
             try {
-                // ?щ윭 ?꾩씠??泥섎━ (?덈줈??諛⑹떇)
+                // 여러 아이템을 한 번에 처리 (배치 방식)
                 const pendingItemsStr = localStorage.getItem('app:pendingVirtualFittingItems');
                 if (pendingItemsStr) {
-                    console.log('?щ윭 ?꾩씠??泥섎━ ?쒖옉');
+                    console.log('여러 아이템 처리 시작');
                     const pendingItems = JSON.parse(pendingItemsStr);
                     hasProcessedRef.current = true;
 
@@ -324,23 +324,23 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                     return;
                 }
 
-                // ?⑥씪 ?꾩씠??泥섎━ (湲곗〈 諛⑹떇)
+                // 단일 아이템 처리 (기존 방식)
                 const pendingItemStr = localStorage.getItem('app:pendingVirtualFittingItem');
                 if (!pendingItemStr) return;
 
                 const pendingItem = JSON.parse(pendingItemStr);
 
-                // 5遺??대궡???곹뭹留?泥섎━ (?ㅻ옒???곗씠??諛⑹?)
+                // 5분을 초과하면 만료된 항목으로 간주
                 if (Date.now() - pendingItem.timestamp > 5 * 60 * 1000) {
                     localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
-                // 移댄뀒怨좊━???곕씪 ?곸젅??移몄뿉 ?ｊ린
+                // 카테고리명으로 적절한 슬롯을 선택
                 const cat = (pendingItem.category || '').toLowerCase();
                 
                 
-                // 諛깆뿏?쒖? ?숈씪??移댄뀒怨좊━ 留ㅽ븨 濡쒖쭅 ?ъ슜
+                // 백엔드와 동일한 카테고리 매핑 로직을 재사용
                 const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
                     (cat === 'outer') ? 'outer'
                     : (cat === 'top') ? 'top'
@@ -348,53 +348,53 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                     : (cat === 'shoes') ? 'shoes'
                     : null;
 
-                console.log('寃곗젙???щ’:', slot);
+                console.log('결정된 슬롯:', slot);
                 if (!slot) {
-                    console.log('移댄뀒怨좊━瑜??몄떇?????놁쓬:', cat);
+                    console.log('카테고리를 해석하지 못함:', cat);
                     localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
                 if (!pendingItem.imageUrl) {
-                    console.log('?대?吏 URL???놁쓬');
+                    console.log('이미지 URL이 없습니다');
                     localStorage.removeItem('app:pendingVirtualFittingItem');
                     return;
                 }
 
-                // 泥섎━ ?쒖옉 ?뚮옒洹??ㅼ젙
+                // 처리 시작 시각을 설정
                 hasProcessedRef.current = true;
 
-                console.log('?대?吏 蹂???쒖옉');
-                // ?대?吏瑜?UploadedImage ?뺤떇?쇰줈 蹂??
+                console.log('이미지 변환 시작');
+                // 이미지 데이터를 UploadedImage 형태로 변환
                 const uploadedImage = await imageProxy.toUploadedImage(pendingItem.imageUrl, pendingItem.title);
-                console.log('?대?吏 蹂???꾨즺:', uploadedImage);
+                console.log('이미지 변환 완료:', uploadedImage);
                 
-                // addCatalogItemToSlot???ъ슜?댁꽌 ?먮낯 ?곗씠?곕룄 ?④퍡 ???
-                console.log('addCatalogItemToSlot ?몄텧 ?쒖옉, ?щ’:', slot);
+                // addCatalogItemToSlot을 호출해 메타데이터와 함께 저장
+                console.log('addCatalogItemToSlot 호출, 슬롯:', slot);
                 await addCatalogItemToSlot(pendingItem);
 
                 addToast(toast.success(`Queued for fitting: ${pendingItem.title}`, undefined, { duration: 2000 }));
                 
-                // 泥섎━ ?꾨즺 ??localStorage?먯꽌 ?쒓굅
+                // 처리 완료 후 localStorage에서 제거
                 localStorage.removeItem('app:pendingVirtualFittingItem');
-                console.log('?곹뭹???먮룞?쇰줈 移몄뿉 ?ㅼ뼱媛붿뒿?덈떎:', slot);
+                console.log('상품이 자동으로 슬롯에 들어갔습니다:', slot);
 
             } catch (error) {
-                console.error('?먮룞 ?곹뭹 異붽? ?ㅽ뙣:', error);
+                console.error('상품 자동 배치 실패:', error);
                 localStorage.removeItem('app:pendingVirtualFittingItem');
-                hasProcessedRef.current = false; // ?ㅽ뙣 ???뚮옒洹?由ъ뀑
+                hasProcessedRef.current = false; // 실패 시 다시 처리할 수 있도록 초기화
             }
         };
 
         handlePendingItem();
         
-        // ?ㅽ넗由ъ? ?뺣━ ?ㅽ뻾
+        // 저장소 정리 실행
         manageStorageSpace();
         
         return () => {
             // cleanup
         };
-    }, []); // ?섏〈??諛곗뿴??鍮?諛곗뿴濡?蹂寃?
+    }, []); // 의존성 배열은 비워 둔다
 
     // Recommendation filter options
     const [minPrice, setMinPrice] = useState<string>('');
@@ -407,7 +407,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     const fetchRandom = useCallback(async (limit: number = 12) => {
         try {
             setIsLoadingRandom(true);
-            const per = Math.max(1, Math.floor(limit / 4)); // 4媛?移댄뀒怨좊━濡??섎늻湲?
+            const per = Math.max(1, Math.floor(limit / 4)); // 4개 카테고리에 균등 분배
             const [tops, pants, shoes, outers] = await Promise.all([
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=top`).catch(() => [] as RecommendationItem[]),
                 apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${per}&category=pants`).catch(() => [] as RecommendationItem[]),
@@ -433,7 +433,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     });
 
     // helpers for history
-    // toDataUrl ?⑥닔?????댁긽 ?ъ슜?섏? ?딆쓬 (?대?吏 ????덊븿)
+    // toDataUrl 함수는 품질 문제로 사용하지 않음 (이미지 왜곡 방지)
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
     const recordInput = useCallback((
         overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
@@ -443,9 +443,13 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         products?: Partial<{ top: RecommendationItem; pants: RecommendationItem; shoes: RecommendationItem; outer: RecommendationItem }>,
     ) => {
+<<<<<<< HEAD
 
         console.log('🔔 recordInput 호출됨:', { overrides, labels, mode, productIds });
         // 이미지 변수들은 더 이상 사용하지 않음 (용량 절약)
+=======
+        // 변환된 이미지는 품질 저하가 없도록 검사 (추가 검증)
+>>>>>>> 8e33230 ([14:15] 한글 인코딩 정상화)
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
         if (src === 'model' && overrides && 'person' in overrides) return;
@@ -457,12 +461,12 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             pantsLabel: labels?.pants ?? (mode === 'delta' ? undefined : pantsLabel),
             shoesLabel: labels?.shoes ?? (mode === 'delta' ? undefined : shoesLabel),
             outerLabel: labels?.outer ?? (mode === 'delta' ? undefined : outerLabel),
-            // ?대?吏????ν븯吏 ?딆쓬 (?⑸웾 ?덉빟)
+            // 인물 이미지는 변환본을 저장하지 않고 출처만 기록 (용량 제한)
             topProductId: productIds?.top,
             pantsProductId: productIds?.pants,
             shoesProductId: productIds?.shoes,
             outerProductId: productIds?.outer,
-            // ?곹뭹 ?곗씠?곕룄 ???(?대?吏 URL ?ы븿)
+            // 상품 메타데이터도 함께 기록 (이미지 URL 포함)
             topProduct: products?.top ?? originalItems.top,
             pantsProduct: products?.pants ?? originalItems.pants,
             shoesProduct: products?.shoes ?? originalItems.shoes,
@@ -477,7 +481,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         const allowWithoutPerson = !personImage && hasAllClothing;
         const allowWithPerson = !!personImage && hasAnyClothing;
         if (!(allowWithoutPerson || allowWithPerson)) {
-            setError("?몃Ъ ?ъ쭊 ?먮뒗 ???섏쓽/?좊컻 3醫?紐⑤몢瑜??쒓났??二쇱꽭??");
+            setError('인물 사진과 의류를 올리거나 상·하의·신발을 모두 선택해 주세요.');
             return;
         }
 
@@ -571,7 +575,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         const cat = (item.category || '').toLowerCase();
         console.log('🔔 카테고리 소문자 변환:', cat);
         
-        // 諛깆뿏?쒖? ?숈씪??移댄뀒怨좊━ 留ㅽ븨 濡쒖쭅 ?ъ슜
+        // 업로드된 사용자 이미지인 경우 (고정 ID 사용)
         const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
             (cat === 'outer') ? 'outer'
             : (cat === 'top') ? 'top'
@@ -594,7 +598,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
             console.log('🔔 이미지 변환 완료:', up);
             
-            // ?먮낯 ?곹뭹 ?곗씠?????
+            // 원본 상품 메타데이터 저장
             setOriginalItems(prev => ({
                 ...prev,
                 [slot]: item
@@ -625,7 +629,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         return addCatalogItemToSlot({ ...(item as any), category: slot } as any);
     }, [addCatalogItemToSlot]);
 
-    // ?섎쪟 ?꾩씠???ㅻ쾭?덉씠 ?몃뱾??
+    // 의류 이미지와 좋아요 토글 처리
     const handleClothingLike = useCallback((slot: 'outer' | 'top' | 'pants' | 'shoes') => {
         const label = slot === 'outer' ? outerLabel : 
                      slot === 'top' ? topLabel : 
@@ -637,9 +641,9 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                              slot === 'pants' ? selectedPantsId :
                              selectedShoesId;
             
-            // ?곹뭹 ID媛 ?덉쑝硫?(移댄깉濡쒓렇?먯꽌 媛?몄삩 ?곹뭹) ?좉?
+            // 상품 ID가 있으면(카탈로그에서 가져온 항목) 그대로 사용
             if (productId) {
-                // ?먮낯 ?곹뭹 ?곗씠???ъ슜
+                // 원본 상품 메타데이터 저장
                 const originalItem = originalItems[slot];
                        const item: RecommendationItem = originalItem ? {
                            ...originalItem,
@@ -667,7 +671,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                     addToast(toast.success('Removed from likes', label, { duration: 1500 }));
                 }
             } else {
-                       // ?낅줈?쒕맂 ?대?吏???좉? (怨좎젙 ID ?ъ슜)
+                       // 업로드된 사용자 이미지 (고정 ID 사용)
                        const item: RecommendationItem = {
                            id: 'uploaded-' + slot,
                            title: label,
@@ -696,14 +700,14 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                      slot === 'pants' ? pantsLabel : shoesLabel;
         
         if (label) {
-            // ?먮낯 ?곹뭹 ?곗씠?곗뿉??URL 媛?몄삤湲?
+            // 원본 상품 페이지에 URL이 있는지 확인
             const originalItem = originalItems[slot];
             if (originalItem?.productUrl) {
-                // ?ㅼ젣 ?곹뭹 URL???덉쑝硫??대떦 ?섏씠吏濡??대룞
+                // 실제 상품 URL이 있으면 해당 페이지로 이동
                 window.open(originalItem.productUrl, '_blank');
-                addToast(toast.success('?곹뭹 ?섏씠吏濡??대룞', originalItem.title, { duration: 2000 }));
+                addToast(toast.success('상품 페이지로 이동', originalItem.title, { duration: 2000 }));
             } else {
-                // ?낅줈?쒕맂 ?대?吏?닿굅??URL???놁쑝硫??쇳븨 ?섏씠吏濡??대룞
+                // 업로드된 이미지라면 기본 쇼핑 페이지로 이동
                 window.open('https://www.musinsa.com', '_blank');
                 addToast(toast.info('Opening shopping page', 'Check Musinsa for similar items.', { duration: 2000 }));
             }
@@ -719,7 +723,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         {/* Input Section */}
                         <div className="lg:col-span-8 order-1 bg-white p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* ?쇱そ ?곸뿭: Person + AI Sample */}
+                                {/* 왼쪽 영역: Person + AI 샘플 */}
                                 <div className="md:col-span-1 space-y-2 border-r border-gray-200 pr-4">
                                     <ImageUploader
                                         id="person-image"
@@ -737,10 +741,10 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                     />
                                 </div>
                                 
-                                {/* ?ㅻⅨ履??곸뿭: ?섎쪟 4媛?*/}
+                                {/* 오른쪽 영역: 의류 4칸 */}
                                 <div className="md:col-span-2 pl-4">
                                     <div className="flex justify-between items-center mb-2">
-                                        <h3 className="text-sm font-medium text-gray-700">?섎쪟 ?꾩씠??</h3>
+                                        <h3 className="text-sm font-medium text-gray-700">의류 아이템</h3>
                                         <Button 
                                             size="sm" 
                                             variant="outline" 
@@ -758,11 +762,11 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                 setSelectedPantsId(null);
                                                 setSelectedShoesId(null);
                                                 setOriginalItems({});
-                                                addToast(toast.success('紐⑤뱺 ?섎쪟媛 鍮꾩썙議뚯뒿?덈떎', undefined, { duration: 1500 }));
+                                                addToast(toast.success('모든 의류가 비워졌습니다', undefined, { duration: 1500 }));
                                             }}
                                             disabled={!outerImage && !topImage && !pantsImage && !shoesImage}
                                         >
-                                            ?꾩껜 鍮꾩슦湲?
+                                            전체 비우기
                                         </Button>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
@@ -917,6 +921,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         </div>
                         {/* Histories section separated from upload card */}
                         <div className="lg:col-span-8 order-3">
+<<<<<<< HEAD
 
                             <TryOnHistory onApply={useCallback(async (payload: {
                                 person?: string;
@@ -956,6 +961,39 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                 // 히스토리에서 적용 완료 토스트
                                 addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1500 }));
                             }, [addCatalogItemToSlot, addToast])} />
+=======
+                            <TryOnHistory onApply={(payload) => {
+                                const parse = (data?: string, title?: string): UploadedImage | null => {
+                                    if (!data) return null;
+                                    const m = data.match(/^data:([^;]+);base64,(.*)$/);
+                                    if (!m) return null;
+                                    const mimeType = m[1];
+                                    const base64 = m[2];
+                                    try {
+                                        const byteChars = atob(base64);
+                                        const byteNumbers = new Array(byteChars.length);
+                                        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+                                        const byteArray = new Uint8Array(byteNumbers);
+                                        const blob = new Blob([byteArray], { type: mimeType });
+                                        const ext = mimeType.split('/')[1] || 'png';
+                                        const fileName = (title || 'history') + '.' + ext;
+                                        const file = new File([blob], fileName, { type: mimeType });
+                                        return { file, previewUrl: data, base64, mimeType };
+                                    } catch {
+                                        return { file: new File([], title || 'history', { type: mimeType }), previewUrl: data, base64, mimeType } as UploadedImage;
+                                    }
+                                };
+                                const p = parse(payload.person, 'person');
+                                const t = parse(payload.top, payload.topLabel || 'top');
+                                const pa = parse(payload.pants, payload.pantsLabel || 'pants');
+                                const s = parse(payload.shoes, payload.shoesLabel || 'shoes');
+                                if (p) { setPersonImage(p); setPersonSource('upload'); }
+                                if (t) { setTopImage(t); setTopLabel(payload.topLabel || 'top'); }
+                                if (pa) { setPantsImage(pa); setPantsLabel(payload.pantsLabel || 'pants'); }
+                                if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || 'shoes'); }
+                                addToast(toast.success('히스토리에서 불러왔습니다', undefined, { duration: 1200 }));
+                            }} />
+>>>>>>> 8e33230 ([14:15] 한글 인코딩 정상화)
                         </div>
 
                         {/* Action and Result Section */}
@@ -1110,7 +1148,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <div className="flex items-center justify-center">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                        <span className="ml-3 text-gray-600">異붿쿇 ?곹뭹??遺덈윭?ㅻ뒗 以?..</span>
+                                        <span className="ml-3 text-gray-600">추천 상품을 불러오는 중...</span>
                                     </div>
                                 </div>
                             ) : recommendations ? (
@@ -1121,19 +1159,19 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                             ) : null}
                         </div>
                     )}
-                    {/* LLM ?됯?: ?덉뒪?좊━ ?좏깮 ???먯닔??*/}
+                    {/* LLM 평가: 히스토리 선택 최소 수 */}
                     {/* HistoryEvaluator removed per request */}
                     {/* Fallback random items before recommendations are available */}
                     {!recommendations && !isLoadingRecommendations && (
                         <div className="mt-8">
                             <Card>
                                 <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-2xl font-bold text-gray-800">?쒕뜡 ?꾩씠??</h2>
-                                    <Button size="sm" onClick={() => fetchRandom(12)} loading={isLoadingRandom}>?덈줈怨좎묠</Button>
+                                    <h2 className="text-2xl font-bold text-gray-800">랜덤 아이템</h2>
+                                    <Button size="sm" onClick={() => fetchRandom(12)} loading={isLoadingRandom}>새로고침</Button>
                                 </div>
                                 <div className="space-y-6">
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?곸쓽</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">상의</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.top.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'top')} padding="sm">
@@ -1146,7 +1184,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?섏쓽</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">하의</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.pants.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'pants')} padding="sm">
@@ -1159,7 +1197,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?꾩슦??</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">아우터</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.outer.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'outer')} padding="sm">
@@ -1172,7 +1210,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">?좊컻</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-2">신발</h3>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {randomItemsByCat.shoes.map(item => (
                                                 <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item,'shoes')} padding="sm">
@@ -1185,7 +1223,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                         </div>
                                     </div>
                                     {randomItemsByCat.top.length + randomItemsByCat.pants.length + randomItemsByCat.shoes.length === 0 && (
-                                        <div className="text-center text-gray-500 py-6">?꾩씠?쒖쓣 遺덈윭?ㅻ뒗 以묒씠嫄곕굹 紐⑸줉??鍮꾩뼱?덉뒿?덈떎.</div>
+                                        <div className="text-center text-gray-500 py-6">아이템을 불러오는 중이거나 목록이 비어 있습니다.</div>
                                     )}
                                 </div>
                             </Card>
