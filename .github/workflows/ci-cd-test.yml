@@ -890,66 +890,85 @@ jobs:
         
         echo "✅ Frontend build completed successfully with video features"
 
-    - name: 🚀 Deploy to Azure Static Web Apps (Test) (수정됨)
+    - name: 🚀 Deploy to Azure Static Web Apps (Test) (Enhanced)
       uses: Azure/static-web-apps-deploy@v1
       with:
-        azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_ISLAND_0C20D9B00 }}
+        azure_static_web_apps_api_token: ${{ secrets.TEST_STATIC_WEB_APPS_API_TOKEN }}
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         action: "upload"
         app_location: "frontend/dist"
         skip_app_build: true
         production_branch: "develop"
+        skip_deploy_on_missing_secrets: true
+      # 🆕 실패 처리 강화
+      continue-on-error: false
+      timeout-minutes: 10
 
-    # 🆕 여기에 추가 (기존 마지막 스텝 다음)
-    - name: 📋 Collect Frontend Deployment Logs (On Failure)
+    # 🆕 통합된 프론트엔드 배포 실패 로그 수집
+    - name: 📋 Collect Frontend Deployment Logs (Comprehensive)
       if: failure()
       run: |
-        echo "📋 Collecting detailed failure logs for frontend deployment..."
+        echo "📋 Collecting comprehensive frontend deployment failure logs..."
         
-        # 1. 빌드 아티팩트 정보
-        echo "🏗️ Build Artifacts Information:"
+        # 1. 🏗️ 빌드 아티팩트 정보
+        echo "🏗️ Build Artifacts Analysis:"
         if [ -d "frontend/dist" ]; then
-          echo "✅ Dist folder exists"
-          ls -la frontend/dist/ || true
-          echo "📦 Build size: $(du -sh frontend/dist/ | cut -f1)"
-          
-          # 주요 파일들 존재 확인
-          [ -f "frontend/dist/index.html" ] && echo "✅ index.html found" || echo "❌ index.html missing"
-          [ -d "frontend/dist/assets" ] && echo "✅ assets folder found" || echo "❌ assets folder missing"
+        echo "✅ Dist folder exists"
+        ls -la frontend/dist/ || true
+        echo "📦 Build size: $(du -sh frontend/dist/ | cut -f1)"
+        
+        # 주요 파일들 존재 확인
+        [ -f "frontend/dist/index.html" ] && echo "✅ index.html found" || echo "❌ index.html missing"
+        [ -d "frontend/dist/assets" ] && echo "✅ assets folder found" || echo "❌ assets folder missing"
         else
-          echo "❌ Dist folder not found"
+        echo "❌ Dist folder not found"
         fi
         
-        # 2. Node.js 환경 정보
+        # 2. 🟢 Node.js 환경 정보
         echo "🟢 Node.js Environment:"
         node --version || true
         npm --version || true
         npm list --depth=0 --prefix frontend || true
         
-        # 3. Vite 빌드 로그 (이미 출력된 것 재확인)
+        # 3. ⚡ Vite 빌드 분석
         echo "⚡ Vite Build Analysis:"
         if [ -f "frontend/dist/.vite/manifest.json" ]; then
-          echo "✅ Vite manifest found"
-          cat frontend/dist/.vite/manifest.json || true
+        echo "✅ Vite manifest found"
+        cat frontend/dist/.vite/manifest.json || true
+        else
+        echo "❌ Vite manifest not found"
         fi
         
-        # 4. 빌드 환경 변수 확인
+        # 4. 🔍 환경 변수 확인 (민감 정보 제외)
         echo "🔍 Build Environment Variables:"
+        echo "NODE_VERSION: ${NODE_VERSION}"
         echo "VITE_API_URL: ${VITE_API_URL:-not set}"
         echo "VITE_NODE_ENV: ${VITE_NODE_ENV:-not set}"
         echo "NODE_ENV: ${NODE_ENV:-not set}"
+        echo "Build location exists: $([ -d 'frontend/dist' ] && echo 'Yes' || echo 'No')"
+        echo "Build files count: $([ -d 'frontend/dist' ] && find frontend/dist -type f | wc -l || echo '0')"
         
-        # 5. TypeScript 컴파일 재확인
+        # 5. 📝 TypeScript 컴파일 재확인
         echo "📝 TypeScript Check:"
         cd frontend
         npx tsc --noEmit --skipLibCheck || echo "⚠️ TypeScript issues detected"
         cd ..
         
-        # 6. 실패 정보 저장
+        # 6. 🔍 Azure Static Web Apps 진단
+        if command -v az &> /dev/null; then
+        echo "🔍 Azure Static Web Apps Status:"
+        az staticwebapp list --query "[?name=='wonderful-island-0c20d9b00'].{name:name,defaultHostname:defaultHostname,repositoryUrl:repositoryUrl}" --output table || true
+        else
+        echo "⚠️ Azure CLI not available for Static Web App diagnostics"
+        fi
+        
+        # 7. 📊 실패 정보 저장
         echo "FRONTEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
-        echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV        
-
-    # 🆕 여기에 추가
+        echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
+        
+        echo "✅ Comprehensive frontend failure log collection completed"
+                
+        # 🆕 여기에 추가
     - name: 🚨 Discord Notification - Frontend Deployment Failed
       if: failure()
       run: |
@@ -1700,10 +1719,14 @@ jobs:
 
     - name: 📤 Upload Failure Artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # ✅ 최신 버전
       with:
         name: failure-logs-${{ github.sha }}
         path: |
           backend-logs.zip
           *.log
         retention-days: 30
+        # 🆕 v4에서 추가된 옵션들
+        compression-level: 6
+        overwrite: true
+
