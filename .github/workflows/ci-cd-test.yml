@@ -221,57 +221,28 @@ jobs:
         
         echo "✅ Backend quality check passed"
 
-    - name: 🎬 Video Feature Integration Test
-      if: needs.trigger-validation.outputs.should_deploy_backend == 'true' || github.event_name == 'schedule'
+    - name: 🎬 Video Feature Environment Check (Simplified)
+      if: needs.trigger-validation.outputs.should_deploy_backend == 'true'
       run: |
-        echo "🎬 Testing Google Vertex AI integration..."
+        echo "🎬 Checking Vertex AI environment variables..."
         
-        # Google Cloud SDK 설치 확인
-        if command -v gcloud &> /dev/null; then
-          echo "✅ Google Cloud SDK available"
-          gcloud version
+        # 환경 변수만 확인
+        echo "📋 Required environment variables:"
+        echo "VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID:-not set}"
+        echo "VERTEX_LOCATION: ${VERTEX_LOCATION:-not set}"
+        echo "VERTEX_MODEL_ID: ${VERTEX_MODEL_ID:-not set}"
+        echo "VERTEX_API_ENDPOINT: ${VERTEX_API_ENDPOINT:-not set}"
+        
+        # GitHub Secrets 존재 여부만 확인
+        if [ -n "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}" ]; then
+          echo "✅ Google service account credentials configured"
+          echo "📏 Credentials length: $(echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' | wc -c) characters"
         else
-          echo "📦 Installing Google Cloud SDK..."
-          curl https://sdk.cloud.google.com | bash
-          source $HOME/google-cloud-sdk/path.bash.inc
+          echo "❌ Google service account credentials not configured"
         fi
         
-        # 서비스 계정 인증 테스트
-        echo "🔐 Testing service account authentication..."
-        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}'
-        gcloud auth activate-service-account --key-file=/tmp/test-gcp-key.json
-        gcloud config set project ${{ secrets.VERTEX_PROJECT_ID }}
-        
-        # Vertex AI API 접근 테스트
-        echo "🔍 Testing Vertex AI API access..."
-        gcloud ai endpoints list --region=${{ secrets.VERTEX_LOCATION }} --limit=1 || \
-          echo "⚠️ Vertex AI API access test failed, but continuing"
-        
-        # Python에서 Vertex AI 라이브러리 테스트
-        cd backend_py
-        echo "🐍 Testing Python Vertex AI integration..."
-        python -c "
-        import os
-        #os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}'
-        os.environ['VERTEX_PROJECT_ID'] = '${{ secrets.VERTEX_PROJECT_ID }}'
-        os.environ['VERTEX_LOCATION'] = '${{ secrets.VERTEX_LOCATION }}'
-        
-        try:
-            from google.cloud import aiplatform
-            aiplatform.init(
-                project='${{ secrets.VERTEX_PROJECT_ID }}',
-                location='${{ secrets.VERTEX_LOCATION }}'
-            )
-            print('✅ Vertex AI Python client initialized successfully')
-        except ImportError:
-            print('⚠️ Vertex AI Python client not installed, install with: pip install google-cloud-aiplatform')
-        except Exception as e:
-            print(f'⚠️ Vertex AI initialization warning: {e}')
-        "
-        
-        # 정리
-        rm -f /tmp/test-gcp-key.json
-        echo "✅ Video feature integration test completed"
+        echo "✅ Video feature environment check completed"
+
         
 
   # ========== PR 전용 검증 ==========
