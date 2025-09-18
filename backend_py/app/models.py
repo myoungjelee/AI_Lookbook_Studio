@@ -1,4 +1,5 @@
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +12,7 @@ class ClothingItems(BaseModel):
     top: Optional[ApiFile] = None
     pants: Optional[ApiFile] = None
     shoes: Optional[ApiFile] = None
+    outer: Optional[ApiFile] = None
 
 
 class VirtualTryOnRequest(BaseModel):

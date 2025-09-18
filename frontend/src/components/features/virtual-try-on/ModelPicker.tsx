@@ -21,7 +21,7 @@ const MODEL_FILES = [
   { id: 'female3', label: '여자 3' },
 ];
 
-const EXTS = ['png', 'jpg', 'jpeg', 'webp'];
+const EXTS = ['jpeg'];
 
 function nameVariants(id: string): string[] {
   // male1 -> [male1, male-1, male_1, male 1]

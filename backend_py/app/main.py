@@ -55,7 +55,6 @@ app.include_router(tips_router)
 app.include_router(evaluate_router)
 app.include_router(tryon_video_router)
 
-
 @app.get("/")
 def root():
     return {"message": "AI Virtual Try-On (Python)"}

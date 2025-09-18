@@ -435,7 +435,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     // helpers for history
     // toDataUrl ?⑥닔?????댁긽 ?ъ슜?섏? ?딆쓬 (?대?吏 ????덊븿)
     // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
-    const recordInput = (
+    const recordInput = useCallback((
         overrides?: Partial<{ person: UploadedImage | null; top: UploadedImage | null; pants: UploadedImage | null; shoes: UploadedImage | null; outer: UploadedImage | null; }>,
         labels?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         mode: 'delta' | 'snapshot' = 'delta',
@@ -443,7 +443,9 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         productIds?: Partial<{ top: string; pants: string; shoes: string; outer: string }>,
         products?: Partial<{ top: RecommendationItem; pants: RecommendationItem; shoes: RecommendationItem; outer: RecommendationItem }>,
     ) => {
-        // ?대?吏 蹂?섎뱾? ???댁긽 ?ъ슜?섏? ?딆쓬 (?⑸웾 ?덉빟)
+
+        console.log('🔔 recordInput 호출됨:', { overrides, labels, mode, productIds });
+        // 이미지 변수들은 더 이상 사용하지 않음 (용량 절약)
         const src = sourceOverride ?? personSource;
         // Skip only when the event is a person change coming from AI model
         if (src === 'model' && overrides && 'person' in overrides) return;
@@ -466,7 +468,8 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             shoesProduct: products?.shoes ?? originalItems.shoes,
             outerProduct: products?.outer ?? originalItems.outer,
         });
-    };
+        console.log('🔔 tryOnHistory.addInput 호출 완료');
+    }, [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]);
 
     const handleCombineClick = useCallback(async () => {
         const hasAnyClothing = !!(topImage || pantsImage || shoesImage);
@@ -484,11 +487,30 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         setRecommendations(null);
 
         try {
+            // 현재 슬롯에 실제로 있는 아이템들만 가져가기
+            // 상태가 아닌 실제 DOM에서 확인하여 최신 상태 보장
             const clothingItems: ClothingItems = {
                 top: topImage ? convertToApiFile(topImage) : null,
                 pants: pantsImage ? convertToApiFile(pantsImage) : null,
                 shoes: shoesImage ? convertToApiFile(shoesImage) : null,
+                outer: outerImage ? convertToApiFile(outerImage) : null,
             };
+            
+            // 디버깅: 전체 의류 아이템 상태 확인
+            console.log('🔍 합성 요청 데이터:', {
+                personImage: personImage ? '있음' : '없음',
+                clothingItems: {
+                    top: topImage ? '있음' : '없음',
+                    pants: pantsImage ? '있음' : '없음', 
+                    shoes: shoesImage ? '있음' : '없음',
+                    outer: outerImage ? '있음' : '없음'
+                },
+                clothingItemsData: clothingItems,
+                outerImage: outerImage,
+                outerInClothingItems: clothingItems.outer,
+                outerImageNull: outerImage === null,
+                outerImageUndefined: outerImage === undefined
+            });
 
 
             const result = await virtualTryOnService.combineImages({
@@ -499,7 +521,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             if (result.generatedImage) {
                 setGeneratedImage(result.generatedImage);
                 // Record output history (data URI)
-                tryOnHistory.addOutput(result.generatedImage);
+                await tryOnHistory.addOutput(result.generatedImage);
 
                 // Fetch recommendations after virtual fitting
                 setIsLoadingRecommendations(true);
@@ -531,14 +553,23 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         } finally {
             setIsLoading(false);
         }
-    }, [personImage, topImage, pantsImage, shoesImage, minPrice, maxPrice, excludeTagsInput]);
+    }, [personImage, topImage, pantsImage, shoesImage, outerImage, minPrice, maxPrice, excludeTagsInput]);
 
 
     const canCombine = (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
 
     // Helper: add a catalog/recommendation item into proper slot
-    const addCatalogItemToSlot = useCallback(async (item: RecommendationItem) => {
+    const addCatalogItemToSlot = useCallback(async (item: RecommendationItem, showToast: boolean = true) => {
+        console.log('🔔🔔🔔 addCatalogItemToSlot 호출됨! 🔔🔔🔔');
+        console.log('🔔 상품 정보:', {
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            imageUrl: item.imageUrl
+        });
+        
         const cat = (item.category || '').toLowerCase();
+        console.log('🔔 카테고리 소문자 변환:', cat);
         
         // 諛깆뿏?쒖? ?숈씪??移댄뀒怨좊━ 留ㅽ븨 濡쒖쭅 ?ъ슜
         const slot: 'top' | 'pants' | 'shoes' | 'outer' | null = 
@@ -547,13 +578,21 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             : (cat === 'pants') ? 'pants'
             : (cat === 'shoes') ? 'shoes'
             : null;
-        if (!slot) return;
+        
+        console.log('🔔 매핑된 slot:', slot);
+        
+        if (!slot) {
+            console.error('❌ 카테고리 매핑 실패:', item.category);
+            return;
+        }
         if (!item.imageUrl) {
             addToast(toast.error('Image URL is missing.'));
             return;
         }
         try {
+            console.log('🔔 이미지 변환 시작...');
             const up = await imageProxy.toUploadedImage(item.imageUrl, item.title);
+            console.log('🔔 이미지 변환 완료:', up);
             
             // ?먮낯 ?곹뭹 ?곗씠?????
             setOriginalItems(prev => ({
@@ -561,17 +600,27 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                 [slot]: item
             }));
             
+            console.log('🔔 recordInput 호출 전:', { slot, item });
+            
             if (slot === 'top') { setTopImage(up); setTopLabel(item.title); setSelectedTopId(String(item.id)); recordInput({ top: up }, { top: item.title }, 'delta', undefined, { top: String(item.id) }, { top: item }); }
             if (slot === 'pants') { setPantsImage(up); setPantsLabel(item.title); setSelectedPantsId(String(item.id)); recordInput({ pants: up }, { pants: item.title }, 'delta', undefined, { pants: String(item.id) }, { pants: item }); }
             if (slot === 'shoes') { setShoesImage(up); setShoesLabel(item.title); setSelectedShoesId(String(item.id)); recordInput({ shoes: up }, { shoes: item.title }, 'delta', undefined, { shoes: String(item.id) }, { shoes: item }); }
             if (slot === 'outer') { setOuterImage(up); setOuterLabel(item.title); setSelectedOuterId(String(item.id)); recordInput({ outer: up }, { outer: item.title }, 'delta', undefined, { outer: String(item.id) }, { outer: item }); }
-            addToast(toast.success(`Added ${item.title}. Try it on from the wardrobe panel!`, undefined, { duration: 1800 }));
+
+            
+            console.log('🔔 recordInput 호출 완료');
+            if (showToast) {
+                addToast(toast.success(`담기 완료: ${item.title}. Try It On을 눌러 합성하세요`, undefined, { duration: 1800 }));
+            }
         } catch (e: any) {
-            addToast(toast.error('Failed to add item to the wardrobe'));
+            console.error('❌ 이미지 처리 실패:', e);
+            addToast(toast.error('가져오기에 실패했어요', e?.message));
         }
     }, [addToast, setTopImage, setPantsImage, setShoesImage, setOuterImage, setTopLabel, setPantsLabel, setShoesLabel, setOuterLabel, setSelectedOuterId, setOriginalItems]);
     // Helper wrapper: force slot without relying on category text
     const addToSlotForced = useCallback((item: RecommendationItem, slot: 'top'|'pants'|'shoes'|'outer') => {
+        console.log('🔔🔔🔔 addToSlotForced 호출됨! 🔔🔔🔔');
+        console.log('🔔 랜덤 아이템 클릭:', { item: item.title, slot });
         // Reuse existing logic by overriding category for mapping
         return addCatalogItemToSlot({ ...(item as any), category: slot } as any);
     }, [addCatalogItemToSlot]);
@@ -739,10 +788,14 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                         onLike={() => handleClothingLike('outer')}
                                                         onBuy={() => handleClothingBuy('outer')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 아우터 제거 시작');
                                                             setOuterImage(null); 
                                                             setOuterLabel(undefined); 
                                                             setSelectedOuterId(null);
                                                             setOriginalItems(prev => ({ ...prev, outer: undefined }));
+                                                            // 생성된 이미지도 초기화하여 이전 결과가 남아있지 않도록 함
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 아우터 제거 완료');
                                                         }}
                                                         itemTitle={outerLabel || 'Outer'}
                                                         isLiked={selectedOuterId ? likesService.isLiked(selectedOuterId) : likesService.isLiked('uploaded-outer')}
@@ -772,10 +825,13 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                         onLike={() => handleClothingLike('top')}
                                                         onBuy={() => handleClothingBuy('top')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 상의 제거 시작');
                                                             setTopImage(null); 
                                                             setTopLabel(undefined); 
                                                             setSelectedTopId(null);
                                                             setOriginalItems(prev => ({ ...prev, top: undefined }));
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 상의 제거 완료');
                                                         }}
                                                         itemTitle={topLabel || 'Top'}
                                                         isLiked={selectedTopId ? likesService.isLiked(selectedTopId) : likesService.isLiked('uploaded-top')}
@@ -805,10 +861,13 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                         onLike={() => handleClothingLike('pants')}
                                                         onBuy={() => handleClothingBuy('pants')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 하의 제거 시작');
                                                             setPantsImage(null); 
                                                             setPantsLabel(undefined); 
                                                             setSelectedPantsId(null);
                                                             setOriginalItems(prev => ({ ...prev, pants: undefined }));
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 하의 제거 완료');
                                                         }}
                                                         itemTitle={pantsLabel || 'Pants'}
                                                         isLiked={selectedPantsId ? likesService.isLiked(selectedPantsId) : likesService.isLiked('uploaded-pants')}
@@ -838,10 +897,13 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                         onLike={() => handleClothingLike('shoes')}
                                                         onBuy={() => handleClothingBuy('shoes')}
                                                         onRemove={() => { 
+                                                            console.log('🔍 신발 제거 시작');
                                                             setShoesImage(null); 
                                                             setShoesLabel(undefined); 
                                                             setSelectedShoesId(null);
                                                             setOriginalItems(prev => ({ ...prev, shoes: undefined }));
+                                                            setGeneratedImage(null);
+                                                            console.log('🔍 신발 제거 완료');
                                                         }}
                                                         itemTitle={shoesLabel || 'Shoes'}
                                                         isLiked={selectedShoesId ? likesService.isLiked(selectedShoesId) : likesService.isLiked('uploaded-shoes')}
@@ -855,37 +917,45 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         </div>
                         {/* Histories section separated from upload card */}
                         <div className="lg:col-span-8 order-3">
-                            <TryOnHistory onApply={(payload) => {
-                                const parse = (data?: string, title?: string): UploadedImage | null => {
-                                    if (!data) return null;
-                                    const m = data.match(/^data:([^;]+);base64,(.*)$/);
-                                    if (!m) return null;
-                                    const mimeType = m[1];
-                                    const base64 = m[2];
-                                    try {
-                                        const byteChars = atob(base64);
-                                        const byteNumbers = new Array(byteChars.length);
-                                        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-                                        const byteArray = new Uint8Array(byteNumbers);
-                                        const blob = new Blob([byteArray], { type: mimeType });
-                                        const ext = mimeType.split('/')[1] || 'png';
-                                        const fileName = (title || 'history') + '.' + ext;
-                                        const file = new File([blob], fileName, { type: mimeType });
-                                        return { file, previewUrl: data, base64, mimeType };
-                                    } catch {
-                                        return { file: new File([], title || 'history', { type: mimeType }), previewUrl: data, base64, mimeType } as UploadedImage;
-                                    }
-                                };
-                                const p = parse(payload.person, 'person');
-                                const t = parse(payload.top, payload.topLabel || 'top');
-                                const pa = parse(payload.pants, payload.pantsLabel || 'pants');
-                                const s = parse(payload.shoes, payload.shoesLabel || 'shoes');
-                                if (p) { setPersonImage(p); setPersonSource('upload'); }
-                                if (t) { setTopImage(t); setTopLabel(payload.topLabel || 'top'); }
-                                if (pa) { setPantsImage(pa); setPantsLabel(payload.pantsLabel || 'pants'); }
-                                if (s) { setShoesImage(s); setShoesLabel(payload.shoesLabel || 'shoes'); }
-                                addToast(toast.success('?덉뒪?좊━?먯꽌 ?곸슜?덉뒿?덈떎', undefined, { duration: 1200 }));
-                            }} />
+
+                            <TryOnHistory onApply={useCallback(async (payload: {
+                                person?: string;
+                                top?: string;
+                                pants?: string;
+                                shoes?: string;
+                                topLabel?: string;
+                                pantsLabel?: string;
+                                shoesLabel?: string;
+                                outerLabel?: string;
+                                topProduct?: RecommendationItem;
+                                pantsProduct?: RecommendationItem;
+                                shoesProduct?: RecommendationItem;
+                                outerProduct?: RecommendationItem;
+                            }) => {
+                                console.log('🔔 히스토리에서 적용 시도:', payload);
+                                
+                                // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
+                                
+                                if (payload.topProduct) {
+                                    console.log('🔔 상의 적용:', payload.topProduct.title);
+                                    await addCatalogItemToSlot(payload.topProduct, false);
+                                }
+                                if (payload.pantsProduct) {
+                                    console.log('🔔 하의 적용:', payload.pantsProduct.title);
+                                    await addCatalogItemToSlot(payload.pantsProduct, false);
+                                }
+                                if (payload.shoesProduct) {
+                                    console.log('🔔 신발 적용:', payload.shoesProduct.title);
+                                    await addCatalogItemToSlot(payload.shoesProduct, false);
+                                }
+                                if (payload.outerProduct) {
+                                    console.log('🔔 아우터 적용:', payload.outerProduct.title);
+                                    await addCatalogItemToSlot(payload.outerProduct, false);
+                                }
+                                
+                                // 히스토리에서 적용 완료 토스트
+                                addToast(toast.success('히스토리에서 적용했습니다', undefined, { duration: 1500 }));
+                            }, [addCatalogItemToSlot, addToast])} />
                         </div>
 
                         {/* Action and Result Section */}
@@ -1046,7 +1116,6 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                             ) : recommendations ? (
                                 <RecommendationDisplay
                                     recommendations={recommendations}
-                                    mode="fitting"
                                     onItemClick={addCatalogItemToSlot}
                                 />
                             ) : null}
