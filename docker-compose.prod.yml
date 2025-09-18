@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend_py
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: prod
+    env_file:
+      - ./backend_py/.env.prod
+    ports:
+      - "3001:3001"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: prod
+        # Prod: use prod nginx config and point to backend service in compose network
+        NGINX_CONF: nginx.prod.conf
+        VITE_API_URL: http://backend:3001
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend

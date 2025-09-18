@@ -3,7 +3,8 @@ import {
     VirtualTryOnRequest,
     VirtualTryOnResponse,
     RecommendationRequest,
-    RecommendationResponse
+    RecommendationResponse,
+    RecommendationItem
 } from '../types';
 
 /**
@@ -117,6 +118,33 @@ export class VirtualTryOnService {
             return { tips: [], source: 'fallback' } as any;
         }
         return response as any;
+    }
+
+    /**
+     * Recommend by selected positions with optional full metadata
+     * @param payload { positions:number[]; items?: any[]; final_k?: number; categories?: string[]; use_llm_rerank?: boolean }
+     */
+    async getRecommendationsByPositions(payload: {
+        positions: number[];
+        items?: Array<{
+            pos: number;
+            category?: string;
+            title?: string;
+            tags?: string[];
+            price?: number;
+            brand?: string;
+            gender?: string;
+            productUrl?: string;
+            imageUrl?: string;
+            description?: string;
+        }>;
+        top_k?: number;
+        final_k?: number;
+        categories?: string[];
+        use_llm_rerank?: boolean;
+    }): Promise<RecommendationItem[]> {
+        const res = await apiClient.post<RecommendationItem[]>('/api/recommend/by-positions', payload, { timeout: 20000 });
+        return res;
     }
 
     /**

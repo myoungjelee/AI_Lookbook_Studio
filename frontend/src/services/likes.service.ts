@@ -54,12 +54,14 @@ export const likesService = {
   toggle(item: RecommendationItem): boolean {
     const items = read();
     const exists = items.some((x) => x.id === item.id);
-    const next = exists
-      ? items.filter((x) => x.id !== item.id)
-      : [item, ...items];
+    const next = exists ? items.filter((x) => x.id !== item.id) : [item, ...items];
     write(next);
     notify(next);
     return !exists;
+  },
+  clear() {
+    write([]);
+    notify([]);
   },
   subscribe(listener: Listener) {
     listeners.add(listener);

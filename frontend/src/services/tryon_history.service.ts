@@ -1,4 +1,5 @@
 import type { RecommendationItem } from "../types";
+import { getStorageUsage, manageStorageSpace } from "./storage.service";
 
 export type TryOnInputHistoryItem = {
   id: string;
@@ -50,7 +51,12 @@ function read<T>(key: string): T[] {
 }
 
 function write<T>(key: string, arr: T[]) {
-  safeSetItem(key, arr);
+  console.log("🔔 write 함수 호출 - key:", key, "배열 길이:", arr.length);
+  const success = safeSetItem(key, arr);
+  console.log("🔔 safeSetItem 결과:", success);
+
+  // 저장 성공 여부와 관계없이 notify 호출 (UI 업데이트를 위해)
+  notify();
 }
 
 function notify() {
@@ -62,7 +68,48 @@ function notify() {
   });
 }
 
+// 이미지 압축 함수
+function compressImage(
+  dataUri: string,
+  quality: number = 0.7,
+  maxWidth: number = 800
+): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      // 비율 유지하면서 크기 조정
+      const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
+      canvas.width = img.width * ratio;
+      canvas.height = img.height * ratio;
+
+      // 캔버스에 그리기
+      ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // 압축된 이미지로 변환
+      const compressedDataUri = canvas.toDataURL("image/jpeg", quality);
+      resolve(compressedDataUri);
+    };
+    img.src = dataUri;
+  });
+}
+
 export const tryOnHistory = {
+  // 디버깅용: listeners에 접근 가능하도록
+  get listeners() {
+    return listeners;
+  },
+
+  // 임시: 모든 히스토리 데이터 클리어 (개발용)
+  clearAll() {
+    console.log("🗑️ 모든 히스토리 데이터 클리어 중...");
+    localStorage.removeItem(KEY_INPUTS);
+    localStorage.removeItem(KEY_OUTPUTS);
+    notify();
+    console.log("✅ 히스토리 데이터 클리어 완료");
+  },
   addInput(item: Omit<TryOnInputHistoryItem, "id" | "ts">) {
     // Drop entries that are only AI-model person without any clothing labels
     if (
@@ -127,16 +174,52 @@ export const tryOnHistory = {
     };
     const list = [now, ...existingList];
     write(KEY_INPUTS, list);
-    notify();
+
+    // 저장 후 용량 관리 실행
+    manageStorageSpace();
   },
-  addOutput(imageDataUri: string) {
+  async addOutput(imageDataUri: string) {
+    // 현재 localStorage 용량 확인
+    const usage = getStorageUsage();
+    console.log("🔔 현재 localStorage 용량:", usage);
+    console.log(
+      "🔔 addOutput 호출됨, 이미지 데이터 길이:",
+      imageDataUri.length
+    );
+
+    // 이미지 압축 (크기 줄이기) - 더 강한 압축
+    const compressedImageDataUri = await compressImage(imageDataUri, 0.5, 600);
+    console.log(
+      "🔔 압축 후 이미지 데이터 길이:",
+      compressedImageDataUri.length
+    );
+
     const now: TryOnOutputHistoryItem = {
       id: `o-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       ts: Date.now(),
-      image: imageDataUri,
+      image: compressedImageDataUri,
+      evaluation: {
+        score: 85, // 기본 점수
+        reasoning: "자동 생성된 결과",
+        model: "virtual-try-on",
+        ts: Date.now(),
+      },
     };
-    const list = [now, ...read<TryOnOutputHistoryItem>(KEY_OUTPUTS)];
+
+    const existingList = read<TryOnOutputHistoryItem>(KEY_OUTPUTS);
+    console.log("🔔 기존 출력 히스토리 개수:", existingList.length);
+
+    const list = [now, ...existingList];
+    console.log("🔔 새로운 리스트 길이:", list.length);
+
     write(KEY_OUTPUTS, list);
+    console.log("🔔 출력 히스토리 저장 완료");
+
+    // 저장 후 용량 관리 실행
+    manageStorageSpace();
+    console.log("🔔 용량 관리 완료");
+
+    // 추가로 notify 호출 (UI 즉시 업데이트)
     notify();
   },
   updateOutput(id: string, patch: Partial<TryOnOutputHistoryItem>) {
@@ -145,7 +228,6 @@ export const tryOnHistory = {
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...patch };
       write(KEY_OUTPUTS, list);
-      notify();
     }
   },
   inputs(): TryOnInputHistoryItem[] {
@@ -156,23 +238,19 @@ export const tryOnHistory = {
   },
   clearInputs() {
     write(KEY_INPUTS, []);
-    notify();
   },
   clearOutputs() {
     write(KEY_OUTPUTS, []);
-    notify();
   },
   removeInput(id: string) {
     const list = read<TryOnInputHistoryItem>(KEY_INPUTS);
     const filtered = list.filter((item) => item.id !== id);
     write(KEY_INPUTS, filtered);
-    notify();
   },
   removeOutput(id: string) {
     const list = read<TryOnOutputHistoryItem>(KEY_OUTPUTS);
     const filtered = list.filter((item) => item.id !== id);
     write(KEY_OUTPUTS, filtered);
-    notify();
   },
   subscribe(fn: Listener) {
     listeners.add(fn);

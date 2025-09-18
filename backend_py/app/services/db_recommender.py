@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -85,6 +86,7 @@ class DbPosRecommender:
 
     def __init__(self, cfg: Optional[DbConfig] = None) -> None:
         self.cfg = cfg or DbConfig()
+        self.logger = logging.getLogger(__name__)
         self.engine: Optional[Engine] = None
         self.products: List[Dict] = []
         self.emb: Optional[np.ndarray] = None
@@ -105,8 +107,16 @@ class DbPosRecommender:
                 )
                 with self.engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
+                self.logger.info("[DbPosRecommender] Connected to DB host=%s db=%s", self.cfg.host, self.cfg.name)
                 self._load_all()
-            except Exception:
+                if self.available():
+                    self.logger.info(
+                        "[DbPosRecommender] Loaded %d products and embeddings", len(self.products)
+                    )
+                else:
+                    self.logger.warning("[DbPosRecommender] Loaded data but recommender marked unavailable")
+            except Exception as exc:
+                self.logger.exception("[DbPosRecommender] Initialization failed: %s", exc)
                 # Leave unavailable; route will fall back
                 self.engine = None
 
@@ -150,6 +160,7 @@ class DbPosRecommender:
             self.products.append(
                 {
                     "id": str(r.get("pos")),
+                    "pos": int(r.get("pos")),
                     "title": str(title),
                     "price": int(r.get("Product_P") or 0),
                     "tags": tags,
@@ -187,6 +198,11 @@ class DbPosRecommender:
         # Sanity check
         if len(self.products) != mat.shape[0]:
             # mismatch: mark unavailable
+            self.logger.error(
+                "[DbPosRecommender] Product/embedding count mismatch: products=%d, embeddings_rows=%d",
+                len(self.products),
+                mat.shape[0],
+            )
             self.products = []
             self.emb = None
             self.emb_norm = None
