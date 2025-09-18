@@ -221,6 +221,30 @@ jobs:
         
         echo "✅ Backend quality check passed"
 
+    - name: 🎬 Video Feature Environment Check (Simplified)
+      if: needs.trigger-validation.outputs.should_deploy_backend == 'true'
+      run: |
+        echo "🎬 Checking Vertex AI environment variables..."
+        
+        # 환경 변수만 확인
+        echo "📋 Required environment variables:"
+        echo "VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID:-not set}"
+        echo "VERTEX_LOCATION: ${VERTEX_LOCATION:-not set}"
+        echo "VERTEX_MODEL_ID: ${VERTEX_MODEL_ID:-not set}"
+        echo "VERTEX_API_ENDPOINT: ${VERTEX_API_ENDPOINT:-not set}"
+        
+        # GitHub Secrets 존재 여부만 확인
+        if [ -n "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}" ]; then
+          echo "✅ Google service account credentials configured"
+          echo "📏 Credentials length: $(echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' | wc -c) characters"
+        else
+          echo "❌ Google service account credentials not configured"
+        fi
+        
+        echo "✅ Video feature environment check completed"
+
+        
+
   # ========== PR 전용 검증 ==========
   pr-validation:
     if: github.event_name == 'pull_request'
@@ -462,11 +486,11 @@ jobs:
         fi
 
 
-    - name: ⚙️ Configure Test Environment Variables (Enhanced)
+    - name: ⚙️ Configure Test Environment Variables (Fixed)
       run: |
         echo "⚙️ Configuring Test App Service environment variables..."
         
-        # 재시도 함수
+        # 재시도 함수 (기존 유지)
         retry_az() {
           local cmd="$1"
           for attempt in 1 2 3; do
@@ -492,22 +516,24 @@ jobs:
         
         DB_HOST_VALUE="${{ secrets.TEST_DB_HOST }}"
         [ -z "$DB_HOST_VALUE" ] && DB_HOST_VALUE="ai-final-team1-db.postgres.database.azure.com"
-        
         DB_USER_VALUE="${{ secrets.TEST_DB_USER }}"
         [ -z "$DB_USER_VALUE" ] && DB_USER_VALUE="adminDB"
-        
         DB_PASSWORD_VALUE="${{ secrets.TEST_DB_PASSWORD }}"
         [ -z "$DB_PASSWORD_VALUE" ] && DB_PASSWORD_VALUE="qwer123!"
-        
         DB_NAME_VALUE="${{ secrets.TEST_DB_NAME }}"
         [ -z "$DB_NAME_VALUE" ] && DB_NAME_VALUE="postgres"
         
-        # 환경 변수 설정 (재시도 적용)
+        # 🔒 Google Credentials를 Base64로 인코딩 (안전한 전송)
+        GOOGLE_CREDS_B64=$(echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' | base64 -w 0)
+        
+        # ✅ 안전한 환경 변수 설정
         ENV_CMD="az webapp config appsettings set \
           --name '${{ env.BACKEND_APP_NAME_TEST }}' \
           --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
           --settings \
-            PORT=3001 HOST=0.0.0.0 NODE_ENV=test \
+            PORT=3001 \
+            HOST=0.0.0.0 \
+            NODE_ENV=test \
             FRONTEND_URL='${{ secrets.TEST_FRONTEND_URL }}' \
             GEMINI_API_KEY='${GEMINI_KEY}' \
             GEMINI_MODEL='gemini-2.5-flash-image-preview' \
@@ -516,13 +542,30 @@ jobs:
             AZURE_OPENAI_KEY='${{ secrets.TEST_AZURE_OPENAI_KEY }}' \
             AZURE_OPENAI_DEPLOYMENT_ID='${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}' \
             AZURE_OPENAI_API_VERSION='2024-12-01-preview' \
-            DB_HOST='${DB_HOST_VALUE}' DB_USER='${DB_USER_VALUE}' \
-            DB_PASSWORD='${DB_PASSWORD_VALUE}' DB_NAME='${DB_NAME_VALUE}' \
-            DB_PORT=5432 DB_SSLMODE=require \
+            DB_HOST='${DB_HOST_VALUE}' \
+            DB_USER='${DB_USER_VALUE}' \
+            DB_PASSWORD='${DB_PASSWORD_VALUE}' \
+            DB_NAME='${DB_NAME_VALUE}' \
+            DB_PORT=5432 \
+            DB_SSLMODE=require \
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
-            DOCKER_ENABLE_CI=true WEBSITES_PORT=3001"
+            DOCKER_ENABLE_CI=true \
+            WEBSITES_PORT=3001 \
+            VERTEX_PROJECT_ID='${{ secrets.VERTEX_PROJECT_ID }}' \
+            VERTEX_LOCATION='${{ secrets.VERTEX_LOCATION }}' \
+            VERTEX_MODEL_ID='${{ secrets.VERTEX_MODEL_ID }}' \
+            VERTEX_API_ENDPOINT='${{ secrets.VERTEX_API_ENDPOINT }}' \
+            GOOGLE_APPLICATION_CREDENTIALS_B64='${GOOGLE_CREDS_B64}' \
+            VERTEX_VIDEO_SAMPLE_COUNT=1 \
+            VERTEX_VIDEO_PERSON_GENERATION=allow_all \
+            VERTEX_VIDEO_ADD_WATERMARK=true \
+            VERTEX_VIDEO_INCLUDE_RAI_REASON=false \
+            VERTEX_VIDEO_GENERATE_AUDIO=false"
         
         retry_az "$ENV_CMD"
+        echo "✅ Environment variables configured successfully (Google credentials as Base64)"
+
+        
 
     # 🆕 여기에 추가 (기존 마지막 스텝 다음)
     - name: 📋 Collect Backend Deployment Logs (On Failure)
@@ -653,11 +696,11 @@ jobs:
           EMBED_COLOR="5763719" # 초록색
           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           
-          PAYLOAD=$(cat << EOF
+        PAYLOAD=$(cat << EOF
         {
           "embeds": [{
-            "title": "✅ Backend Deployment Success",
-            "description": "Test environment backend deployed successfully",
+            "title": "✅ Backend Deployment Success (with Video AI)",
+            "description": "Test environment backend deployed with Vertex AI video generation",
             "color": $EMBED_COLOR,
             "timestamp": "$TIMESTAMP",
             "fields": [
@@ -682,6 +725,11 @@ jobs:
                 "inline": false
               },
               {
+                "name": "🎬 Video AI",
+                "value": "Google Vertex AI Veo 3.0 (4s, 720p)",
+                "inline": true
+              },
+              {
                 "name": "🌐 Test URL",
                 "value": "[${{ secrets.TEST_BACKEND_URL }}](${{ secrets.TEST_BACKEND_URL }}/health)",
                 "inline": false
@@ -690,7 +738,7 @@ jobs:
           }]
         }
         EOF
-          )
+        )
           
           curl -H "Content-Type: application/json" \
             -X POST \
@@ -745,82 +793,118 @@ jobs:
           echo "⚠️ TypeScript warnings exist but continuing"
         }
         
-        echo "🏗️ Building for Test environment..."
+        echo "🏗️ Building for Test environment with video features..."
         rm -rf dist/
         
+        # 🆕 비디오 기능 환경 변수 추가
         export VITE_API_URL="${{ secrets.TEST_BACKEND_URL }}"
         export VITE_NODE_ENV="test"
         export VITE_DEV_MODE="false"
         export VITE_DEPLOYMENT_TRIGGER="${{ needs.trigger-validation.outputs.deployment_reason }}"
         export VITE_DEPLOYMENT_COMMIT="${{ github.sha }}"
         
+        # 🎬 Vertex AI 비디오 기능 환경 변수
+        export VITE_FEATURE_VIDEO="true"
+        export VITE_VIDEO_ASPECT="9:16"
+        export VITE_VIDEO_DURATION="4"
+        export VITE_VIDEO_RESOLUTION="720p"
+        export VITE_VIDEO_PROMPT="Create a 4-second lookbook video for this outfit."
+        export VITE_VIDEO_PROMPT_LOCK="false"
+        
         npx vite build --mode test
         
         echo "📋 Build verification..."
         ls -la dist/
         echo "Build size: $(du -sh dist/ | cut -f1)"
-        echo "✅ Frontend build completed successfully"
+        
+        # 🆕 비디오 기능 빌드 확인
+        if grep -q "VITE_FEATURE_VIDEO" dist/assets/*.js 2>/dev/null; then
+          echo "✅ Video features included in build"
+        else
+          echo "⚠️ Video features may not be properly included"
+        fi
+        
+        echo "✅ Frontend build completed successfully with video features"
 
-    - name: 🚀 Deploy to Azure Static Web Apps (Test) (수정됨)
+    - name: 🚀 Deploy to Azure Static Web Apps (Test) (Enhanced)
       uses: Azure/static-web-apps-deploy@v1
       with:
-        azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_ISLAND_0C20D9B00 }}
+        azure_static_web_apps_api_token: ${{ secrets.TEST_STATIC_WEB_APPS_API_TOKEN }}
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         action: "upload"
         app_location: "frontend/dist"
         skip_app_build: true
         production_branch: "develop"
+        skip_deploy_on_missing_secrets: true
+      # 🆕 실패 처리 강화
+      continue-on-error: false
+      timeout-minutes: 10
 
-    # 🆕 여기에 추가 (기존 마지막 스텝 다음)
-    - name: 📋 Collect Frontend Deployment Logs (On Failure)
+    # 🆕 통합된 프론트엔드 배포 실패 로그 수집
+    - name: 📋 Collect Frontend Deployment Logs (Comprehensive)
       if: failure()
       run: |
-        echo "📋 Collecting detailed failure logs for frontend deployment..."
+        echo "📋 Collecting comprehensive frontend deployment failure logs..."
         
-        # 1. 빌드 아티팩트 정보
-        echo "🏗️ Build Artifacts Information:"
+        # 1. 🏗️ 빌드 아티팩트 정보
+        echo "🏗️ Build Artifacts Analysis:"
         if [ -d "frontend/dist" ]; then
-          echo "✅ Dist folder exists"
-          ls -la frontend/dist/ || true
-          echo "📦 Build size: $(du -sh frontend/dist/ | cut -f1)"
-          
-          # 주요 파일들 존재 확인
-          [ -f "frontend/dist/index.html" ] && echo "✅ index.html found" || echo "❌ index.html missing"
-          [ -d "frontend/dist/assets" ] && echo "✅ assets folder found" || echo "❌ assets folder missing"
+        echo "✅ Dist folder exists"
+        ls -la frontend/dist/ || true
+        echo "📦 Build size: $(du -sh frontend/dist/ | cut -f1)"
+        
+        # 주요 파일들 존재 확인
+        [ -f "frontend/dist/index.html" ] && echo "✅ index.html found" || echo "❌ index.html missing"
+        [ -d "frontend/dist/assets" ] && echo "✅ assets folder found" || echo "❌ assets folder missing"
         else
-          echo "❌ Dist folder not found"
+        echo "❌ Dist folder not found"
         fi
         
-        # 2. Node.js 환경 정보
+        # 2. 🟢 Node.js 환경 정보
         echo "🟢 Node.js Environment:"
         node --version || true
         npm --version || true
         npm list --depth=0 --prefix frontend || true
         
-        # 3. Vite 빌드 로그 (이미 출력된 것 재확인)
+        # 3. ⚡ Vite 빌드 분석
         echo "⚡ Vite Build Analysis:"
         if [ -f "frontend/dist/.vite/manifest.json" ]; then
-          echo "✅ Vite manifest found"
-          cat frontend/dist/.vite/manifest.json || true
+        echo "✅ Vite manifest found"
+        cat frontend/dist/.vite/manifest.json || true
+        else
+        echo "❌ Vite manifest not found"
         fi
         
-        # 4. 빌드 환경 변수 확인
+        # 4. 🔍 환경 변수 확인 (민감 정보 제외)
         echo "🔍 Build Environment Variables:"
+        echo "NODE_VERSION: ${NODE_VERSION}"
         echo "VITE_API_URL: ${VITE_API_URL:-not set}"
         echo "VITE_NODE_ENV: ${VITE_NODE_ENV:-not set}"
         echo "NODE_ENV: ${NODE_ENV:-not set}"
+        echo "Build location exists: $([ -d 'frontend/dist' ] && echo 'Yes' || echo 'No')"
+        echo "Build files count: $([ -d 'frontend/dist' ] && find frontend/dist -type f | wc -l || echo '0')"
         
-        # 5. TypeScript 컴파일 재확인
+        # 5. 📝 TypeScript 컴파일 재확인
         echo "📝 TypeScript Check:"
         cd frontend
         npx tsc --noEmit --skipLibCheck || echo "⚠️ TypeScript issues detected"
         cd ..
         
-        # 6. 실패 정보 저장
+        # 6. 🔍 Azure Static Web Apps 진단
+        if command -v az &> /dev/null; then
+        echo "🔍 Azure Static Web Apps Status:"
+        az staticwebapp list --query "[?name=='wonderful-island-0c20d9b00'].{name:name,defaultHostname:defaultHostname,repositoryUrl:repositoryUrl}" --output table || true
+        else
+        echo "⚠️ Azure CLI not available for Static Web App diagnostics"
+        fi
+        
+        # 7. 📊 실패 정보 저장
         echo "FRONTEND_FAILURE_REASON=Deployment step failed" >> $GITHUB_ENV
-        echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV        
-
-    # 🆕 여기에 추가
+        echo "FRONTEND_FAILURE_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
+        
+        echo "✅ Comprehensive frontend failure log collection completed"
+                
+        # 🆕 여기에 추가
     - name: 🚨 Discord Notification - Frontend Deployment Failed
       if: failure()
       run: |
@@ -1571,10 +1655,14 @@ jobs:
 
     - name: 📤 Upload Failure Artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # ✅ 최신 버전
       with:
         name: failure-logs-${{ github.sha }}
         path: |
           backend-logs.zip
           *.log
         retention-days: 30
+        # 🆕 v4에서 추가된 옵션들
+        compression-level: 6
+        overwrite: true
+

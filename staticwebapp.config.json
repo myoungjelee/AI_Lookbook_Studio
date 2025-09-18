@@ -12,6 +12,7 @@
       "route": "/api/*",
       "allowedRoles": ["anonymous"]
     }
+
   ],
   "mimeTypes": {
     ".jpg": "image/jpeg",
@@ -19,4 +20,5 @@
     ".png": "image/png",
     ".gif": "image/gif"
   }
+
 }
