@@ -72,6 +72,7 @@ export const VirtualTryOnUI: React.FC = () => {
     // Video generation state
     const [videoPrompt, setVideoPrompt] = useState<string>((import.meta as any).env?.VITE_VIDEO_PROMPT || 'Create an 8-second lookbook video for this outfit.');
     const [videoStatus, setVideoStatus] = useState<'idle' | 'starting' | 'polling' | 'completed' | 'error'>('idle');
+    const [videoGenId, setVideoGenId] = useState<number>(0);
     const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
     const [videoError, setVideoError] = useState<string | null>(null);
     const [videoUrls, setVideoUrls] = useState<string[]>([]);
@@ -183,23 +184,24 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [generatedImage, clearVideoPoll]);
 
     // When a video completes, persist to local video history once
-    const savedVideoOnceRef = React.useRef(false);
+    const savedForGenRef = React.useRef<number | null>(null);
     useEffect(() => {
-        if (videoStatus === 'completed' && videoUrls.length > 0 && !savedVideoOnceRef.current) {
+        if (videoStatus === 'completed' && videoUrls.length > 0 && savedForGenRef.current !== videoGenId) {
             try {
+                const remote = videoUrls.filter((u) => typeof u === 'string' && !u.startsWith('data:'));
+                const clipsToSave = (remote.length > 0 ? remote : videoUrls.slice(0, 1)).slice(0, 4);
                 videoHistory.add({
-                    clips: videoUrls,
+                    clips: clipsToSave,
                     prompt: videoPrompt,
                     params: { aspect: videoDefaults.aspectRatio, duration: videoDefaults.durationSeconds, resolution: videoDefaults.resolution },
                     sourceImage: generatedImage || undefined,
                 });
-                savedVideoOnceRef.current = true;
+                savedForGenRef.current = videoGenId;
             } catch {
                 // ignore
             }
         }
-        if (videoStatus !== 'completed') savedVideoOnceRef.current = false;
-    }, [videoStatus, videoUrls, videoPrompt, videoDefaults.aspectRatio, videoDefaults.durationSeconds, videoDefaults.resolution, generatedImage]);
+    }, [videoStatus, videoUrls, videoPrompt, videoDefaults.aspectRatio, videoDefaults.durationSeconds, videoDefaults.resolution, generatedImage, videoGenId]);
 
     useEffect(() => {
         if (!videoFeatureEnabled) {
@@ -228,6 +230,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         setVideoOperationName(null);
         setVideoProgress(0);
         setVideoStatus('starting');
+        setVideoGenId((x) => x + 1);
         try {
             const res = await virtualTryOnService.startVideoGeneration({
                 prompt: trimmed,

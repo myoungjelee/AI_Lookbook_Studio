@@ -10,6 +10,7 @@ export type VideoHistoryItem = {
 };
 
 const KEY_VIDEO_HISTORY = 'app:tryon:history:videos:v1';
+const MAX_ITEMS = 30;
 
 type Listener = () => void;
 const listeners: Set<Listener> = new Set();
@@ -38,7 +39,7 @@ export const videoHistory = {
       ts: Date.now(),
       ...entry,
     };
-    const list = [now, ...read()];
+    const list = [now, ...read()].slice(0, MAX_ITEMS);
     write(list);
   },
   list(): VideoHistoryItem[] { return read(); },
@@ -48,4 +49,3 @@ export const videoHistory = {
 };
 
 export default videoHistory;
-

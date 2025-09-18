@@ -90,8 +90,30 @@ export const MyPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-white pt-[124px]">
       <div className="mx-auto max-w-[1280px] px-8 pb-16">
-        <div className="grid grid-cols-1 items-start gap-10 xl:grid-cols-3 lg:grid-cols-2">
-          {/* 입력 히스토리 */}
+        <div className="grid grid-cols-1 items-start gap-10">
+          {/* 영상 히스토리 – 최상단, 가로 전체 */}
+          <Card className="space-y-6 p-6 xl:p-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">영상 히스토리</h2>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setVideos(videoHistory.list())}>새로고침</Button>
+                <Button size="sm" variant="ghost" onClick={() => { videoHistory.clear(); setVideos([]); }}>비우기</Button>
+              </div>
+            </div>
+            {videos.length === 0 ? (
+              <div className="py-12 text-center text-sm text-gray-500">저장된 영상 히스토리가 없습니다.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {videos.map((v) => (
+                  <div key={v.id} className="group relative aspect-[9/16] min-h-[240px] md:min-h-[300px] overflow-hidden rounded-xl bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
+                    <video src={toPlayable(v.clips[0])} className="h-full w-full object-cover" controls playsInline />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* 입력 히스토리 – 영상 히스토리와 동일 폭으로 아래 배치 */}
           <Card className="space-y-6 p-6 xl:p-8">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-gray-900">입력 히스토리</h2>
@@ -111,7 +133,7 @@ export const MyPage: React.FC = () => {
             )}
           </Card>
 
-          {/* 결과 히스토리 */}
+          {/* 결과 히스토리 – 동일 폭으로 아래 배치 */}
           <Card className="space-y-6 p-6 xl:p-8">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-gray-900">결과 히스토리</h2>
@@ -132,28 +154,6 @@ export const MyPage: React.FC = () => {
               </div>
             )}
           </Card>
-
-          {/* 영상 히스토리 */}
-          <Card className="space-y-6 p-6 xl:p-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">영상 히스토리</h2>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setVideos(videoHistory.list())}>새로고침</Button>
-                <Button size="sm" variant="ghost" onClick={() => { videoHistory.clear(); setVideos([]); }}>비우기</Button>
-              </div>
-            </div>
-            {videos.length === 0 ? (
-              <div className="py-12 text-center text-sm text-gray-500">저장된 영상 히스토리가 없습니다.</div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                {videos.map((v) => (
-                  <div key={v.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl bg-gray-100 ring-1 ring-transparent hover:ring-blue-200">
-                    <video src={toPlayable(v.clips[0])} className="h-full w-full object-cover" controls playsInline />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
         </div>
       </div>
 
@@ -163,4 +163,3 @@ export const MyPage: React.FC = () => {
 };
 
 export default MyPage;
-
