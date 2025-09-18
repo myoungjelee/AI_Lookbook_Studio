@@ -42,6 +42,8 @@ Tip: `scripts/quickstart.ps1` installs frontend deps, prepares backend venv, ing
 - `POST /api/recommend`
 - `POST /api/recommend/from-fitting`
 - `POST /api/tips`
+- `POST /api/try-on/video`
+- `POST /api/try-on/video/status`
 - `POST /api/evaluate`
 - `POST /api/recommend/by-positions` (optional, external recommender bridge)
 
@@ -50,9 +52,11 @@ Copy `backend_py/.env.example` to `backend_py/.env` and set keys as needed.
 - CORS: `FRONTEND_URL`
 - Azure OpenAI (optional): `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT_ID`
 - Gemini (optional): `GEMINI_API_KEY`, `GEMINI_FIXED_PROMPT`, `GEMINI_TEMPERATURE`
+- Vertex AI video generation (optional): `VERTEX_PROJECT_ID`, `VERTEX_LOCATION`, `VERTEX_MODEL_ID`, `VERTEX_API_ENDPOINT`, `GOOGLE_APPLICATION_CREDENTIALS`
 - External recommender (optional): `RECOMMENDER_URL`, `RECOMMENDER_TIMEOUT`
 
 Frontend dev uses `VITE_API_URL` when provided; otherwise defaults to `http://localhost:3001` via `vite.config.ts`.
+Optional frontend flags: `VITE_FEATURE_VIDEO`, `VITE_VIDEO_PROMPT`, `VITE_VIDEO_ASPECT`, `VITE_VIDEO_DURATION`, `VITE_VIDEO_RESOLUTION`.
 
 ## Docker
 - Dev: `docker compose -f docker-compose.dev.yml up`
