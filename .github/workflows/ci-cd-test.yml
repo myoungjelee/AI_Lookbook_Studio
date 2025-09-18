@@ -486,11 +486,11 @@ jobs:
         fi
 
 
-    - name: ⚙️ Configure Test Environment Variables (Enhanced)
+    - name: ⚙️ Configure Test Environment Variables (Fixed)
       run: |
         echo "⚙️ Configuring Test App Service environment variables..."
         
-        # 재시도 함수
+        # 재시도 함수 (기존 유지)
         retry_az() {
           local cmd="$1"
           for attempt in 1 2 3; do
@@ -516,22 +516,24 @@ jobs:
         
         DB_HOST_VALUE="${{ secrets.TEST_DB_HOST }}"
         [ -z "$DB_HOST_VALUE" ] && DB_HOST_VALUE="ai-final-team1-db.postgres.database.azure.com"
-        
         DB_USER_VALUE="${{ secrets.TEST_DB_USER }}"
         [ -z "$DB_USER_VALUE" ] && DB_USER_VALUE="adminDB"
-        
         DB_PASSWORD_VALUE="${{ secrets.TEST_DB_PASSWORD }}"
         [ -z "$DB_PASSWORD_VALUE" ] && DB_PASSWORD_VALUE="qwer123!"
-        
         DB_NAME_VALUE="${{ secrets.TEST_DB_NAME }}"
         [ -z "$DB_NAME_VALUE" ] && DB_NAME_VALUE="postgres"
         
-        # ✅ 간소화된 환경 변수 설정 (JSON을 환경 변수로 직접 전달)
+        # 🔒 Google Credentials를 Base64로 인코딩 (안전한 전송)
+        GOOGLE_CREDS_B64=$(echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' | base64 -w 0)
+        
+        # ✅ 안전한 환경 변수 설정
         ENV_CMD="az webapp config appsettings set \
           --name '${{ env.BACKEND_APP_NAME_TEST }}' \
           --resource-group '${{ env.AZURE_RESOURCE_GROUP_TEST }}' \
           --settings \
-            PORT=3001 HOST=0.0.0.0 NODE_ENV=test \
+            PORT=3001 \
+            HOST=0.0.0.0 \
+            NODE_ENV=test \
             FRONTEND_URL='${{ secrets.TEST_FRONTEND_URL }}' \
             GEMINI_API_KEY='${GEMINI_KEY}' \
             GEMINI_MODEL='gemini-2.5-flash-image-preview' \
@@ -540,16 +542,20 @@ jobs:
             AZURE_OPENAI_KEY='${{ secrets.TEST_AZURE_OPENAI_KEY }}' \
             AZURE_OPENAI_DEPLOYMENT_ID='${{ secrets.TEST_AZURE_OPENAI_DEPLOYMENT_ID }}' \
             AZURE_OPENAI_API_VERSION='2024-12-01-preview' \
-            DB_HOST='${DB_HOST_VALUE}' DB_USER='${DB_USER_VALUE}' \
-            DB_PASSWORD='${DB_PASSWORD_VALUE}' DB_NAME='${DB_NAME_VALUE}' \
-            DB_PORT=5432 DB_SSLMODE=require \
+            DB_HOST='${DB_HOST_VALUE}' \
+            DB_USER='${DB_USER_VALUE}' \
+            DB_PASSWORD='${DB_PASSWORD_VALUE}' \
+            DB_NAME='${DB_NAME_VALUE}' \
+            DB_PORT=5432 \
+            DB_SSLMODE=require \
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
-            DOCKER_ENABLE_CI=true WEBSITES_PORT=3001 \
+            DOCKER_ENABLE_CI=true \
+            WEBSITES_PORT=3001 \
             VERTEX_PROJECT_ID='${{ secrets.VERTEX_PROJECT_ID }}' \
             VERTEX_LOCATION='${{ secrets.VERTEX_LOCATION }}' \
             VERTEX_MODEL_ID='${{ secrets.VERTEX_MODEL_ID }}' \
             VERTEX_API_ENDPOINT='${{ secrets.VERTEX_API_ENDPOINT }}' \
-            GOOGLE_APPLICATION_CREDENTIALS_JSON='${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_CONTENT }}' \
+            GOOGLE_APPLICATION_CREDENTIALS_B64='${GOOGLE_CREDS_B64}' \
             VERTEX_VIDEO_SAMPLE_COUNT=1 \
             VERTEX_VIDEO_PERSON_GENERATION=allow_all \
             VERTEX_VIDEO_ADD_WATERMARK=true \
@@ -557,8 +563,8 @@ jobs:
             VERTEX_VIDEO_GENERATE_AUDIO=false"
         
         retry_az "$ENV_CMD"
-        
-        echo "✅ Vertex AI environment variables configured (JSON in env var)"        
+        echo "✅ Environment variables configured successfully (Google credentials as Base64)"
+
         
 
     # 🆕 여기에 추가 (기존 마지막 스텝 다음)

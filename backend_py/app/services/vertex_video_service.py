@@ -3,14 +3,10 @@ import os
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException
-from google.auth import default
 from google.auth.transport.requests import Request
-import json
-from google.oauth2 import service_account
 
 
 logger = logging.getLogger(__name__)
@@ -76,12 +72,29 @@ class VertexVideoService:
             return token
 
     def _get_credentials(self):
-        """로컬과 CI/CD 모두 호환되는 Google Cloud 인증"""
+        """로컬과 CI/CD 모두 호환되는 Google Cloud 인증 (Base64 지원)"""
         import json
+        import base64
         from google.oauth2 import service_account
         from google.auth import default
 
-        # 1. 환경변수에서 JSON 직접 읽기 (CI/CD용)
+        # 1. Base64로 인코딩된 JSON 읽기 (CI/CD용 - 안전)
+        credentials_b64 = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_B64')
+        if credentials_b64:
+            try:
+                # Base64 디코딩 후 JSON 파싱
+                credentials_json = base64.b64decode(credentials_b64).decode('utf-8')
+                credentials_info = json.loads(credentials_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    credentials_info,
+                    scopes=self._scopes
+                )
+                logger.info("✅ Google credentials loaded from Base64 environment variable")
+                return credentials
+            except Exception as e:
+                logger.warning(f"Failed to load credentials from Base64 env var: {e}")
+
+        # 2. 일반 JSON 환경 변수 (기존 방식)
         credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
         if credentials_json:
             try:
@@ -95,7 +108,7 @@ class VertexVideoService:
             except Exception as e:
                 logger.warning(f"Failed to load credentials from JSON env var: {e}")
 
-        # 2. 기본 방식 (로컬 개발용 - 파일 경로)
+        # 3. 기본 방식 (로컬 개발용 - 파일 경로)
         try:
             credentials, _ = default(scopes=self._scopes)
             logger.info("✅ Google credentials loaded via default method")
