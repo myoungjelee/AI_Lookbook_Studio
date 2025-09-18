@@ -17,6 +17,7 @@ import { ModelPicker } from './ModelPicker';
 import { ResultDisplay } from './ResultDisplay';
 import { SnsShareDialog } from './SnsShareDialog';
 import { TryOnHistory } from './TryOnHistory';
+import { videoHistory } from '../../../services/video_history.service';
 // Simple feature-flag helper (treats undefined as ON)
 const isFeatureEnabled = (value: unknown): boolean => {
   if (value === undefined || value === null) return true;
@@ -180,6 +181,25 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             setVideoProgress(null);
         }
     }, [generatedImage, clearVideoPoll]);
+
+    // When a video completes, persist to local video history once
+    const savedVideoOnceRef = React.useRef(false);
+    useEffect(() => {
+        if (videoStatus === 'completed' && videoUrls.length > 0 && !savedVideoOnceRef.current) {
+            try {
+                videoHistory.add({
+                    clips: videoUrls,
+                    prompt: videoPrompt,
+                    params: { aspect: videoDefaults.aspectRatio, duration: videoDefaults.durationSeconds, resolution: videoDefaults.resolution },
+                    sourceImage: generatedImage || undefined,
+                });
+                savedVideoOnceRef.current = true;
+            } catch {
+                // ignore
+            }
+        }
+        if (videoStatus !== 'completed') savedVideoOnceRef.current = false;
+    }, [videoStatus, videoUrls, videoPrompt, videoDefaults.aspectRatio, videoDefaults.durationSeconds, videoDefaults.resolution, generatedImage]);
 
     useEffect(() => {
         if (!videoFeatureEnabled) {
