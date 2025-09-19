@@ -8,8 +8,10 @@ import os
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from ..services.catalog import get_catalog_service
+from ..services.azure_openai_service import azure_openai_service
 
 router = APIRouter(prefix="/api/search", tags=["Search"])
 
@@ -136,3 +138,181 @@ def semantic_search(
     res = svc.search(words, max_results=limit * 2, products=filtered)
     return res[:limit]
 
+
+# ---------------------- Natural language parse ---------------------- #
+
+class ParseRequest(BaseModel):
+    text: str
+
+
+class ParseResponse(BaseModel):
+    category: Optional[str] = None
+    tokens: List[str] = []
+    colors: List[str] = []
+    gender: Optional[str] = None
+    priceRange: Optional[Dict[str, int]] = None
+    source: str = "fallback"
+
+
+_COLOR_MAP = {
+    "black": ["블랙", "검정", "검은", "흑", "black"],
+    "white": ["화이트", "하양", "흰", "white"],
+    "gray": ["그레이", "회색", "gray", "grey"],
+    "beige": ["베이지", "beige"],
+    "brown": ["브라운", "갈색", "brown"],
+    "navy": ["네이비", "navy"],
+    "blue": ["블루", "파랑", "청", "blue"],
+    "green": ["그린", "초록", "녹", "green"],
+    "red": ["레드", "빨강", "red"],
+    "pink": ["핑크", "분홍", "pink"],
+    "purple": ["퍼플", "보라", "purple"],
+    "yellow": ["옐로우", "노랑", "yellow"],
+    "orange": ["오렌지", "주황", "orange"],
+}
+
+
+_CATEGORY_SYNONYMS = {
+    "top": [
+        "상의", "탑", "티", "티셔츠", "반팔", "긴팔", "맨투맨", "후드",
+        "니트", "스웨터", "셔츠", "블라우스", "폴로", "피케", "피케티",
+    ],
+    "pants": [
+        "하의", "바지", "슬랙스", "팬츠", "데님", "청바지", "조거", "트레이닝",
+        "치노", "와이드", "테이퍼드", "스커트", "치마", "원피스",
+    ],
+    "shoes": [
+        "신발", "스니커즈", "운동화", "로퍼", "부츠", "샌들", "힐", "구두",
+    ],
+    "outer": [
+        "아우터", "자켓", "재킷", "자켓", "코트", "패딩", "점퍼", "가디건",
+        "야상", "블루종", "바람막이",
+    ],
+    "accessories": [
+        "모자", "캡", "비니", "가방", "백팩", "토트", "숄더", "벨트", "시계",
+        "양말", "넥타이", "머플러", "액세서리", "주얼리",
+    ],
+}
+
+
+def _fallback_parse(text: str) -> ParseResponse:
+    t = (text or "").strip().lower()
+    resp = ParseResponse()
+
+    # Detect category by synonyms
+    for cat, syns in _CATEGORY_SYNONYMS.items():
+        for s in syns:
+            if s.lower() in t:
+                resp.category = cat
+                break
+        if resp.category:
+            break
+
+    # Extract colors
+    colors: List[str] = []
+    for norm, syns in _COLOR_MAP.items():
+        if any(s.lower() in t for s in syns):
+            colors.append(norm)
+    resp.colors = colors
+
+    # Gender hints
+    if any(k in t for k in ["남성", "남자", "man", "male", "남자용", "신사"]):
+        resp.gender = "male"
+    elif any(k in t for k in ["여성", "여자", "woman", "female", "여자용", "숙녀"]):
+        resp.gender = "female"
+    elif any(k in t for k in ["공용", "유니섹스", "unisex", "남녀공용"]):
+        resp.gender = "unisex"
+    elif any(k in t for k in ["키즈", "아동", "kids", "child", "children"]):
+        resp.gender = "kids"
+
+    # Price range detection (very light heuristics for KRW)
+    import re
+
+    # Normalize common units like 만원/천원/k
+    def parse_price(piece: str) -> Optional[int]:
+        piece = piece.strip()
+        try:
+            if piece.endswith("만원") or piece.endswith("만 원") or piece.endswith("만"):
+                num = float(re.sub(r"[^0-9.]", "", piece))
+                return int(num * 10000)
+            if piece.endswith("천원") or piece.endswith("천 원"):
+                num = float(re.sub(r"[^0-9.]", "", piece))
+                return int(num * 1000)
+            if piece.lower().endswith("k"):
+                num = float(re.sub(r"[^0-9.]", "", piece))
+                return int(num * 1000)
+            # plain number may be won already
+            digits = re.sub(r"[^0-9]", "", piece)
+            if digits:
+                return int(digits)
+        except Exception:
+            return None
+        return None
+
+    pr: Dict[str, int] = {}
+    # Patterns like '5만원 이하', '10만 원 이하', '3~5만원'
+    m = re.search(r"(\d+[\.,]?\d*)\s*(만|만원|만 원|천|천원|k)?\s*(이하|이내|under|<=)", t)
+    if m:
+        price = parse_price(m.group(0))
+        if price:
+            pr["max"] = price
+    else:
+        m2 = re.search(r"(\d+[\.,]?\d*)\s*~\s*(\d+[\.,]?\d*)\s*(만|만원|만 원|천|천원|k)?", t)
+        if m2:
+            p1 = parse_price(m2.group(1) + (m2.group(3) or ""))
+            p2 = parse_price(m2.group(2) + (m2.group(3) or ""))
+            if p1 and p2:
+                pr["min"], pr["max"] = min(p1, p2), max(p1, p2)
+    if pr:
+        resp.priceRange = pr
+
+    # Build tokens by stripping stopwords and keeping alphanumerics/Korean
+    words = [w for w in re.split(r"[^0-9A-Za-z가-힣\+/#-]+", t) if w]
+    # Remove generic words
+    stop = {"좀", "매우", "정도", "같은", "원", "가격", "의", "and", "or", "under"}
+    tokens = [w for w in words if w not in stop and len(w) > 1]
+    # Avoid duplicating color words
+    color_words = {s.lower() for syns in _COLOR_MAP.values() for s in syns}
+    tokens = [w for w in tokens if w not in color_words]
+    resp.tokens = tokens[:8]
+    return resp
+
+
+@router.post("/parse")
+def parse_text(req: ParseRequest) -> ParseResponse:
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    # Try Azure OpenAI if available
+    if azure_openai_service.available():
+        try:
+            data = azure_openai_service.parse_search_text(text)
+            # Normalize Azure result to our schema
+            out = ParseResponse(
+                category=(data.get("category") or None),
+                tokens=[str(t) for t in (data.get("tokens") or [])][:8],
+                colors=[str(c).lower() for c in (data.get("colors") or [])],
+                gender=(data.get("gender") or None),
+                priceRange=data.get("priceRange") or None,
+                source="ai",
+            )
+            # Light post-normalization of category
+            if out.category:
+                c = out.category.lower()
+                # Map a few common variants
+                if c in ["bottom", "bottoms", "skirt", "dress"]:
+                    out.category = "pants"
+                elif c in ["top", "tops", "tshirt", "shirt", "knit", "hoodie"]:
+                    out.category = "top"
+                elif c in ["shoe", "sneakers", "boots", "heels"]:
+                    out.category = "shoes"
+                elif c in ["outerwear", "jacket", "coat", "padding", "cardigan"]:
+                    out.category = "outer"
+                elif c in ["acc", "accessory", "bag", "hat", "belt", "watch", "socks"]:
+                    out.category = "accessories"
+            return out
+        except Exception:
+            pass
+
+    # Fallback rules
+    return _fallback_parse(text)

@@ -9,6 +9,7 @@ import { CategoryRow } from '../home/CategoryRow';
 import { FilterChips } from '../home/FilterChips';
 import { ProductCardOverlay } from './ProductCardOverlay';
 import { StickySidebar } from './StickySidebar';
+import { SearchChatWidget } from '../search/SearchChatWidget';
 
 function formatPriceKRW(n: number) {
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(n);
@@ -368,6 +369,32 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
         <section className="product-section" aria-label="추천 상품 목록">
           {/* 검색 입력 */}
           <div style={{display:'flex',gap:'8px',alignItems:'center',margin:'6px 0 12px'}}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const text = window.prompt('찾는 옷을 설명해주세요 (예: 네이비 와이드 슬랙스 5만원 이하)');
+                if (!text) return;
+                try {
+                  const parsed = await apiClient.post<any>('/api/search/parse', { text });
+                  const tokens: string[] = Array.isArray(parsed?.tokens) ? parsed.tokens : [];
+                  const q = [...tokens, ...(Array.isArray(parsed?.colors) ? parsed.colors : [])].join(' ');
+                  const params: any = { q, limit: '24' };
+                  if (parsed?.category) params.category = parsed.category;
+                  if (parsed?.priceRange?.min) params.minPrice = String(parsed.priceRange.min);
+                  if (parsed?.priceRange?.max) params.maxPrice = String(parsed.priceRange.max);
+                  setSearchQuery(q);
+                  const qs = new URLSearchParams(params).toString();
+                  const data = await apiClient.get<RecommendationItem[]>(`/api/search/semantic?${qs}`);
+                  setGridItems(data);
+                } catch (err) {
+                  console.warn('parse+semantic search failed', err);
+                }
+              }}
+            >
+              챗봇
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new CustomEvent('open-search-chat'))}>챗봇</Button>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -416,6 +443,13 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
         onRemoveItem={handleRemoveItem}
         onGoToFitting={handleGoToFitting}
         onClearAll={handleClearAll}
+      />
+      {/* Floating chatbot widget */}
+      <SearchChatWidget
+        onApplyResults={(items, q) => {
+          if (q) setSearchQuery(q);
+          setGridItems(items);
+        }}
       />
     </div>
   );
