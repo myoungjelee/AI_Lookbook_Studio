@@ -43,8 +43,12 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
     except Exception as e:  # noqa: BLE001
         print(f"[generate] PIL not available for collage fallback: {e}")
         return None
-    # Collect present images in display order (outer should be outermost)
-    order = ["outer", "top", "pants", "shoes"]
+    # Collect present images for a simple tile collage.
+    # To avoid confusing results from product photos that include full bodies,
+    # we exclude OUTER from collage when no TOP is present.
+    core_order = ["top", "pants", "shoes"]
+    include_outer = bool(items.get("top") and items.get("outer"))
+    order = (core_order + (["outer"] if include_outer else []))
     present: list[Image.Image] = []
     try:
         for key in order:
@@ -168,11 +172,10 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
             if hasattr(req.clothingItems, "model_dump")
             else dict(req.clothingItems)
         )
-        # Require at least three items for person-less composition (ideal)
-        present = [k for k in ("top", "pants", "shoes", "outer") if clothing.get(k)]
-        present_count = len(present)
-        print(f"[generate] no-person path: clothing present={present}")
-        if present_count >= 3:
+        # Prefer a collage when at least two core garments are present (top+pants). Shoes optional.
+        core_present = [k for k in ("top", "pants", "shoes") if clothing.get(k)]
+        print(f"[generate] no-person path: core_present={core_present}, outer={'있음' if clothing.get('outer') else '없음'}")
+        if len(core_present) >= 2 and all(k in core_present for k in ("top", "pants")):
             collaged = _compose_outfit_collage(clothing)
             if collaged:
                 return VirtualTryOnResponse(

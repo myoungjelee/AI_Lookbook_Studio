@@ -119,17 +119,26 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         shoes?: RecommendationItem;
     }>({});
 
-    // Restore slot selections from localStorage snapshot when coming back (catalog items only)
+    // Restore slot selections and person image from localStorage snapshot when coming back
     useEffect(() => {
         try {
             const raw = localStorage.getItem('app:tryon:slots:v1');
             if (!raw) return;
-            const snap: Partial<Record<'outer'|'top'|'pants'|'shoes', RecommendationItem|null>> = JSON.parse(raw);
+            const snap: any = JSON.parse(raw);
             const tasks: Array<Promise<any>> = [];
+            
+            // 복원할 사람 이미지가 있고 현재 사람 이미지가 없을 때만 복원
+            if (!personImage && snap.person) {
+                setPersonImage(snap.person);
+                setPersonSource(snap.personSource || 'unknown');
+            }
+            
+            // 의류 아이템들 복원
             if (!outerImage && snap.outer) tasks.push(addToSlotForced(snap.outer as RecommendationItem, 'outer'));
             if (!topImage && snap.top) tasks.push(addToSlotForced(snap.top as RecommendationItem, 'top'));
             if (!pantsImage && snap.pants) tasks.push(addToSlotForced(snap.pants as RecommendationItem, 'pants'));
             if (!shoesImage && snap.shoes) tasks.push(addToSlotForced(snap.shoes as RecommendationItem, 'shoes'));
+            
             if (tasks.length) Promise.allSettled(tasks).then(() => console.log('✅ 슬롯 스냅샷 복원 완료'));
         } catch (e) {
             console.warn('슬롯 스냅샷 복원 실패:', e);
@@ -137,13 +146,19 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Persist slot selections (catalog items only) to localStorage
+    // Persist slot selections and person image to localStorage
     // Guard: avoid writing an all-null snapshot on initial mount
     useEffect(() => {
         try {
-            const hasAny = !!(originalItems.outer || originalItems.top || originalItems.pants || originalItems.shoes);
+            const hasAny = !!(originalItems.outer || originalItems.top || originalItems.pants || originalItems.shoes || personImage);
             if (hasAny) {
                 const snapshot = {
+                    person: personImage ? {
+                        previewUrl: personImage.previewUrl,
+                        base64: personImage.base64,
+                        mimeType: personImage.mimeType
+                    } : null,
+                    personSource: personSource,
                     outer: originalItems.outer || null,
                     top: originalItems.top || null,
                     pants: originalItems.pants || null,
@@ -156,7 +171,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         } catch {
             // ignore storage errors
         }
-    }, [originalItems]);
+    }, [originalItems, personImage, personSource]);
 
     // Reflect history evaluations (scores) for current generated image
     const [historyTick, setHistoryTick] = useState<number>(0);
@@ -521,11 +536,11 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
 
     const handleCombineClick = useCallback(async () => {
         const hasAnyClothing = !!(topImage || pantsImage || shoesImage || outerImage);
-        const hasAllClothing = !!(topImage && pantsImage && shoesImage);
-        const allowWithoutPerson = !personImage && hasAllClothing;
+        // 사람 없어도 의류 1개 이상이면 진행(기본 3종 제한 해제)
+        const allowWithoutPerson = !personImage && hasAnyClothing;
         const allowWithPerson = !!personImage && hasAnyClothing;
         if (!(allowWithoutPerson || allowWithPerson)) {
-            setError("?몃Ъ ?ъ쭊 ?먮뒗 ???섏쓽/?좊컻 3醫?紐⑤몢瑜??쒓났??二쇱꽭??");
+            setError("의류 이미지 1개 이상 또는 인물 사진을 제공해 주세요.");
             return;
         }
 
@@ -561,9 +576,73 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
             });
 
 
+            // Dress/Skirt heuristic from pants metadata/labels
+            const bottomText = (
+                (originalItems.pants?.title || '') + ' ' +
+                ((originalItems.pants?.tags || []).join(' ')) + ' ' +
+                (originalItems.pants?.category || '') + ' ' +
+                (pantsLabel || '')
+            ).toLowerCase();
+            const hasDressTok = ['dress','onepiece','one-piece','ops','원피스'].some(t=>bottomText.includes(t));
+            const hasSkirtTok = ['skirt','스커트','치마','플리츠','테니스','랩'].some(t=>bottomText.includes(t));
+            const isDress = hasDressTok;
+            const isSkirt = !hasDressTok && hasSkirtTok;
+
+            // Identity lock when person image present
+            const identityPrompt = personImage ? (
+                'IDENTITY LOCK: Use the provided PERSON image only. Ignore any faces/skin/limbs in garment photos. ' +
+                'Do not change the person\'s facial identity, body shape, pose, or expression. Do not copy the garment model\'s pose.'
+            ) : undefined;
+
+            // 하의가 드레스/스커트인 경우: 바지 금지. 스커트+상의 없음이면 기본 흰티 지시
+            const bottomPrompt = (isDress || isSkirt) ? (
+                [
+                    `BOTTOM TYPE: ${isDress ? 'ONE-PIECE DRESS' : 'SKIRT'}.`,
+                    'Do NOT generate trousers, leggings, or shorts.',
+                    `Keep the ${isDress ? 'dress' : 'skirt'} silhouette and hem length consistent with the reference; do not convert to pants.`,
+                    (isDress ? 'OVERRIDE MAPPING: Use the provided BOTTOM reference as a ONE-PIECE DRESS (bodice + skirt). Segment the upper part as the bodice to cover the torso, and the lower part as the skirt from the waist downward. Do not ignore this garment.' : ''),
+                    (isDress ? 'If ONE-PIECE, treat it as both TOP and PANTS; do not invent a separate top. Remove the base TOP from the PERSON image so that only the dress bodice/neckline remains visible (strapless or off-shoulder allowed).' : ''),
+                    (isSkirt && !topImage ? 'If TOP is missing with a SKIRT, add a plain white crew-neck short-sleeve T-shirt as TOP. No logos or graphics.' : ''),
+                ].filter(Boolean).join(' ')
+            ) : undefined;
+
+            // 상의/하의 기본값(프롬프트 방식) — 드레스일 땐 하의 기본값 금지
+            const topMissingPrompt = (!topImage && !isDress) ? (
+                'If TOP is missing, add a plain white crew-neck short-sleeve T-shirt as the TOP. No logos or graphics. Natural cotton texture.'
+            ) : undefined;
+            const pantsMissingPrompt = (!pantsImage && !isDress) ? (
+                'If PANTS are missing, add neutral straight-fit trousers in black or dark gray that pair well with the selected garments. No shorts or leggings.'
+            ) : (isDress ? 'Under a ONE-PIECE dress, do NOT add any trousers or leggings.' : undefined);
+
+            const fittingPrompt = (
+                'Fit garments to the BASE PERSON with realistic warp and perspective; ' +
+                'follow neckline/shoulders/waist/hips; respect arm/hand occlusion; ' +
+                'add soft shadows and seamless blending; no flat pasting or rectangular cutouts.'
+            );
+            const fullBodyPrompt = personImage ? (
+                'FULL-BODY VIEW: Show the full person head-to-toe. If the source photo is cropped, extend the canvas and synthesize missing lower body and legs with consistent anatomy, perspective, and lighting.'
+            ) : undefined;
+
+            const layeringPrompt = 'Apply garments in order: TOP, OUTER, then BOTTOM (pants or dress), then SHOES. Do not add accessories from reference photos.';
+            const referenceExclusionPrompt = 'Do not copy the garment model\'s body, pose, or background objects. Transfer garments only.';
+
+            const dynamicPrompt = [
+                identityPrompt,
+                fullBodyPrompt,
+                layeringPrompt,
+                fittingPrompt,
+                referenceExclusionPrompt,
+                bottomPrompt,
+                topMissingPrompt,
+                pantsMissingPrompt,
+            ]
+                .filter(Boolean)
+                .join(' ');
+
             const result = await virtualTryOnService.combineImages({
                 person: personImage ? convertToApiFile(personImage) : null,
                 clothingItems,
+                prompt: dynamicPrompt,
             });
 
             if (result.generatedImage) {
@@ -682,10 +761,11 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         } finally {
             setIsLoading(false);
         }
-    }, [personImage, topImage, pantsImage, shoesImage, outerImage, minPrice, maxPrice, excludeTagsInput]);
+    }, [personImage, topImage, pantsImage, shoesImage, outerImage, minPrice, maxPrice, excludeTagsInput, originalItems, pantsLabel]);
 
 
-    const canCombine = (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) || (!personImage && !!(topImage && pantsImage && shoesImage));
+    // 버튼 활성화: 사람 있든 없든 의류 1개 이상이면 진행 가능
+    const canCombine = (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) || (!personImage && (topImage || pantsImage || shoesImage || outerImage));
 
     // Helper: add a catalog/recommendation item into proper slot
     const addCatalogItemToSlot = useCallback(async (item: RecommendationItem, showToast: boolean = true) => {
@@ -1104,7 +1184,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         </div>
 
                         {/* Action and Result Section */}
-                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-32 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto self-start">
+                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-2 xl:gap-3 lg:sticky lg:top-32 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto self-start">
                             <CombineButton
                                 onClick={handleCombineClick}
                                 disabled={!canCombine || isLoading}

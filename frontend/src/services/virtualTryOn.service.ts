@@ -1,4 +1,5 @@
 ﻿import {
+  RecommendationItem,
   RecommendationRequest,
   RecommendationResponse,
   VideoGenerationRequest,

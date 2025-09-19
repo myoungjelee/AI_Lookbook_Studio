@@ -157,44 +157,103 @@ class GeminiImageService:
         if prompt and str(prompt).strip():
             parts.append({"text": str(prompt).strip()})
 
-        # Person image (optional) with minimal role hint
+        # Person image (optional) with detailed role hints
         if person is not None:
             p_b64, p_mime = self._normalize_image(
                 person.get("base64"), person.get("mimeType")
             )
-            parts.append(
-                {"text": (
-                    "BASE PERSON: use this exact person, face, body proportions, skin tone, and background. "
-                    "Do NOT invent or substitute another model. Only change clothing items as instructed."
-                )}
-            )
-            parts.append(
-                {
-                    "inline_data": {
-                        "data": p_b64,
-                        "mime_type": p_mime,
-                    }
-                }
+            # Anchor PERSON image first so the model bases the scene on this subject
+            parts.append({"inline_data": {"data": p_b64, "mime_type": p_mime}})
+            parts.extend(
+                [
+                    {
+                        "text": (
+                            "BASE PERSON: use this exact person, face, body proportions, skin tone, and background. "
+                            "Do NOT invent or substitute another model."
+                        )
+                    },
+                    {
+                        "text": (
+                            "APPEARANCE LOCK: Preserve the PERSON's facial features, skin tone and undertone, and hair texture exactly; "
+                            "do not change demographic appearance."
+                        )
+                    },
+                    {
+                        "text": (
+                            "STRICT IDENTITY LOCK: The PERSON image is the ONLY valid face for the final output. "
+                            "Ignore any faces, limbs, or skin that appear in garment reference photos. "
+                            "Do not alter facial identity, expression, or body shape. FINAL FACE MUST MATCH THE PERSON image."
+                        )
+                    },
+                    {
+                        "text": (
+                            "FULL-BODY VIEW: Show the entire person head-to-toe with feet visible. "
+                            "If the base image is cropped, extend the canvas and realistically synthesize the missing lower body and legs "
+                            "with anatomy, perspective, lighting, and background consistent with the PERSON image."
+                        )
+                    },
+                    {
+                        "text": (
+                            "POSE CONSISTENCY: Keep the PERSON's pose and gesture. Do not copy the garment model's pose or limbs."
+                        )
+                    },
+                    {
+                        "text": (
+                            "CLOTHING REPLACEMENT: Replace the PERSON's existing garments only where new garments are provided."
+                            " For ONE-PIECE dresses the base top must be hidden; otherwise leave untreated areas intact."
+                        )
+                    },
+                ]
             )
 
         if clothing_items:
-            parts.append(
-                {
-                    "text": (
-                        "LAYERING RULES: apply garments in this order—TOP first, then OUTER on top of the top,"
-                        " then PANTS, then SHOES. Outerwear must always be the outermost layer covering the top."
-                    )
-                }
+            parts.extend(
+                [
+                    {
+                        "text": (
+                            "LAYERING RULES: apply garments in this order—TOP first, OUTER layered over TOP,"
+                            " then PANTS (or DRESS), then SHOES. Use only the provided garments; do not add accessories."
+                        )
+                    },
+                    {
+                        "text": (
+                            "FITTING RULES: conform garments to the BASE PERSON's body with realistic warp and perspective. "
+                            "Follow shoulders, neckline, waist, hips, and leg contours. "
+                            "Respect occlusion—keep arms/hands that are in front of the torso in front of the garment. "
+                            "Blend edges and add natural shading; no flat pasting or hard cutouts."
+                        )
+                    },
+                    {
+                        "text": (
+                            "REFERENCE EXCLUSION: Do not copy the garment model's body, pose, or accessories."
+                        )
+                    },
+                ]
             )
 
         # Clothing images
         has_any_clothing = False
         print(f"[gemini] _build_parts 시작 - clothing_items: {clothing_items}")
         garment_guidance = {
-            "top": "Extract the entire top (shirts, tees, knitwear) including sleeves and collars.",
-            "outer": "Extract the full outerwear (jackets, coats, cardigans). It must cover the top entirely without cropping hems or sleeves.",
-            "pants": "Extract trousers/bottoms from waist to hem. Keep waistband and full length intact.",
-            "shoes": "Extract the full pair of shoes with soles. Maintain orientation for both feet.",
+            "top": (
+                "Extract ONLY the top garment (shirts, tees, knitwear)."
+                " Remove any mannequin/body parts. REMOVE any head/neck/face/hair from the reference."
+                " Fit around neckline, shoulders, and armholes."
+            ),
+            "outer": (
+                "Extract ONLY the outerwear (jackets, coats, cardigans)."
+                " Remove any visible bottoms from the reference. REMOVE any head/neck/face/hair from the reference."
+                " Layer naturally over the top garment."
+            ),
+            "pants": (
+                "Extract ONLY the bottoms from waist to hem."
+                " If the reference is a SKIRT, treat it as a skirt covering from waist downward."
+                " If the reference is a ONE-PIECE DRESS, treat it as a dress with bodice plus skirt covering the torso and legs."
+            ),
+            "shoes": (
+                "Extract ONLY the pair of shoes with soles; do not include legs."
+                " Align to feet orientation and add subtle contact shadow."
+            ),
         }
         for key in ("top", "pants", "shoes", "outer"):
             item = clothing_items.get(key)
@@ -209,7 +268,8 @@ class GeminiImageService:
                     {
                         "text": (
                             f"GARMENT {key.upper()}: {garment_guidance.get(key, 'Use as-is.')} "
-                            "Ignore/remove any person, mannequin, limbs, or background in this reference. "
+                            "If any face/head/skin is visible in the garment image, treat it strictly as background and remove it. "
+                            "Do not copy or blend any face from the garment reference. "
                             "Apply the garment onto the BASE PERSON exactly according to the layering rules without cropping."
                         )
                     }
@@ -255,12 +315,15 @@ class GeminiImageService:
 
         try:
             # The new API mirrors Node but uses snake_case fields
+            # If a PERSON image is present in parts, use a lower temperature to improve adherence/stability
+            has_person = any(isinstance(p, dict) and isinstance(p.get("inline_data"), dict) for p in parts[:4])
+            temp = min(self.temperature, 0.5) if has_person else self.temperature
             resp = client.models.generate_content(
                 model=self.model,
                 contents=[{"role": "user", "parts": norm_parts}],
                 config={
                     "response_modalities": ["IMAGE"],
-                    "temperature": self.temperature,
+                    "temperature": temp,
                 },
             )
             return self._extract_image_from_response(resp)
@@ -295,9 +358,13 @@ class GeminiImageService:
 
         try:
             try:
+                has_person = any(
+                    isinstance(p, dict) and p.get("mime_type") and p.get("data") for p in legacy_inputs[:4]
+                )
+                temp = min(self.temperature, 0.5) if has_person else self.temperature
                 resp = model.generate_content(  # type: ignore[assignment]
                     legacy_inputs,
-                    generation_config={"temperature": self.temperature},
+                    generation_config={"temperature": temp},
                 )
             except TypeError:
                 # For older SDKs without generation_config support

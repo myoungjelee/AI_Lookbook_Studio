@@ -19,6 +19,7 @@ class VirtualTryOnRequest(BaseModel):
     # Person can be omitted to allow outfit-only composition
     person: Optional[ApiFile] = None
     clothingItems: ClothingItems
+    prompt: Optional[str] = None
 
 
 class VirtualTryOnResponse(BaseModel):

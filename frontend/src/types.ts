@@ -24,6 +24,7 @@ export interface VirtualTryOnRequest {
   // Person image is now optional to allow outfit-only composition
   person: ApiFile | null;
   clothingItems: ClothingItems;
+  prompt: string | null; // Optional prompt for AI generation
 }
 
 export interface VirtualTryOnResponse {
@@ -81,22 +82,22 @@ export interface RecommendationOptions {
 }
 
 export interface VideoGenerationRequest {
-    prompt: string;
-    imageData: string;
-    mimeType?: string;
-    parameters?: Record<string, unknown>;
+  prompt: string;
+  imageData: string;
+  mimeType?: string;
+  parameters?: Record<string, unknown>;
 }
 
 export interface VideoGenerationStartResponse {
-    operationName: string;
-    raw?: unknown;
+  operationName: string;
+  raw?: unknown;
 }
 
 export interface VideoGenerationStatusResponse {
-    done: boolean;
-    videoUris: string[];
-    operation: unknown;
-    progressPercent?: number | null;
+  done: boolean;
+  videoUris: string[];
+  operation: unknown;
+  progressPercent?: number | null;
 }
 
 // Style tips
