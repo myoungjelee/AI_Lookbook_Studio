@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Spinner } from '../../ui';
-import { ImageIcon } from '../../icons/ImageIcon';
 import { AlertTriangleIcon } from '../../icons/AlertTriangleIcon';
+import { ImageIcon } from '../../icons/ImageIcon';
 import { ZoomInIcon } from '../../icons/ZoomInIcon';
+import { Spinner } from '../../ui';
 import { FullScreenImage } from '../common/FullScreenImage';
 
 interface ResultDisplayProps {
@@ -10,6 +10,7 @@ interface ResultDisplayProps {
     isLoading: boolean;
     error: string | null;
     score?: number | null; // optional AI score to overlay
+    onFullScreenChange?: (isFullScreen: boolean) => void; // 풀스크린 상태 변경 콜백
 }
 
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({
@@ -17,6 +18,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
     isLoading,
     error,
     score,
+    onFullScreenChange,
 }) => {
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -53,7 +55,10 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
                             </div>
                         )}
                         <button
-                            onClick={() => setIsFullScreen(true)}
+                            onClick={() => {
+                                setIsFullScreen(true);
+                                onFullScreenChange?.(true);
+                            }}
                             className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg cursor-pointer"
                             aria-label="View full screen"
                         >
@@ -75,7 +80,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
                 )}
             </div>
             {isFullScreen && generatedImage && (
-                <FullScreenImage src={generatedImage} onClose={() => setIsFullScreen(false)} />
+                <FullScreenImage 
+                    src={generatedImage} 
+                    onClose={() => {
+                        setIsFullScreen(false);
+                        onFullScreenChange?.(false);
+                    }} 
+                />
             )}
         </>
     );

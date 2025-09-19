@@ -102,6 +102,14 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     
     // ?몃쾭 ?ㅻ쾭?덉씠 ?곹깭
     const [hoveredSlot, setHoveredSlot] = useState<'outer' | 'top' | 'pants' | 'shoes' | null>(null);
+    const [isFullScreen, setIsFullScreen] = useState(false); // 풀스크린 상태 추가
+    
+    // 풀스크린이 열릴 때 hoveredSlot 초기화
+    useEffect(() => {
+        if (isFullScreen) {
+            setHoveredSlot(null);
+        }
+    }, [isFullScreen]);
     
     // ?먮낯 ?곹뭹 ?곗씠?????
     const [originalItems, setOriginalItems] = useState<{
@@ -110,6 +118,45 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
         pants?: RecommendationItem;
         shoes?: RecommendationItem;
     }>({});
+
+    // Restore slot selections from localStorage snapshot when coming back (catalog items only)
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('app:tryon:slots:v1');
+            if (!raw) return;
+            const snap: Partial<Record<'outer'|'top'|'pants'|'shoes', RecommendationItem|null>> = JSON.parse(raw);
+            const tasks: Array<Promise<any>> = [];
+            if (!outerImage && snap.outer) tasks.push(addToSlotForced(snap.outer as RecommendationItem, 'outer'));
+            if (!topImage && snap.top) tasks.push(addToSlotForced(snap.top as RecommendationItem, 'top'));
+            if (!pantsImage && snap.pants) tasks.push(addToSlotForced(snap.pants as RecommendationItem, 'pants'));
+            if (!shoesImage && snap.shoes) tasks.push(addToSlotForced(snap.shoes as RecommendationItem, 'shoes'));
+            if (tasks.length) Promise.allSettled(tasks).then(() => console.log('✅ 슬롯 스냅샷 복원 완료'));
+        } catch (e) {
+            console.warn('슬롯 스냅샷 복원 실패:', e);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Persist slot selections (catalog items only) to localStorage
+    // Guard: avoid writing an all-null snapshot on initial mount
+    useEffect(() => {
+        try {
+            const hasAny = !!(originalItems.outer || originalItems.top || originalItems.pants || originalItems.shoes);
+            if (hasAny) {
+                const snapshot = {
+                    outer: originalItems.outer || null,
+                    top: originalItems.top || null,
+                    pants: originalItems.pants || null,
+                    shoes: originalItems.shoes || null,
+                };
+                localStorage.setItem('app:tryon:slots:v1', JSON.stringify(snapshot));
+            } else {
+                localStorage.removeItem('app:tryon:slots:v1');
+            }
+        } catch {
+            // ignore storage errors
+        }
+    }, [originalItems]);
 
     // Reflect history evaluations (scores) for current generated image
     const [historyTick, setHistoryTick] = useState<number>(0);
@@ -473,7 +520,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
     }, [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]);
 
     const handleCombineClick = useCallback(async () => {
-        const hasAnyClothing = !!(topImage || pantsImage || shoesImage);
+        const hasAnyClothing = !!(topImage || pantsImage || shoesImage || outerImage);
         const hasAllClothing = !!(topImage && pantsImage && shoesImage);
         const allowWithoutPerson = !personImage && hasAllClothing;
         const allowWithPerson = !!personImage && hasAnyClothing;
@@ -821,6 +868,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                         onImageUpload={(img) => { setPersonImage(img); setPersonSource(img ? 'upload' : 'unknown'); setSelectedModelId(null); recordInput({ person: img }, undefined, 'delta', img ? 'upload' : 'unknown'); }}
                                         externalImage={personImage}
                                         active={!!personImage && personSource === 'upload'}
+                                        isFullScreen={isFullScreen}
                                     />
                                     <ModelPicker
                                         direction="vertical"
@@ -875,9 +923,10 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                 }}
                                                 externalImage={outerImage}
                                                 active={!!outerImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'outer'}
+                                                        isVisible={hoveredSlot === 'outer' && !isFullScreen}
                                                         onLike={() => handleClothingLike('outer')}
                                                         onBuy={() => handleClothingBuy('outer')}
                                                         onRemove={() => { 
@@ -912,9 +961,10 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                 }}
                                                 externalImage={topImage}
                                                 active={!!topImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'top'}
+                                                        isVisible={hoveredSlot === 'top' && !isFullScreen}
                                                         onLike={() => handleClothingLike('top')}
                                                         onBuy={() => handleClothingBuy('top')}
                                                         onRemove={() => { 
@@ -948,9 +998,10 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                 }}
                                                 externalImage={pantsImage}
                                                 active={!!pantsImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'pants'}
+                                                        isVisible={hoveredSlot === 'pants' && !isFullScreen}
                                                         onLike={() => handleClothingLike('pants')}
                                                         onBuy={() => handleClothingBuy('pants')}
                                                         onRemove={() => { 
@@ -984,9 +1035,10 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                                 }}
                                                 externalImage={shoesImage}
                                                 active={!!shoesImage}
+                                                isFullScreen={isFullScreen}
                                                 overlay={
                                                     <ClothingItemOverlay
-                                                        isVisible={hoveredSlot === 'shoes'}
+                                                        isVisible={hoveredSlot === 'shoes' && !isFullScreen}
                                                         onLike={() => handleClothingLike('shoes')}
                                                         onBuy={() => handleClothingBuy('shoes')}
                                                         onRemove={() => { 
@@ -1052,7 +1104,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         </div>
 
                         {/* Action and Result Section */}
-                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-0 self-start">
+                        <div id="result-panel" className="lg:col-span-4 order-2 flex flex-col gap-6 xl:gap-7 lg:sticky lg:top-32 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto self-start">
                             <CombineButton
                                 onClick={handleCombineClick}
                                 disabled={!canCombine || isLoading}
@@ -1063,6 +1115,7 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                 isLoading={isLoading}
                                 error={error}
                                 score={currentScore ?? undefined}
+                                onFullScreenChange={setIsFullScreen}
                             />
                             {/* Style Tips below result */}
                             <StyleTipsCard generatedImage={generatedImage || undefined} />
