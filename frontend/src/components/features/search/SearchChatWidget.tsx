@@ -16,9 +16,7 @@ const panelStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  // Wider but still not intrusive; capped by viewport
   width: 'min(520px, 92vw)',
-  // About 2x taller than before; responsive to viewport height
   height: 'min(82vh, 960px)',
   background: '#fff',
   borderRadius: 16,
@@ -93,17 +91,17 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
         const max = parsed?.priceRange?.max ? `${parsed.priceRange.max.toLocaleString()}원` : '';
         parts.push(`가격: ${min}${min && max ? ' ~ ' : ''}${max}`);
       }
-      const summary = parts.length ? `검색 조건 – ${parts.join(' • ')}` : '조건 없이 검색했어요.';
+      const summary = parts.length ? `검색 요약 · ${parts.join(' · ')}` : '조건 없이 검색했어요.';
 
       setMessages((m) => [
         ...m,
-        { role: 'assistant', content: `${summary}\n결과 ${items.length}개를 적용했어요.` },
+        { role: 'assistant', content: `${summary}\n총 ${items.length}개를 찾았어요.` },
       ]);
       onApplyResults?.(items, q);
     } catch (err) {
       setMessages((m) => [
         ...m,
-        { role: 'assistant', content: '검색에 실패했어요. 네트워크 상태를 확인해 주세요.' },
+        { role: 'assistant', content: '검색에 실패했어요. 네트워크 상태를 확인해주세요.' },
       ]);
     } finally {
       setBusy(false);
@@ -123,7 +121,7 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
       {!open && (
         <button
           type="button"
-          aria-label="검색 챗봇 열기"
+          aria-label="검색 챗 열기"
           onClick={() => setOpen(true)}
           style={{
             width: 56,
@@ -190,14 +188,14 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
                 color: '#fff',
                 cursor: canSend ? 'pointer' : 'default'
               }}
-              aria-label="전송"
-              title="전송"
+              aria-label="보내기"
+              title="보내기"
             >
-              ↩︎
+              ➤
             </button>
           </div>
           <div style={{ textAlign: 'center', fontSize: 11, color: '#777', paddingBottom: 8 }}>
-            AI 응답은 부정확할 수 있어요
+            AI 추천은 참고용이에요
           </div>
         </div>
       )}
@@ -206,3 +204,4 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
 };
 
 export default SearchChatWidget;
+

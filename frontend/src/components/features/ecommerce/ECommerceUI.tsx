@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './ECommerceUI.css';
 import { apiClient } from '../../../services/api.service';
 import { likesService } from '../../../services/likes.service';
@@ -27,7 +27,7 @@ const useRandomProducts = (limit: number = 24) => {
       const data = await apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${limit}`);
       setItems(data);
     } catch (e: any) {
-      setError(e?.message || '추천 상품을 불러오지 못했습니다.');
+      setError(e?.message || '추천 상품을 불러오는 데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -163,17 +163,17 @@ const promoSlides: PromoSlide[] = [
   {
     id: 'run-lab',
     eyebrow: 'RUN CLUB',
-    title: '새벽 러닝을 위한 테크웨어 컬렉션',
-    description: '땀을 빠르게 배출하고 체온을 유지해 주는 고기능성 자켓과 러닝 슈즈를 만나보세요.',
+    title: '러닝 시즌, 새로운 기록을 준비하세요',
+    description: '가볍게 달리고 땀 식히기 좋은 기능성 웨어와 액세서리를 만나보세요.',
     image: 'https://images.unsplash.com/photo-1600965962361-9035dbfd1c50?auto=format&fit=crop&w=900&q=80',
-    ctaLabel: '버추얼 피팅 바로가기',
+    ctaLabel: '가상 피팅 바로가기',
     background: 'radial-gradient(circle at 15% 20%, #4f46e590, transparent 60%), linear-gradient(120deg, #111827 0%, #1e1b4b 60%, #111827 100%)'
   },
   {
     id: 'studio-fit',
     eyebrow: 'STUDIO FIT',
-    title: '필라테스를 위한 우먼스 퍼포먼스웨어',
-    description: '섬세하게 잡아주는 텐션과 부드러운 촉감을 갖춘 크롭탑 & 레깅스 셋업을 엄선했습니다.',
+    title: '미니멀 실루엣, 스튜디오 감성룩',
+    description: '차분한 톤에 포인트 되는 컬러 매치로 트렌디한 데일리룩 완성.',
     image: 'https://images.unsplash.com/photo-1527718641255-324f8e2d0421?auto=format&fit=crop&w=900&q=80',
     ctaLabel: '추천 상품 둘러보기',
     background: 'radial-gradient(circle at 80% 20%, #f472b63d, transparent 65%), linear-gradient(135deg, #312e81 0%, #4c1d95 55%, #312e81 100%)'
@@ -181,10 +181,10 @@ const promoSlides: PromoSlide[] = [
   {
     id: 'street-play',
     eyebrow: 'STREET PLAY',
-    title: '주말 농구에 어울리는 스트리트 무드',
-    description: '로우탑 스니커즈와 와이드 팬츠, 오버핏 아우터로 완성하는 여유로운 실루엣.',
+    title: '스트릿 무드의 레이어드 스타일',
+    description: '와이드 팬츠와 루즈한 상의로 여유롭게 연출하는 캐주얼 룩.',
     image: 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=900&q=80',
-    ctaLabel: '코디 가이드 확인하기',
+    ctaLabel: '룩 자세히 보기',
     background: 'radial-gradient(circle at 20% 80%, #f9731633, transparent 60%), linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%)'
   }
 ];
@@ -295,7 +295,7 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     setSelectedItems({});
   };
 
-  // 사이드바에 담기 (기존 handleAddToCart)
+  // 장바구니(피팅 바) 추가
   const handleAddToCart = (product: RecommendationItem) => {
     const category = resolveCartCategory(product);
     if (!category) {
@@ -306,14 +306,13 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
       [category]: product,
     }));
     
-    console.log('🔔 메인페이지에서 상품 클릭:', { product, category });
+    console.log('🛒 상품 클릭:', { product, category });
   };
 
-  // 바로 피팅룸에 박히는 기능 (상품추천처럼)
+  // 바로 가상피팅으로 이동 (추천 카드)
   const handleDirectFitting = (product: RecommendationItem) => {
-    console.log('🔔 바로 피팅룸으로 이동:', product.title);
+    console.log('🚀 가상피팅으로 이동:', product.title);
     try {
-      // VirtualTryOnUI에서 기대하는 키 이름으로 저장
       const itemWithTimestamp = {
         ...product,
         timestamp: Date.now()
@@ -321,7 +320,7 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
       localStorage.setItem('app:pendingVirtualFittingItem', JSON.stringify(itemWithTimestamp));
       onNavigate?.('try-on');
     } catch (error) {
-      console.warn('직접 피팅 데이터 저장 실패', error);
+      console.warn('가상피팅 이동 저장 실패', error);
     }
   };
 
@@ -330,16 +329,16 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
       <div className="main-container">
         <section className="headline-strip">
           <div>
-            <div className="headline-strip__title">스포츠 종목 아이템 추천</div>
+            <div className="headline-strip__title">오늘의 스타일 추천</div>
             <div className="headline-strip__meta">
-              <span>러닝</span>
-              <span>바디밸런스</span>
-              <span>에어로 테크</span>
+              <span>트렌드</span>
+              <span>빠른배송</span>
+              <span>베스트 픽</span>
             </div>
           </div>
           <div className="headline-strip__actions">
             <Button variant="outline" size="sm" onClick={() => onNavigate?.('try-on')}>
-              버추얼 피팅 이동
+              가상 피팅 이동
             </Button>
             <Button variant="ghost" size="sm" onClick={refresh} loading={loading}>
               새로고침
@@ -347,15 +346,15 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
         </section>
 
-        <section className="hero-section" aria-label="프로모션 영역">
+        <section className="hero-section" aria-label="프로모션">
           <PromoCarousel onTryOn={() => onNavigate?.('try-on')} />
         </section>
 
-        <section className="category-showcase" aria-label="카테고리 탐색">
+        <section className="category-showcase" aria-label="카테고리 둘러보기">
           <CategoryRow />
         </section>
 
-        <section className="filter-panel" aria-label="필터 영역">
+        <section className="filter-panel" aria-label="필터">
           <div className="filter-panel__chips">
             <FilterChips />
           </div>
@@ -366,35 +365,9 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
         </section>
 
-        <section className="product-section" aria-label="추천 상품 목록">
-          {/* 검색 입력 */}
+        <section className="product-section" aria-label="추천 상품">
+          {/* 검색 입력 줄: [검색어] [챗봇] [초기화] */}
           <div style={{display:'flex',gap:'8px',alignItems:'center',margin:'6px 0 12px'}}>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                const text = window.prompt('찾는 옷을 설명해주세요 (예: 네이비 와이드 슬랙스 5만원 이하)');
-                if (!text) return;
-                try {
-                  const parsed = await apiClient.post<any>('/api/search/parse', { text });
-                  const tokens: string[] = Array.isArray(parsed?.tokens) ? parsed.tokens : [];
-                  const q = [...tokens, ...(Array.isArray(parsed?.colors) ? parsed.colors : [])].join(' ');
-                  const params: any = { q, limit: '24' };
-                  if (parsed?.category) params.category = parsed.category;
-                  if (parsed?.priceRange?.min) params.minPrice = String(parsed.priceRange.min);
-                  if (parsed?.priceRange?.max) params.maxPrice = String(parsed.priceRange.max);
-                  setSearchQuery(q);
-                  const qs = new URLSearchParams(params).toString();
-                  const data = await apiClient.get<RecommendationItem[]>(`/api/search/semantic?${qs}`);
-                  setGridItems(data);
-                } catch (err) {
-                  console.warn('parse+semantic search failed', err);
-                }
-              }}
-            >
-              챗봇
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new CustomEvent('open-search-chat'))}>챗봇</Button>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -410,10 +383,12 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
               placeholder="검색어를 입력하고 Enter"
               className="h-9 w-48 md:w-64 rounded-full border border-[var(--divider)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#111111]"
             />
+            <Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new CustomEvent('open-search-chat'))}>챗봇</Button>
             <Button size="sm" variant="outline" onClick={() => setGridItems(items)}>초기화</Button>
           </div>
+
           <div className="section-title">
-            <h2 className="section-title__heading">오늘의 인기 아이템</h2>
+            <h2 className="section-title__heading">오늘의 베스트 선택</h2>
           </div>
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#d6001c]">
@@ -454,4 +429,6 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     </div>
   );
 };
+
+export default ECommerceUI;
 
