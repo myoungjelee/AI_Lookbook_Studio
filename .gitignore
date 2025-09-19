@@ -157,6 +157,7 @@ test.httpㅇ
 # mise: keep local-only runtime/tool settings untracked
 mise.toml
 agents.md
+backend_py/gen-lang-client-0009734645-6e8394415d7d.json
 
 # uv: local caches and venvs (per-developer)
 .uv/
