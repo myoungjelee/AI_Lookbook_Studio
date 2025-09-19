@@ -258,7 +258,11 @@ const PromoCarousel: React.FC<PromoCarouselProps> = ({ onTryOn }) => {
 
 export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
   const { items, loading, error, refresh } = useRandomProducts(24);
-  const gridItems = useMemo(() => items, [items]);
+  const [gridItems, setGridItems] = useState<RecommendationItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => { setGridItems(items); }, [items]);
+  // gridItems was a memo of items; replaced by state so we can inject semantic search results
   const [selectedItems, setSelectedItems] = useState<{
     outer?: RecommendationItem;
     top?: RecommendationItem;
@@ -329,7 +333,7 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
             <div className="headline-strip__meta">
               <span>러닝</span>
               <span>바디밸런스</span>
-              <span>에어플로 테크</span>
+              <span>에어로 테크</span>
             </div>
           </div>
           <div className="headline-strip__actions">
@@ -362,6 +366,25 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
         </section>
 
         <section className="product-section" aria-label="추천 상품 목록">
+          {/* 검색 입력 */}
+          <div style={{display:'flex',gap:'8px',alignItems:'center',margin:'6px 0 12px'}}>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={async (e) => {
+                if ((e as any).key === 'Enter') {
+                  try {
+                    const qs = new URLSearchParams({ q: searchQuery || '', limit: '24' }).toString();
+                    const data = await apiClient.get<RecommendationItem[]>(`/api/search/semantic?${qs}`);
+                    setGridItems(data);
+                  } catch (err) { console.warn('semantic search failed', err); }
+                }
+              }}
+              placeholder="검색어를 입력하고 Enter"
+              className="h-9 w-48 md:w-64 rounded-full border border-[var(--divider)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#111111]"
+            />
+            <Button size="sm" variant="outline" onClick={() => setGridItems(items)}>초기화</Button>
+          </div>
           <div className="section-title">
             <h2 className="section-title__heading">오늘의 인기 아이템</h2>
           </div>
@@ -397,3 +420,4 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     </div>
   );
 };
+

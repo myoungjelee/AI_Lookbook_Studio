@@ -17,22 +17,22 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
   ];
 
   const utilityNav = [
-    { id: 'store', label: 'ì˜¤í”„ë¼ì¸ ìŠ¤í† ì–´' },
-    // ê²€ìƒ‰: ë©”ì¸ ì„¹ì…˜ì˜ ê²€ìƒ‰ ì…ë ¥ì„ ì‚¬ìš©í•˜ë¯€ë¡œ ì œê±°
-    { id: 'likes', label: 'ì¢‹ì•„ìš”', go: 'likes' as const },
-    { id: 'my', label: 'ë§ˆì´', go: 'my' as const },
-    { id: 'login', label: 'ë¡œê·¸ì¸ / íšŒì›ê°€ì…' },
+    { id: 'store', label: '¿ÀÇÁ¶óÀÎ ½ºÅä¾î' },
+    { id: 'search', label: '°Ë»ö' },
+    { id: 'likes', label: 'ÁÁ¾Æ¿ä', go: 'likes' as const },
+    { id: 'my', label: '¸¶ÀÌ', go: 'my' as const },
+    { id: 'login', label: '·Î±×ÀÎ / È¸¿ø°¡ÀÔ' },
   ];
 
   const secondaryNav: Array<{ id: string; label: string; go?: 'home' | 'try-on' | 'likes' | 'my' }> = [
-    { id: 'recommend', label: 'ì¶”ì²œ', go: 'home' },
-    { id: 'ranking', label: 'ë­í‚¹' },
-    { id: 'sale', label: 'ì„¸ì¼' },
-    { id: 'brand', label: 'ë¸Œëœë“œ' },
-    { id: 'new', label: 'ë°œë§¤' },
-    { id: 'fashion', label: 'íŒ¨ì…˜ ë§¤ê±°ì§„' },
-    { id: 'spa', label: 'SPAìƒµ' },
-    { id: 'try-on', label: 'ë²„ì¶”ì–¼ í”¼íŒ…', go: 'try-on' },
+    { id: 'recommend', label: 'ÃßÃµ', go: 'home' },
+    { id: 'ranking', label: '·©Å·' },
+    { id: 'sale', label: '¼¼ÀÏ' },
+    { id: 'brand', label: 'ºê·£µå' },
+    { id: 'new', label: '¹ß¸Å' },
+    { id: 'fashion', label: 'ÆĞ¼Ç ¸Å°ÅÁø' },
+    { id: 'spa', label: 'SPAÀ§Å©' },
+    { id: 'try-on', label: '¹öÃß¾ó ÇÇÆÃ', go: 'try-on' },
   ];
 
   return (
@@ -79,4 +79,3 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
 };
 
 export default TopBar;
-
