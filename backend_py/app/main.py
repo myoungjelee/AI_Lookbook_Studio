@@ -7,6 +7,7 @@ from .routes.health import router as health_router
 from .routes.api import router as api_router
 from .routes.generate import router as generate_router
 from .routes.recommend import router as recommend_router
+from .routes.recommend_external import router as recommend_external_router
 from .routes.recommend_positions import router as recommend_positions_router
 from .routes.proxy import router as proxy_router
 from .routes.tips import router as tips_router
@@ -49,6 +50,7 @@ app.include_router(health_router)
 app.include_router(api_router)
 app.include_router(generate_router)
 app.include_router(recommend_router)
+app.include_router(recommend_external_router)
 app.include_router(recommend_positions_router)
 app.include_router(proxy_router)
 app.include_router(tips_router)

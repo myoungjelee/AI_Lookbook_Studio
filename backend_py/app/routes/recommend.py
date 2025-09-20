@@ -16,7 +16,9 @@ from ..models import (
 from ..services.azure_openai_service import azure_openai_service
 from ..services.catalog import get_catalog_service
 from ..services.db_recommender import db_pos_recommender
+from ..services.embedding_client import embedding_client
 from ..services.llm_ranker import llm_ranker
+from ..utils.slot_classifier import validate_slot_data
 
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 

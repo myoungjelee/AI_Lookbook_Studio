@@ -5,7 +5,7 @@ import { likesService } from '../../../services/likes.service';
 import { manageStorageSpace } from '../../../services/storage.service';
 import { tryOnHistory } from '../../../services/tryon_history.service';
 import { virtualTryOnService } from '../../../services/virtualTryOn.service';
-import type { ApiFile, ClothingItems, RecommendationItem, RecommendationOptions, UploadedImage } from '../../../types';
+import type { ApiFile, ClothingItems, RecommendationItem, UploadedImage } from '../../../types';
 import { normalizeCategoryLoose } from '../../../utils/category';
 import { Button, Card, Input, toast, useToast } from '../../ui';
 import { Header } from '../layout/Header';
@@ -639,30 +639,215 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                 .filter(Boolean)
                 .join(' ');
 
-            const result = await virtualTryOnService.combineImages({
+            // 가상 피팅과 추천을 동시에 시작
+            const virtualTryOnPromise = virtualTryOnService.combineImages({
                 person: personImage ? convertToApiFile(personImage) : null,
                 clothingItems,
                 prompt: dynamicPrompt,
             });
 
-            if (result.generatedImage) {
-                setGeneratedImage(result.generatedImage);
+            // 외부 데이터가 있는지 확인
+            const hasExternalData = topImage || pantsImage || shoesImage || outerImage;
+            
+            let recommendationPromise;
+            if (hasExternalData) {
+                // 외부 데이터가 있으면 새로운 로직 사용
+                recommendationPromise = getRecommendationsForSlots();
+            } else {
+                // 내부 데이터만 있으면 기존 로직 사용 (원래대로) - Azure OpenAI 호출 없음
+                recommendationPromise = (async () => {
+                    try {
+                        const positions: number[] = [];
+                        const itemsPayload: any[] = [];
+                        
+                        if (originalItems.top && originalItems.top.pos !== undefined) {
+                            positions.push(originalItems.top.pos);
+                            itemsPayload.push({
+                                pos: originalItems.top.pos,
+                                category: originalItems.top.category,
+                                title: originalItems.top.title,
+                                tags: originalItems.top.tags,
+                                price: originalItems.top.price
+                            });
+                        }
+                        if (originalItems.pants && originalItems.pants.pos !== undefined) {
+                            positions.push(originalItems.pants.pos);
+                            itemsPayload.push({
+                                pos: originalItems.pants.pos,
+                                category: originalItems.pants.category,
+                                title: originalItems.pants.title,
+                                tags: originalItems.pants.tags,
+                                price: originalItems.pants.price
+                            });
+                        }
+                        if (originalItems.shoes && originalItems.shoes.pos !== undefined) {
+                            positions.push(originalItems.shoes.pos);
+                            itemsPayload.push({
+                                pos: originalItems.shoes.pos,
+                                category: originalItems.shoes.category,
+                                title: originalItems.shoes.title,
+                                tags: originalItems.shoes.tags,
+                                price: originalItems.shoes.price
+                            });
+                        }
+                        if (originalItems.outer && originalItems.outer.pos !== undefined) {
+                            positions.push(originalItems.outer.pos);
+                            itemsPayload.push({
+                                pos: originalItems.outer.pos,
+                                category: originalItems.outer.category,
+                                title: originalItems.outer.title,
+                                tags: originalItems.outer.tags,
+                                price: originalItems.outer.price
+                            });
+                        }
+
+                        const byPos = await apiClient.recommendByPositions({
+                            positions,
+                            items: itemsPayload,
+                            min_price: minPrice ? Number(minPrice) : undefined,
+                            max_price: maxPrice ? Number(maxPrice) : undefined,
+                            exclude_tags: excludeTagsInput ? excludeTagsInput.split(',').map(t => t.trim()) : [],
+                            final_k: 3,
+                            use_llm_rerank: false, // 내부 데이터는 LLM 리랭킹 비활성화
+                        });
+                        
+                        // toCategoryRecs 함수 정의
+                        const toCategoryRecs = (arr: RecommendationItem[]) => {
+                            const buckets: any = { top: [], pants: [], shoes: [], outer: [], accessories: [] };
+                            for (const it of arr) {
+                                const key = normalizeCategoryLoose(String(it.category || ''));
+                                buckets[key].push(it);
+                            }
+                            return buckets;
+                        };
+                        
+                        return toCategoryRecs(byPos);
+                    } catch (error) {
+                        console.error('내부 데이터 추천 실패:', error);
+                        return null;
+                    }
+                })();
+            }
+
+            // 가상 피팅과 추천을 병렬로 실행
+            const [virtualTryOnResult, recommendations] = await Promise.all([
+                virtualTryOnPromise,
+                recommendationPromise
+            ]);
+
+            if (virtualTryOnResult.generatedImage) {
+                setGeneratedImage(virtualTryOnResult.generatedImage);
                 // Record output history (data URI)
-                await tryOnHistory.addOutput(result.generatedImage);
+                await tryOnHistory.addOutput(virtualTryOnResult.generatedImage);
+            }
 
-                // Fetch recommendations after virtual fitting
-                setIsLoadingRecommendations(true);
-                try {
-                    // 1) Try pos-based recommendation when originalItems are available
-                    const selected: Array<{ slot: 'top'|'pants'|'shoes'|'outer'; item: RecommendationItem }> = [] as any;
-                    if (originalItems.top) selected.push({ slot: 'top', item: originalItems.top! });
-                    if (originalItems.pants) selected.push({ slot: 'pants', item: originalItems.pants! });
-                    if (originalItems.shoes) selected.push({ slot: 'shoes', item: originalItems.shoes! });
-                    if (originalItems.outer) selected.push({ slot: 'outer', item: originalItems.outer! });
+            if (recommendations) {
+                setRecommendations(recommendations);
+            }
 
+        } catch (error) {
+            console.error('Failed to process:', error);
+            setError(error instanceof Error ? error.message : 'Failed to process');
+        } finally {
+            setIsLoading(false);
+            setIsLoadingRecommendations(false);
+        }
+    }, [personImage, topImage, pantsImage, shoesImage, outerImage, minPrice, maxPrice, excludeTagsInput, originalItems, pantsLabel]);
+
+    // 추천 로직을 별도 함수로 분리
+    const getRecommendationsForSlots = useCallback(async () => {
+        try {
+            // 슬롯별로 내부/외부 데이터 구분하여 처리 (내부 아이템 우선)
+            const clothingSlots: Record<string, any> = {
+                top: originalItems.top ? {
+                    // 내부 아이템: originalItems.top 정보 사용
+                    id: originalItems.top.id,
+                    pos: originalItems.top.pos,
+                    title: originalItems.top.title,
+                    price: originalItems.top.price,
+                    category: originalItems.top.category,
+                    imageUrl: originalItems.top.imageUrl,
+                    productUrl: originalItems.top.productUrl,
+                    tags: originalItems.top.tags
+                } : (topImage ? {
+                    // 외부 업로드: base64 정보 사용
+                    base64: topImage.base64,
+                    mimeType: topImage.mimeType,
+                    isExternal: true
+                } : null),
+                pants: originalItems.pants ? {
+                    // 내부 아이템: originalItems.pants 정보 사용
+                    id: originalItems.pants.id,
+                    pos: originalItems.pants.pos,
+                    title: originalItems.pants.title,
+                    price: originalItems.pants.price,
+                    category: originalItems.pants.category,
+                    imageUrl: originalItems.pants.imageUrl,
+                    productUrl: originalItems.pants.productUrl,
+                    tags: originalItems.pants.tags
+                } : (pantsImage ? {
+                    // 외부 업로드: base64 정보 사용
+                    base64: pantsImage.base64,
+                    mimeType: pantsImage.mimeType,
+                    isExternal: true
+                } : null),
+                shoes: originalItems.shoes ? {
+                    // 내부 아이템: originalItems.shoes 정보 사용
+                    id: originalItems.shoes.id,
+                    pos: originalItems.shoes.pos,
+                    title: originalItems.shoes.title,
+                    price: originalItems.shoes.price,
+                    category: originalItems.shoes.category,
+                    imageUrl: originalItems.shoes.imageUrl,
+                    productUrl: originalItems.shoes.productUrl,
+                    tags: originalItems.shoes.tags
+                } : (shoesImage ? {
+                    // 외부 업로드: base64 정보 사용
+                    base64: shoesImage.base64,
+                    mimeType: shoesImage.mimeType,
+                    isExternal: true
+                } : null),
+                outer: originalItems.outer ? {
+                    // 내부 아이템: originalItems.outer 정보 사용
+                    id: originalItems.outer.id,
+                    pos: originalItems.outer.pos,
+                    title: originalItems.outer.title,
+                    price: originalItems.outer.price,
+                    category: originalItems.outer.category,
+                    imageUrl: originalItems.outer.imageUrl,
+                    productUrl: originalItems.outer.productUrl,
+                    tags: originalItems.outer.tags
+                } : (outerImage ? {
+                    // 외부 업로드: base64 정보 사용
+                    base64: outerImage.base64,
+                    mimeType: outerImage.mimeType,
+                    isExternal: true
+                } : null)
+            };
+
+            // 내부 데이터와 외부 데이터 분리
+            const internalSlots: Array<{ slot: 'top'|'pants'|'shoes'|'outer'; item: RecommendationItem }> = [];
+            const externalSlots: Array<{ slot: 'top'|'pants'|'shoes'|'outer'; data: any }> = [];
+
+            for (const [slotName, slotData] of Object.entries(clothingSlots)) {
+                if (slotData) {
+                    if (slotData.isExternal) {
+                        externalSlots.push({ slot: slotName as any, data: slotData });
+                    } else {
+                        internalSlots.push({ slot: slotName as any, item: slotData });
+                    }
+                }
+            }
+
+            console.log('🔍 슬롯 분류:', { internalSlots, externalSlots });
+            console.log('🔍 originalItems 상태:', originalItems);
+            console.log('🔍 topImage 상태:', topImage);
+            console.log('🔍 pantsImage 상태:', pantsImage);
+
+                    // 내부 데이터 처리 (기존 로직)
                     const positions: number[] = [];
                     const itemsPayload: any[] = [];
-                    for (const s of selected) {
+                    for (const s of internalSlots) {
                         const idNum = Number(s.item.id);
                         const posNum = Number.isFinite(s.item.pos as any) ? Number(s.item.pos) : (Number.isFinite(idNum) ? idNum : NaN);
                         if (!Number.isFinite(posNum)) continue; // skip if no numeric pos
@@ -688,80 +873,70 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                         return buckets;
                     };
 
+                    // 내부 데이터와 외부 데이터를 병렬로 처리
+                    const allRecommendations: any = { top: [], pants: [], shoes: [], outer: [], accessories: [] };
+                    
+                    // 1. 내부 데이터 추천 (기존 로직)
                     if (positions.length > 0) {
                         try {
-                            const byPos = await virtualTryOnService.getRecommendationsByPositions({
+                            const byPos = await apiClient.recommendByPositions({
                                 positions,
                                 items: itemsPayload,
-                                // Explicitly pass dressed categories to ensure all appear
-                                categories: selected.map(s => s.slot),
+                                min_price: minPrice ? Number(minPrice) : undefined,
+                                max_price: maxPrice ? Number(maxPrice) : undefined,
+                                exclude_tags: excludeTagsInput ? excludeTagsInput.split(',').map(t => t.trim()) : [],
                                 final_k: 3,
-                                use_llm_rerank: true,
+                                use_llm_rerank: false, // 내부 데이터는 LLM 리랭킹 비활성화
                             });
-                            setRecommendations(toCategoryRecs(byPos));
+                            const internalRecs = toCategoryRecs(byPos);
+                            // 내부 추천 결과를 전체 추천에 병합
+                            for (const [category, items] of Object.entries(internalRecs)) {
+                                if (items && Array.isArray(items)) {
+                                    allRecommendations[category] = [...allRecommendations[category], ...items];
+                                }
+                            }
                         } catch (e) {
-                            // Fallback to image-based when vector recommender is unavailable
-                            const options: RecommendationOptions = {};
-                            if (minPrice) options.minPrice = Number(minPrice);
-                            if (maxPrice) options.maxPrice = Number(maxPrice);
-                            const trimmed = excludeTagsInput.trim();
-                            if (trimmed) options.excludeTags = trimmed.split(',').map(t => t.trim()).filter(Boolean);
-
-                            const usedClothingItems: any = {};
-                            if (topImage) usedClothingItems.top = clothingItems.top;
-                            if (pantsImage) usedClothingItems.pants = clothingItems.pants;
-                            if (shoesImage) usedClothingItems.shoes = clothingItems.shoes;
-                            if (outerImage) usedClothingItems.outer = clothingItems.outer;
-
-                            const recommendationsResult = await virtualTryOnService.getRecommendationsFromFitting({
-                                person: null,
-                                clothingItems: usedClothingItems,
-                                generatedImage: result.generatedImage,
-                                options,
-                                selectedProductIds: null,
-                            });
-                            setRecommendations(recommendationsResult.recommendations as any);
+                            console.error('내부 데이터 추천 실패:', e);
                         }
-                    } else {
-                        // 2) Fallback to image-based from-fitting when pos not available (uploaded images etc.)
-                        const options: RecommendationOptions = {};
-                        if (minPrice) options.minPrice = Number(minPrice);
-                        if (maxPrice) options.maxPrice = Number(maxPrice);
-                        const trimmed = excludeTagsInput.trim();
-                        if (trimmed) options.excludeTags = trimmed.split(',').map(t => t.trim()).filter(Boolean);
-
-                        // 입힌 아이템만 추천하도록 필터링 (아예 필드를 제외)
-                        const usedClothingItems: any = {};
-                        if (topImage) usedClothingItems.top = clothingItems.top;
-                        if (pantsImage) usedClothingItems.pants = clothingItems.pants;
-                        if (shoesImage) usedClothingItems.shoes = clothingItems.shoes;
-                        if (outerImage) usedClothingItems.outer = clothingItems.outer;
-
-                        const recommendationsResult = await virtualTryOnService.getRecommendationsFromFitting({
-                            person: null,
-                            clothingItems: usedClothingItems,
-                            generatedImage: result.generatedImage,
-                            options,
-                            selectedProductIds: null,
-                        });
-
-                        setRecommendations(recommendationsResult.recommendations as any);
                     }
-                } catch (recError) {
-                    console.error('Failed to get recommendations:', recError);
-                } finally {
-                    setIsLoadingRecommendations(false);
-                }
-            } else {
-                setError('The AI could not generate an image. Please try again with different images.');
-            }
-        } catch (err) {
-            console.error(err);
-            setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
-        } finally {
-            setIsLoading(false);
+
+                    // 2. 외부 데이터 추천 (새로운 로직)
+                    if (externalSlots.length > 0) {
+                        try {
+                            console.log('🔍 외부 데이터 추천 시작:', externalSlots);
+                            
+                            // 외부 데이터를 병렬로 처리 (API 클라이언트 사용)
+                            const externalPromises = externalSlots.map(async (slot) => {
+                                try {
+                                    const response = await apiClient.getExternalRecommendations(slot.slot, slot.data);
+                                    console.log(`🔍 ${slot.slot} 외부 추천 결과:`, response);
+                                    return { slot: slot.slot, recommendations: response.recommendations || [] };
+                                } catch (error) {
+                                    console.error(`${slot.slot} 외부 추천 에러:`, error);
+                                    return { slot: slot.slot, recommendations: [] };
+                                }
+                            });
+
+                            const externalResults = await Promise.all(externalPromises);
+                            
+                            // 외부 추천 결과를 전체 추천에 병합
+                            for (const result of externalResults) {
+                                allRecommendations[result.slot] = [...allRecommendations[result.slot], ...result.recommendations];
+                            }
+                            
+                            console.log('🔍 전체 추천 결과:', allRecommendations);
+                        } catch (e) {
+                            console.error('외부 데이터 추천 실패:', e);
+                        }
+                    }
+
+            // 3. 최종 추천 결과 반환
+            return allRecommendations;
+        } catch (error) {
+            console.error('추천 처리 실패:', error);
+            return null;
         }
-    }, [personImage, topImage, pantsImage, shoesImage, outerImage, minPrice, maxPrice, excludeTagsInput, originalItems, pantsLabel]);
+    }, [originalItems, topImage, pantsImage, shoesImage, outerImage]);
 
 
     // 버튼 활성화: 사람 있든 없든 의류 1개 이상이면 진행 가능

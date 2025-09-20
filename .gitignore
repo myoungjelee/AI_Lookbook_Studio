@@ -1,3 +1,8 @@
+# 외부 임베딩 명세 문서 무시
+docs/external_embedding_integration.md
+# embedding 전체 무시
+embedding/
+
 # Dependencies
 node_modules/
 npm-debug.log*

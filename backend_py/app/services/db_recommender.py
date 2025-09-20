@@ -265,5 +265,90 @@ class DbPosRecommender:
             out.append(p)
         return out
 
+    def recommend_by_embedding(
+        self,
+        query_embedding: List[float],
+        *,
+        category: Optional[str] = None,
+        top_k: int = 5,
+        alpha: float = 0.38,
+        w1: float = 0.97,
+        w2: float = 0.03,
+    ) -> List[Dict]:
+        """
+        외부 이미지에서 생성된 임베딩 벡터로 추천
+        
+        Args:
+            query_embedding: 쿼리 임베딩 벡터
+            category: 카테고리 필터 (top, pants, shoes, outer)
+            top_k: 반환할 추천 개수
+            alpha: 가격 가중치 파라미터
+            w1: 유사도 가중치
+            w2: 가격 가중치
+            
+        Returns:
+            List[Dict]: 추천 아이템 리스트
+        """
+        if not self.available():
+            raise RuntimeError("DbPosRecommender unavailable")
+
+        n = len(self.products)
+        k = max(1, min(int(top_k), n))
+        emb_norm = self.emb_norm  # type: ignore[assignment]
+        prices = self.prices  # type: ignore[assignment]
+
+        # 쿼리 벡터 정규화
+        query_vec = np.array(query_embedding, dtype=np.float32)
+        query_norm = np.linalg.norm(query_vec)
+        if query_norm == 0:
+            query_norm = 1e-8
+        query_vec = query_vec / query_norm
+
+        # 코사인 유사도 계산
+        sim = emb_norm @ query_vec
+        
+        # 가격 가중치 계산 (평균 가격 기준)
+        avg_price = float(prices.mean())
+        clog = np.log1p(prices)
+        qlog = np.log1p(avg_price)
+        price_score = np.exp(-alpha * np.abs(clog - qlog))
+        
+        # 최종 점수 계산
+        total = w1 * sim + w2 * price_score
+
+        # 카테고리 필터링
+        if category:
+            category_indices = []
+            for i, product in enumerate(self.products):
+                product_category = _normalize_slot(product.get("category", ""))
+                if product_category == category:
+                    category_indices.append(i)
+            
+            if not category_indices:
+                return []
+            
+            # 카테고리 필터링된 인덱스로 점수 재계산
+            filtered_total = np.full(n, -np.inf)
+            for idx in category_indices:
+                filtered_total[idx] = total[idx]
+            total = filtered_total
+
+        # 상위 k개 선택
+        if k >= n:
+            top_idx = np.argsort(-total)
+        else:
+            part = np.argpartition(-total, kth=k - 1)[:k]
+            top_idx = part[np.argsort(-total[part])]
+
+        out: List[Dict] = []
+        for i in top_idx.tolist():
+            if total[i] == -np.inf:  # 필터링된 항목 건너뛰기
+                continue
+            p = dict(self.products[i])
+            p["score"] = float(total[i])
+            out.append(p)
+        
+        return out
+
 
 db_pos_recommender = DbPosRecommender()

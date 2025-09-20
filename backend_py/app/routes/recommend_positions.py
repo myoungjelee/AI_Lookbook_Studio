@@ -269,7 +269,11 @@ def recommend_by_positions(req: PositionsRequest, response: Response) -> List[Re
 
     # Build per-category top-N so that every dressed category surfaces results
     selected: List[Dict] = []
-    use_llm = req.use_llm_rerank if req.use_llm_rerank is not None else llm_ranker.available()
+    # use_llm_rerank가 명시적으로 False면 LLM 사용 안함, None이면 기본값 사용
+    if req.use_llm_rerank is not None:
+        use_llm = req.use_llm_rerank
+    else:
+        use_llm = llm_ranker.available()
 
     # Helper: build simple analysis context
     def build_analysis_for(cat: str) -> Dict:

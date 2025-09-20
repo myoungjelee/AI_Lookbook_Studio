@@ -80,6 +80,76 @@ class AzureOpenAIService:
 
         return self._chat_to_json(content)
 
+    def analyze_clothing_item(self, image_data: Dict) -> str:
+        """옷 아이템만 분석하여 설명을 추출합니다."""
+        if not self.available():
+            raise RuntimeError("Azure OpenAI is not configured")
+        
+        content: List[Dict] = [
+            {"type": "text", "text": "이 옷의 스타일, 색상, 카테고리를 간단히 설명해주세요."},
+        ]
+        
+        # 이미지 데이터 추가
+        if image_data and image_data.get("base64"):
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{image_data.get('mimeType', 'image/jpeg')};base64,{image_data['base64']}"
+                }
+            })
+        
+        try:
+            if self.client:
+                response = self.client.chat.completions.create(
+                    model=self.deployment_id,
+                    messages=[{"role": "user", "content": content}],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                return response.choices[0].message.content or "옷 아이템"
+            else:
+                # HTTP fallback
+                return self._http_analyze_clothing(image_data)
+        except Exception as e:
+            print(f"❌ Azure OpenAI 옷 분석 실패: {e}")
+            return "옷 아이템"
+    
+    def _http_analyze_clothing(self, image_data: Dict) -> str:
+        """HTTP fallback for clothing analysis"""
+        try:
+            import httpx
+            with httpx.Client() as client:
+                response = client.post(
+                    f"{self.endpoint}/openai/deployments/{self.deployment_id}/chat/completions",
+                    headers={
+                        "api-key": self.api_key,
+                        "Content-Type": "application/json"
+                    },
+                    params={"api-version": self.api_version},
+                    json={
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "이 옷의 스타일, 색상, 카테고리를 간단히 설명해주세요."},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{image_data.get('mimeType', 'image/jpeg')};base64,{image_data['base64']}"
+                                    }
+                                }
+                            ]
+                        }],
+                        "temperature": self.temperature,
+                        "max_tokens": self.max_tokens
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"] or "옷 아이템"
+        except Exception as e:
+            print(f"❌ HTTP fallback 옷 분석 실패: {e}")
+            return "옷 아이템"
+
     def analyze_virtual_try_on(self, generated_image_data_uri: str) -> Dict:
         if not self.available():
             raise RuntimeError("Azure OpenAI is not configured")
