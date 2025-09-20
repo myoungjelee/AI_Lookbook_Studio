@@ -756,6 +756,8 @@ export const VirtualTryOnUI: React.FC = () => {
   const [excludeTagsInput, setExcludeTagsInput] = useState<string>("");
 
   // Random items to show before recommendations are available
+  type GenderFilter = 'all' | 'male' | 'female';
+  const [vtGender, setVtGender] = useState<GenderFilter>('all');
   const [randomItemsByCat, setRandomItemsByCat] = useState<{
     top: RecommendationItem[];
     pants: RecommendationItem[];
@@ -767,25 +769,26 @@ export const VirtualTryOnUI: React.FC = () => {
     try {
       setIsLoadingRandom(true);
       const per = Math.max(1, Math.floor(limit / 4)); // 4개 카테고리에 균등 분배
+      const gparam = vtGender && vtGender !== 'all' ? `&gender=${vtGender}` : '';
       const [tops, pants, shoes, outers] = await Promise.all([
         apiClient
           .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=top`
+            `/api/recommend/random?limit=${per}&category=top${gparam}`
           )
           .catch(() => [] as RecommendationItem[]),
         apiClient
           .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=pants`
+            `/api/recommend/random?limit=${per}&category=pants${gparam}`
           )
           .catch(() => [] as RecommendationItem[]),
         apiClient
           .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=shoes`
+            `/api/recommend/random?limit=${per}&category=shoes${gparam}`
           )
           .catch(() => [] as RecommendationItem[]),
         apiClient
           .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=outer`
+            `/api/recommend/random?limit=${per}&category=outer${gparam}`
           )
           .catch(() => [] as RecommendationItem[]),
       ]);
@@ -796,7 +799,7 @@ export const VirtualTryOnUI: React.FC = () => {
     } finally {
       setIsLoadingRandom(false);
     }
-  }, []);
+  }, [vtGender]);
   useEffect(() => {
     // Fetch once on mount; keep until proper recommendations arrive
     fetchRandom(12);
@@ -2257,6 +2260,34 @@ export const VirtualTryOnUI: React.FC = () => {
             </div>
             {/* close grid container */}
           </div>
+          {/* 좌측 세로 젠더 필터 버튼 (사이버 피팅 화면에도 적용) */}
+          <div className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-30">
+            <div className="flex flex-col gap-2 rounded-full border border-[var(--divider)] bg-white/90 p-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/70">
+              {([
+                { key: 'all', label: '전체' },
+                { key: 'male', label: '남성' },
+                { key: 'female', label: '여성' },
+              ] as { key: 'all' | 'male' | 'female'; label: string }[]).map(({ key, label }) => {
+                const active = vtGender === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setVtGender(key)}
+                    className={[
+                      'px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 text-left',
+                      active ? 'bg-black text-white shadow-sm' : 'text-[var(--text-strong)] hover:bg-gray-100',
+                    ].join(' ')}
+                    title={`${label} 상품만 보기`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Bottom full-width Random Items section */}
           <section className="mt-10">
             <Card>
