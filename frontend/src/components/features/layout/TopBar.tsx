@@ -1,10 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface TopBarProps {
   onNavigate?: (page: 'home' | 'try-on' | 'likes' | 'my') => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
+  const envLogo = (import.meta as any).env?.VITE_LOGO_URL as string | undefined;
+  const [logoSrc, setLogoSrc] = useState<string>(envLogo || '/logo.png');
+  const handleLogoError = () => {
+    if (!envLogo && logoSrc !== '/logo.jpg') {
+      setLogoSrc('/logo.jpg');
+    } else if (!envLogo && logoSrc !== '/logo.jpg.png') {
+      setLogoSrc('/logo.jpg.png');
+    } else {
+      // give up; keep empty to allow text fallback
+      setLogoSrc('');
+    }
+  };
   const primaryNav: Array<{ id: string; label: string; go?: 'home' | 'try-on' | 'likes' | 'my' }> = [
     { id: 'musinsa', label: 'MUSINSA', go: 'home' },
     { id: 'beauty', label: 'BEAUTY' },
@@ -37,23 +49,32 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-30 shadow-sm">
-      <div className="bg-[#111111] text-white">
+      <div className="bg-[#FEF8E7] text-gray-900">
         <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-6 px-8">
           {primaryNav.map((item, idx) => (
             <button
               key={item.id}
               onClick={() => item.go && onNavigate?.(item.go)}
-              className={`${idx === 0 ? 'text-lg font-extrabold tracking-tight' : 'text-sm font-medium tracking-wide'} hover:text-white/80 transition-colors`}
+              aria-label={idx === 0 ? 'Home' : undefined}
+              className={`${idx === 0 ? 'flex items-center' : 'text-sm font-medium tracking-wide hover:text-gray-700'} transition-colors`}
             >
-              {item.label}
+              {idx === 0 ? (
+                logoSrc ? (
+                  <img src={logoSrc} alt="logo" className="h-6 w-auto object-contain" onError={handleLogoError} />
+                ) : (
+                  <span className="text-lg font-extrabold tracking-tight">MUSINSA</span>
+                )
+              ) : (
+                item.label
+              )}
             </button>
           ))}
-          <div className="ml-auto flex items-center gap-4 text-xs text-gray-300">
+          <div className="ml-auto flex items-center gap-4 text-xs text-gray-600">
             {utilityNav.map(item => (
               <button
                 key={item.id}
                 onClick={() => item.go && onNavigate?.(item.go)}
-                className="transition-colors hover:text-white"
+                className="transition-colors hover:text-gray-900"
               >
                 {item.label}
               </button>
@@ -61,13 +82,13 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
-      <div className="border-t border-[#2c2c30] bg-[#1b1b1d] text-gray-200">
+      <div className="border-t border-[#ecdcb7] bg-[#FEF8E7] text-gray-900">
         <div className="mx-auto flex h-12 max-w-[1280px] items-center gap-5 px-8 text-sm">
           {secondaryNav.map((item, idx) => (
             <button
               key={item.id}
               onClick={() => item.go && onNavigate?.(item.go)}
-              className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-white/40 hover:text-white ${idx === 0 ? 'border-white text-white' : ''}`}
+              className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 ${idx === 0 ? 'border-gray-900 text-gray-900' : ''}`}
             >
               {item.label}
             </button>

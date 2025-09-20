@@ -85,6 +85,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ item, onBuy, onVirtualFitting
 
   const discount = item.discountRate ? Math.round(item.discountRate * 100) : item.discountPercentage;
 
+
   return (
     <article
       onClick={handleNavigate}
@@ -324,40 +325,21 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
     }
   };
 
+  // 상단 프로모션(헤드라인/배너/카테고리) 노출 플래그
+  const showTopPromos = false;
+  const showFilterChips = false;
+
   return (
     <div className="main-wrap">
       <div className="main-container">
-        <section className="headline-strip">
-          <div>
-            <div className="headline-strip__title">오늘의 스타일 추천</div>
-            <div className="headline-strip__meta">
-              <span>트렌드</span>
-              <span>빠른배송</span>
-              <span>베스트 픽</span>
-            </div>
-          </div>
-          <div className="headline-strip__actions">
-            <Button variant="outline" size="sm" onClick={() => onNavigate?.('try-on')}>
-              가상 피팅 이동
-            </Button>
-            <Button variant="ghost" size="sm" onClick={refresh} loading={loading}>
-              새로고침
-            </Button>
-          </div>
-        </section>
-
-        <section className="hero-section" aria-label="프로모션">
-          <PromoCarousel onTryOn={() => onNavigate?.('try-on')} />
-        </section>
-
-        <section className="category-showcase" aria-label="카테고리 둘러보기">
-          <CategoryRow />
-        </section>
+        {/* top promos removed */}
 
         <section className="filter-panel" aria-label="필터">
-          <div className="filter-panel__chips">
-            <FilterChips />
-          </div>
+          {showFilterChips && (
+            <div className="filter-panel__chips">
+              <FilterChips />
+            </div>
+          )}
           <div className="filter-panel__refresh">
             <Button onClick={refresh} size="sm" variant="outline" loading={loading}>
               추천 다시 받기
@@ -431,4 +413,5 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
 };
 
 export default ECommerceUI;
+
 

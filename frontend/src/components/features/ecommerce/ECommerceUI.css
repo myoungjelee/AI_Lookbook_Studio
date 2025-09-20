@@ -10,6 +10,13 @@
   padding: 0 32px;
 }
 
+/* 검색창 위 3개 박스 숨김: 헤드라인 스트립, 배너 슬라이드, 카테고리 쇼케이스 */
+.headline-strip,
+.hero-section,
+.category-showcase {
+  display: none !important;
+}
+
 @media (max-width: 1200px) {
   .main-container {
     padding: 0 28px;
