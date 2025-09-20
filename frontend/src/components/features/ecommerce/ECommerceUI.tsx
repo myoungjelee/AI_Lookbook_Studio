@@ -345,6 +345,26 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
 
   // 상단 프로모션(헤드라인/배너/카테고리) 노출 플래그
   const showTopPromos = false;
+  // TopBar 검색창과 연동: semantic-search 이벤트 수신 시 검색 실행
+  React.useEffect(() => {
+    const handler = async (ev: Event) => {
+      const anyEv = ev as any;
+      const q = (anyEv?.detail?.q || '').toString();
+      const limit = Number(anyEv?.detail?.limit || 24);
+      if (!q) return;
+      try {
+        const qs = new URLSearchParams({ q, limit: String(limit) }).toString();
+        const data = await apiClient.get<RecommendationItem[]>(`/api/search/semantic?${qs}`);
+        setGridItems(data);
+        setSearchQuery(q);
+      } catch (err) {
+        console.warn('semantic search failed (from TopBar)', err);
+      }
+    };
+    window.addEventListener('semantic-search' as any, handler);
+    return () => window.removeEventListener('semantic-search' as any, handler);
+  }, []);
+
   const showFilterChips = false;
 
   return (
@@ -394,26 +414,8 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* 검색 입력 줄: [검색어] [챗봇] [초기화] */}
-          <div style={{display:'flex',gap:'8px',alignItems:'center',margin:'6px 0 12px'}}>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={async (e) => {
-                if ((e as any).key === 'Enter') {
-                  try {
-                    const qs = new URLSearchParams({ q: searchQuery || '', limit: '24' }).toString();
-                    const data = await apiClient.get<RecommendationItem[]>(`/api/search/semantic?${qs}`);
-                    setGridItems(data);
-                  } catch (err) { console.warn('semantic search failed', err); }
-                }
-              }}
-              placeholder="검색어를 입력하고 Enter"
-              className="h-9 w-48 md:w-64 rounded-full border border-[var(--divider)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#111111]"
-            />
-            <Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new CustomEvent('open-search-chat'))}>챗봇</Button>
-            <Button size="sm" variant="outline" onClick={() => setGridItems(items)}>초기화</Button>
-          </div>
+          {/* 검색 입력은 TopBar로 이동. TopBar에서 'semantic-search' 이벤트를 발생시킵니다. */}
+          <div style={{display:'none'}} />
 
           <div className="section-title">
             <h2 className="section-title__heading">오늘의 베스트 선택</h2>
@@ -459,4 +461,3 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
 };
 
 export default ECommerceUI;
-

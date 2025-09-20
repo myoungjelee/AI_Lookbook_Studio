@@ -7,6 +7,7 @@ interface TopBarProps {
 export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
   const envLogo = (import.meta as any).env?.VITE_LOGO_URL as string | undefined;
   const [logoSrc, setLogoSrc] = useState<string>(envLogo || '/logo.png');
+  const [searchTerm, setSearchTerm] = useState('');
   const handleLogoError = () => {
     if (!envLogo && logoSrc !== '/logo.jpg') {
       setLogoSrc('/logo.jpg');
@@ -84,15 +85,35 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
       </div>
       <div className="border-t border-[#ecdcb7] bg-[#FEF8E7] text-gray-900">
         <div className="mx-auto flex h-12 max-w-[1280px] items-center gap-5 px-8 text-sm">
-          {secondaryNav.map((item, idx) => (
-            <button
-              key={item.id}
-              onClick={() => item.go && onNavigate?.(item.go)}
-              className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 ${idx === 0 ? 'border-gray-900 text-gray-900' : ''}`}
-            >
-              {item.label}
-            </button>
-          ))}
+          <div className="flex items-center gap-5">
+            {secondaryNav.map((item, idx) => (
+              <button
+                key={item.id}
+                onClick={() => item.go && onNavigate?.(item.go)}
+                className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 ${idx === 0 ? 'border-gray-900 text-gray-900' : ''}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {/* 검색창: 서브 탑 네비의 우측(유틸리티 아래) 배치 */}
+          <form
+            className="ml-auto flex items-center"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = searchTerm.trim();
+              window.dispatchEvent(new CustomEvent('semantic-search', { detail: { q, limit: 24 } }));
+            }}
+            role="search"
+            aria-label="상품 검색"
+          >
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="검색어를 입력하고 Enter"
+              className="h-9 w-56 md:w-72 rounded-full border border-[#dad0b8] bg-white px-4 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/30"
+            />
+          </form>
         </div>
       </div>
     </header>
