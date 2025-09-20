@@ -1,8 +1,22 @@
 import { isRetryableError, getRetryDelay, createErrorContext, reportError } from '../utils/errorHandling';
 
 // API Configuration
+const DEFAULT_BACKEND_FALLBACK = 'http://localhost:3001';
+
+const resolveBaseUrl = (): string => {
+    const raw = (import.meta.env.VITE_API_URL as string) || '';
+    const trimmed = raw.trim();
+    if (trimmed) {
+        return trimmed.replace(/\/+$/, '');
+    }
+    if (typeof window !== 'undefined') {
+        return '';
+    }
+    return DEFAULT_BACKEND_FALLBACK;
+};
+
 const API_CONFIG = {
-    baseUrl: (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001',
+    baseUrl: resolveBaseUrl(),
     timeout: 30000,
     retries: 3,
     retryDelay: 1000,
@@ -105,21 +119,21 @@ class ApiClient {
         const loadingKey = this.getLoadingKey(method, endpoint);
         let fallbackTried = false;
 
+        const upperMethod = method.toUpperCase();
+        const defaultHeaders: Record<string, string> = { ...options.headers };
+
         let config: RequestConfig = {
-            method: method.toUpperCase(),
+            method: upperMethod,
             url,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
+            headers: defaultHeaders,
             timeout: options.timeout || this.timeout,
         };
 
-        if (data) {
+        if (data !== undefined) {
             config.body = JSON.stringify(data);
+            config.headers = { 'Content-Type': 'application/json', ...config.headers };
         }
 
-        // Apply request interceptors
         for (const interceptor of this.requestInterceptors) {
             if (interceptor.onRequest) {
                 try {
@@ -138,18 +152,29 @@ class ApiClient {
         let lastError: ApiError;
 
         for (let attempt = 0; attempt <= this.retries; attempt++) {
+            let controller: AbortController | null = null;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), config.timeout);
+                controller = new AbortController();
+                timeoutId = setTimeout(() => {
+                    if (controller) {
+                        controller.abort();
+                    }
+                }, config.timeout);
 
                 const response = await fetch(config.url, {
                     method: config.method,
                     headers: config.headers,
                     body: config.body,
                     signal: controller.signal,
+                    keepalive: upperMethod === 'GET' ? true : false,
                 });
 
-                clearTimeout(timeoutId);
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
@@ -162,7 +187,6 @@ class ApiClient {
 
                 let result = await response.json();
 
-                // Apply response interceptors
                 for (const interceptor of this.responseInterceptors) {
                     if (interceptor.onResponse) {
                         result = await interceptor.onResponse(result);
@@ -173,47 +197,56 @@ class ApiClient {
                 return result;
 
             } catch (error) {
-                lastError = error instanceof ApiError
-                    ? error
-                    : new ApiError(
-                        error instanceof Error ? error.message : 'Network error',
-                        0,
-                        'NETWORK_ERROR'
-                    );
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
 
-                // One-time DNS/NETWORK fallback to same-origin or localhost:3001
-                const isNetworkError = lastError.code === 'NETWORK_ERROR';
+                const abortError = error instanceof DOMException && error.name === 'AbortError';
+                const abortedMessage = error instanceof Error && error.message === 'signal is aborted without reason';
+                if (abortError || abortedMessage) {
+                    lastError = new ApiError('Request timed out', 408, 'REQUEST_TIMEOUT');
+                } else {
+                    lastError = error instanceof ApiError
+                        ? error
+                        : new ApiError(
+                            error instanceof Error ? error.message : 'Network error',
+                            0,
+                            'NETWORK_ERROR'
+                        );
+                }
+
+                const networkLike = lastError.code === 'NETWORK_ERROR' || lastError.code === 'REQUEST_TIMEOUT';
                 const isAbsolute = /^https?:\/\//i.test(this.baseUrl);
-                if (isNetworkError && !fallbackTried && isAbsolute) {
+                if (networkLike && !fallbackTried && isAbsolute) {
                     fallbackTried = true;
                     const sameOrigin = (typeof window !== 'undefined' ? window.location.origin : '') || '';
-                    const fallbackBase = sameOrigin || 'http://localhost:3001';
+                    const fallbackBase = sameOrigin || DEFAULT_BACKEND_FALLBACK;
                     url = `${fallbackBase}${endpoint}`;
                     config.url = url;
-                    // immediate retry with fallback URL
                     continue;
                 }
 
-                // Apply response error interceptors
                 for (const interceptor of this.responseInterceptors) {
                     if (interceptor.onResponseError) {
                         lastError = await interceptor.onResponseError(lastError);
                     }
                 }
 
-                // Don't retry if it's not a retryable error
                 if (!isRetryableError(lastError)) {
                     break;
                 }
 
-                // Don't retry on the last attempt
                 if (attempt === this.retries) {
                     break;
                 }
 
-                // Wait before retrying with smart delay calculation
                 const delay = getRetryDelay(lastError, attempt);
                 await new Promise(resolve => setTimeout(resolve, delay));
+            } finally {
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                }
             }
         }
 

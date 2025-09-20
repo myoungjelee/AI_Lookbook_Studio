@@ -14,7 +14,7 @@ from ..models import (
 )
 from ..services.azure_openai_service import azure_openai_service
 from ..services.catalog import get_catalog_service
-from ..services.db_recommender import db_pos_recommender
+from ..services.db_recommender import db_pos_recommender, _normalize_gender as _db_norm_gender
 from ..services.llm_ranker import llm_ranker
 
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
@@ -132,30 +132,17 @@ def random_products(
 
     if gender:
         gq = (gender or "").strip().lower()
+        want = _db_norm_gender(gq)
+        # 남/여 요청 시 공용도 함께 포함
+        def match(prod_gender: str) -> bool:
+            ng = _db_norm_gender(prod_gender)
+            if want == "male":
+                return ng in {"male", "unisex"}
+            if want == "female":
+                return ng in {"female", "unisex"}
+            return ng == want
 
-        def norm_gender(s: str) -> str:
-            c = (s or "").strip().lower()
-            if not c:
-                return "unknown"
-            if any(k in c for k in ["male", "man", "men", "m", "남", "남성", "남자"]):
-                return "male"
-            if any(
-                k in c for k in ["female", "woman", "women", "w", "여", "여성", "여자"]
-            ):
-                return "female"
-            if any(k in c for k in ["unisex", "uni", "男女", "공용", "유니섹스"]):
-                return "unisex"
-            if any(
-                k in c for k in ["kid", "kids", "child", "children", "아동", "키즈"]
-            ):
-                return "kids"
-            return c
-
-        products = [
-            p
-            for p in products
-            if norm_gender(str(p.get("gender") or "")) == norm_gender(gq)
-        ]
+        products = [p for p in products if match(str(p.get("gender") or ""))]
 
     import random
 

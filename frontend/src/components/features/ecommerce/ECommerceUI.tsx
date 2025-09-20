@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './ECommerceUI.css';
 import { apiClient } from '../../../services/api.service';
+import { FALLBACK_RECOMMENDATIONS } from '../../../data/fallbackRecommendations';
 import { likesService } from '../../../services/likes.service';
 import type { RecommendationItem } from '../../../types';
 import { HeartIcon } from '../../icons/HeartIcon';
@@ -15,7 +16,9 @@ function formatPriceKRW(n: number) {
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(n);
 }
 
-const useRandomProducts = (limit: number = 24) => {
+type GenderFilter = 'all' | 'male' | 'female';
+
+const useRandomProducts = (limit: number = 24, gender: GenderFilter = 'all') => {
   const [items, setItems] = useState<RecommendationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,10 +27,24 @@ const useRandomProducts = (limit: number = 24) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.get<RecommendationItem[]>(`/api/recommend/random?limit=${limit}`);
-      setItems(data);
+      const qs = new URLSearchParams({ limit: String(limit) });
+      if (gender && gender !== 'all') qs.set('gender', gender);
+      const data = await apiClient.get<RecommendationItem[]>(`/api/recommend/random?${qs.toString()}`, { timeout: 45000 });
+      if (!Array.isArray(data) || data.length === 0) {
+        setItems(FALLBACK_RECOMMENDATIONS.slice(0, limit));
+        setError('추천 상품이 비어 있어 기본 목록을 표시합니다.');
+      } else {
+        setItems(data);
+      }
     } catch (e: any) {
-      setError(e?.message || '추천 상품을 불러오는 데 실패했습니다.');
+      setItems(FALLBACK_RECOMMENDATIONS.slice(0, limit));
+      const message = (e?.message || '추천 상품을 불러오는 데 실패했습니다.').toString();
+      const lower = message.toLowerCase();
+      if (lower.includes('abort') || lower.includes('timeout')) {
+        setError('서버 응답이 지연되어 기본 추천 목록을 보여드립니다.');
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -35,7 +52,7 @@ const useRandomProducts = (limit: number = 24) => {
 
   useEffect(() => {
     fetchItems();
-  }, []);
+  }, [gender, limit]);
 
   return { items, loading, error, refresh: fetchItems };
 };
@@ -259,7 +276,8 @@ const PromoCarousel: React.FC<PromoCarouselProps> = ({ onTryOn }) => {
 };
 
 export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { items, loading, error, refresh } = useRandomProducts(24);
+  const [gender, setGender] = useState<GenderFilter>('all');
+  const { items, loading, error, refresh } = useRandomProducts(24, gender);
   const [gridItems, setGridItems] = useState<RecommendationItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -348,6 +366,34 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
         </section>
 
         <section className="product-section" aria-label="추천 상품">
+          {/* 좌측 세로 젠더 필터 버튼 (데스크톱에서만 노출) */}
+          <div className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-30">
+            <div className="flex flex-col gap-2 rounded-full border border-[var(--divider)] bg-white/90 p-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/70">
+              {([
+                {key: 'all', label: '전체'},
+                {key: 'male', label: '남성'},
+                {key: 'female', label: '여성'},
+              ] as {key: GenderFilter; label: string}[]).map(({key, label}) => {
+                const active = gender === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setGender(key)}
+                    className={[
+                      'px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 text-left',
+                      active ? 'bg-black text-white shadow-sm' : 'text-[var(--text-strong)] hover:bg-gray-100',
+                    ].join(' ')}
+                    title={`${label} 상품만 보기`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 검색 입력 줄: [검색어] [챗봇] [초기화] */}
           <div style={{display:'flex',gap:'8px',alignItems:'center',margin:'6px 0 12px'}}>
             <input
@@ -413,5 +459,4 @@ export const ECommerceUI: React.FC<HomeProps> = ({ onNavigate }) => {
 };
 
 export default ECommerceUI;
-
 
