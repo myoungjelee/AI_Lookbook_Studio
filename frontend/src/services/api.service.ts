@@ -8,7 +8,7 @@ import { SlotItem } from "../utils/slotClassifier";
 
 // API Configuration
 const API_CONFIG = {
-  baseUrl: (import.meta.env as any).VITE_API_URL || "http://localhost:3001",
+  baseUrl: import.meta.env.VITE_API_URL || "http://localhost:3001",
   timeout: 30000,
   retries: 3,
   retryDelay: 1000,
