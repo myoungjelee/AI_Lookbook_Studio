@@ -81,7 +81,7 @@ const HistoryItemCard: React.FC<HistoryItemCardProps> = ({ item, onApply, getHis
         outerProduct: item.outerProduct
       })}
       className="relative w-40 aspect-[4/5] rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition"
-      title="클릭하면 입력을 적용합니다"
+      title="클릭하면 기록을 적용합니다"
     >
       {loading ? (
         <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
@@ -126,7 +126,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
     setOutputs(newOutputs);
   };
 
-  // 더 이상 API 호출이 필요하지 않음 (상품 데이터가 히스토리에 저장됨)
+  // 추가 API 호출이 필요 없는 구조 (상품 메타데이터가 히스토리에 포함됨)
 
   // 히스토리 아이템의 대표 이미지를 가져오는 함수 (실제 선택된 아이템 우선)
   const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
@@ -205,7 +205,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
     if (sortMode === 'recent') {
       arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
     } else {
-      // 랭킹순 정렬 (평가 점수 기준)
+      // 랭킹 모드 정렬 (평가 점수 기준)
       arr.sort((a, b) => {
         const scoreA = a.evaluation?.score || 0;
         const scoreB = b.evaluation?.score || 0;
