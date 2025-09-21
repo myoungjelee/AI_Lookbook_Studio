@@ -8,16 +8,16 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
   const envLogo = (import.meta as any).env?.VITE_LOGO_URL as string | undefined;
   const [logoSrc, setLogoSrc] = useState<string>(envLogo || '/logo.png');
   const [searchTerm, setSearchTerm] = useState('');
-  const handleLogoError = () => {
-    if (!envLogo && logoSrc !== '/logo.jpg') {
-      setLogoSrc('/logo.jpg');
-    } else if (!envLogo && logoSrc !== '/logo.jpg.png') {
-      setLogoSrc('/logo.jpg.png');
-    } else {
-      // give up; keep empty to allow text fallback
-      setLogoSrc('');
-    }
-  };
+  // const handleLogoError = () => {
+  //   if (!envLogo && logoSrc !== '/logo.jpg') {
+  //     setLogoSrc('/logo.jpg');
+  //   } else if (!envLogo && logoSrc !== '/logo.jpg.png') {
+  //     setLogoSrc('/logo.jpg.png');
+  //   } else {
+  //     // give up; keep empty to allow text fallback
+  //     setLogoSrc('');
+  //   }
+  // };
   const primaryNav: Array<{ id: string; label: string; go?: 'home' | 'try-on' | 'likes' | 'my' }> = [
     { id: 'musinsa', label: 'MUSINSA', go: 'home' },
     { id: 'beauty', label: 'BEAUTY' },
@@ -61,7 +61,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
             >
               {idx === 0 ? (
                 logoSrc ? (
-                  <img src={logoSrc} alt="logo" className="h-6 w-auto object-contain" onError={handleLogoError} />
+                  <img src={logoSrc} alt="logo" className="h-6 w-auto object-contain" />
                 ) : (
                   <span className="text-lg font-extrabold tracking-tight">MUSINSA</span>
                 )
