@@ -756,8 +756,8 @@ export const VirtualTryOnUI: React.FC = () => {
   const [excludeTagsInput, setExcludeTagsInput] = useState<string>("");
 
   // Random items to show before recommendations are available
-  type GenderFilter = 'all' | 'male' | 'female';
-  const [vtGender, setVtGender] = useState<GenderFilter>('all');
+  type GenderFilter = "all" | "male" | "female";
+  const [vtGender, setVtGender] = useState<GenderFilter>("all");
   const [randomItemsByCat, setRandomItemsByCat] = useState<{
     top: RecommendationItem[];
     pants: RecommendationItem[];
@@ -765,41 +765,45 @@ export const VirtualTryOnUI: React.FC = () => {
     outer: RecommendationItem[];
   }>({ top: [], pants: [], shoes: [], outer: [] });
   const [isLoadingRandom, setIsLoadingRandom] = useState<boolean>(false);
-  const fetchRandom = useCallback(async (limit: number = 12) => {
-    try {
-      setIsLoadingRandom(true);
-      const per = Math.max(1, Math.floor(limit / 4)); // 4개 카테고리에 균등 분배
-      const gparam = vtGender && vtGender !== 'all' ? `&gender=${vtGender}` : '';
-      const [tops, pants, shoes, outers] = await Promise.all([
-        apiClient
-          .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=top${gparam}`
-          )
-          .catch(() => [] as RecommendationItem[]),
-        apiClient
-          .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=pants${gparam}`
-          )
-          .catch(() => [] as RecommendationItem[]),
-        apiClient
-          .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=shoes${gparam}`
-          )
-          .catch(() => [] as RecommendationItem[]),
-        apiClient
-          .get<RecommendationItem[]>(
-            `/api/recommend/random?limit=${per}&category=outer${gparam}`
-          )
-          .catch(() => [] as RecommendationItem[]),
-      ]);
-      setRandomItemsByCat({ top: tops, pants, shoes, outer: outers });
-    } catch (e) {
-      // ignore silently
-      setRandomItemsByCat({ top: [], pants: [], shoes: [], outer: [] });
-    } finally {
-      setIsLoadingRandom(false);
-    }
-  }, [vtGender]);
+  const fetchRandom = useCallback(
+    async (limit: number = 12) => {
+      try {
+        setIsLoadingRandom(true);
+        const per = Math.max(1, Math.floor(limit / 4)); // 4개 카테고리에 균등 분배
+        const gparam =
+          vtGender && vtGender !== "all" ? `&gender=${vtGender}` : "";
+        const [tops, pants, shoes, outers] = await Promise.all([
+          apiClient
+            .get<RecommendationItem[]>(
+              `/api/recommend/random?limit=${per}&category=top${gparam}`
+            )
+            .catch(() => [] as RecommendationItem[]),
+          apiClient
+            .get<RecommendationItem[]>(
+              `/api/recommend/random?limit=${per}&category=pants${gparam}`
+            )
+            .catch(() => [] as RecommendationItem[]),
+          apiClient
+            .get<RecommendationItem[]>(
+              `/api/recommend/random?limit=${per}&category=shoes${gparam}`
+            )
+            .catch(() => [] as RecommendationItem[]),
+          apiClient
+            .get<RecommendationItem[]>(
+              `/api/recommend/random?limit=${per}&category=outer${gparam}`
+            )
+            .catch(() => [] as RecommendationItem[]),
+        ]);
+        setRandomItemsByCat({ top: tops, pants, shoes, outer: outers });
+      } catch (e) {
+        // ignore silently
+        setRandomItemsByCat({ top: [], pants: [], shoes: [], outer: [] });
+      } finally {
+        setIsLoadingRandom(false);
+      }
+    },
+    [vtGender]
+  );
   useEffect(() => {
     // Fetch once on mount; keep until proper recommendations arrive
     fetchRandom(12);
@@ -2263,11 +2267,13 @@ export const VirtualTryOnUI: React.FC = () => {
           {/* 좌측 세로 젠더 필터 버튼 (사이버 피팅 화면에도 적용) */}
           <div className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-30">
             <div className="flex flex-col gap-2 rounded-full border border-[var(--divider)] bg-white/90 p-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/70">
-              {([
-                { key: 'all', label: '전체' },
-                { key: 'male', label: '남성' },
-                { key: 'female', label: '여성' },
-              ] as { key: 'all' | 'male' | 'female'; label: string }[]).map(({ key, label }) => {
+              {(
+                [
+                  { key: "all", label: "전체" },
+                  { key: "male", label: "남성" },
+                  { key: "female", label: "여성" },
+                ] as { key: "all" | "male" | "female"; label: string }[]
+              ).map(({ key, label }) => {
                 const active = vtGender === key;
                 return (
                   <button
@@ -2276,9 +2282,11 @@ export const VirtualTryOnUI: React.FC = () => {
                     aria-pressed={active}
                     onClick={() => setVtGender(key)}
                     className={[
-                      'px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 text-left',
-                      active ? 'bg-black text-white shadow-sm' : 'text-[var(--text-strong)] hover:bg-gray-100',
-                    ].join(' ')}
+                      "px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 text-left",
+                      active
+                        ? "bg-black text-white shadow-sm"
+                        : "text-[var(--text-strong)] hover:bg-gray-100",
+                    ].join(" ")}
                     title={`${label} 상품만 보기`}
                   >
                     {label}
@@ -2292,64 +2300,173 @@ export const VirtualTryOnUI: React.FC = () => {
           <section className="mt-10">
             <Card>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-800">랜덤 아이템</h2>
-                <Button size="sm" onClick={() => fetchRandom(12)} loading={isLoadingRandom}>새로고침</Button>
+                <h2 className="text-2xl font-bold text-gray-800">
+                  랜덤 아이템
+                </h2>
+                <Button
+                  size="sm"
+                  onClick={() => fetchRandom(12)}
+                  loading={isLoadingRandom}
+                >
+                  새로고침
+                </Button>
               </div>
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">상의</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    상의
+                  </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.top.map(item => (
-                      <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item, 'top')} padding="sm">
-                        <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedTopId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
-                          {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
+                    {randomItemsByCat.top.map((item) => (
+                      <Card
+                        key={item.id}
+                        className="cursor-pointer hover:shadow-lg transition-shadow"
+                        onClick={() => addToSlotForced(item, "top")}
+                        padding="sm"
+                      >
+                        <div
+                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                            selectedTopId === String(item.id)
+                              ? "ring-2 ring-blue-500"
+                              : ""
+                          }`}
+                        >
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </div>
-                        <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
+                        <p
+                          className="text-xs text-gray-700 truncate"
+                          title={item.title}
+                        >
+                          {item.title}
+                        </p>
                       </Card>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">하의</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    하의
+                  </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.pants.map(item => (
-                      <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item, 'pants')} padding="sm">
-                        <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedPantsId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
-                          {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
+                    {randomItemsByCat.pants.map((item) => (
+                      <Card
+                        key={item.id}
+                        className="cursor-pointer hover:shadow-lg transition-shadow"
+                        onClick={() => addToSlotForced(item, "pants")}
+                        padding="sm"
+                      >
+                        <div
+                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                            selectedPantsId === String(item.id)
+                              ? "ring-2 ring-blue-500"
+                              : ""
+                          }`}
+                        >
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </div>
-                        <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
+                        <p
+                          className="text-xs text-gray-700 truncate"
+                          title={item.title}
+                        >
+                          {item.title}
+                        </p>
                       </Card>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">아우터</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    아우터
+                  </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.outer.map(item => (
-                      <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item, 'outer')} padding="sm">
-                        <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedOuterId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
-                          {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
+                    {randomItemsByCat.outer.map((item) => (
+                      <Card
+                        key={item.id}
+                        className="cursor-pointer hover:shadow-lg transition-shadow"
+                        onClick={() => addToSlotForced(item, "outer")}
+                        padding="sm"
+                      >
+                        <div
+                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                            selectedOuterId === String(item.id)
+                              ? "ring-2 ring-blue-500"
+                              : ""
+                          }`}
+                        >
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </div>
-                        <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
+                        <p
+                          className="text-xs text-gray-700 truncate"
+                          title={item.title}
+                        >
+                          {item.title}
+                        </p>
                       </Card>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">신발</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    신발
+                  </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.shoes.map(item => (
-                      <Card key={item.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => addToSlotForced(item, 'shoes')} padding="sm">
-                        <div className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${selectedShoesId === String(item.id) ? 'ring-2 ring-blue-500' : ''}`}>
-                          {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />}
+                    {randomItemsByCat.shoes.map((item) => (
+                      <Card
+                        key={item.id}
+                        className="cursor-pointer hover:shadow-lg transition-shadow"
+                        onClick={() => addToSlotForced(item, "shoes")}
+                        padding="sm"
+                      >
+                        <div
+                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                            selectedShoesId === String(item.id)
+                              ? "ring-2 ring-blue-500"
+                              : ""
+                          }`}
+                        >
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </div>
-                        <p className="text-xs text-gray-700 truncate" title={item.title}>{item.title}</p>
+                        <p
+                          className="text-xs text-gray-700 truncate"
+                          title={item.title}
+                        >
+                          {item.title}
+                        </p>
                       </Card>
                     ))}
                   </div>
                 </div>
-                {randomItemsByCat.top.length + randomItemsByCat.pants.length + randomItemsByCat.shoes.length === 0 && (
-                  <div className="text-center text-gray-500 py-6">아이템을 불러올 수 없거나 결과가 없습니다.</div>
+                {randomItemsByCat.top.length +
+                  randomItemsByCat.pants.length +
+                  randomItemsByCat.shoes.length ===
+                  0 && (
+                  <div className="text-center text-gray-500 py-6">
+                    아이템을 불러올 수 없거나 결과가 없습니다.
+                  </div>
                 )}
               </div>
             </Card>
