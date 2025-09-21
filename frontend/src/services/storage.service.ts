@@ -14,7 +14,7 @@ const STORAGE_CONFIG: StorageItem[] = [
   {
     key: "app:tryon:history:outputs:v1",
     priority: 1, // 출력 히스토리 (이미지가 많아서 용량 많이 차지)
-    maxItems: 10,
+    maxItems: 12,
     getItems: () => {
       try {
         const raw = localStorage.getItem("app:tryon:history:outputs:v1");
@@ -35,7 +35,7 @@ const STORAGE_CONFIG: StorageItem[] = [
   {
     key: "app:tryon:history:inputs:v1",
     priority: 2, // 입력 히스토리
-    maxItems: 10,
+    maxItems: 12,
     getItems: () => {
       try {
         const raw = localStorage.getItem("app:tryon:history:inputs:v1");

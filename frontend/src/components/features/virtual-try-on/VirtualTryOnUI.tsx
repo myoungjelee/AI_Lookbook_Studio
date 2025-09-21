@@ -1335,20 +1335,21 @@ const toPlayable = (u: string) => (u && u.startsWith('gs://')) ? `/api/try-on/vi
                                 console.log('🔔 히스토리에서 적용 시도:', payload);
                                 
                                 // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
+                                // 실제로 선택된 아이템들만 처리 (라벨이 있는 것들)
                                 
-                                if (payload.topProduct) {
+                                if (payload.topLabel && payload.topProduct) {
                                     console.log('🔔 상의 적용:', payload.topProduct.title);
                                     await addCatalogItemToSlot(payload.topProduct, false);
                                 }
-                                if (payload.pantsProduct) {
+                                if (payload.pantsLabel && payload.pantsProduct) {
                                     console.log('🔔 하의 적용:', payload.pantsProduct.title);
                                     await addCatalogItemToSlot(payload.pantsProduct, false);
                                 }
-                                if (payload.shoesProduct) {
+                                if (payload.shoesLabel && payload.shoesProduct) {
                                     console.log('🔔 신발 적용:', payload.shoesProduct.title);
                                     await addCatalogItemToSlot(payload.shoesProduct, false);
                                 }
-                                if (payload.outerProduct) {
+                                if (payload.outerLabel && payload.outerProduct) {
                                     console.log('🔔 아우터 적용:', payload.outerProduct.title);
                                     await addCatalogItemToSlot(payload.outerProduct, false);
                                 }
