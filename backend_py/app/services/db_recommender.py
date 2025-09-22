@@ -239,6 +239,43 @@ class DbPosRecommender:
     def available(self) -> bool:
         return self.emb_norm is not None and len(self.products) > 0
 
+    def _calculate_similarity_scores(
+        self, 
+        query_vec: np.ndarray, 
+        *, 
+        alpha: float = 0.38, 
+        w1: float = 0.97, 
+        w2: float = 0.03
+    ) -> np.ndarray:
+        """
+        코사인 유사도 + 가격 가중치 계산 공통 함수
+        
+        Args:
+            query_vec: 정규화된 쿼리 벡터
+            alpha: 가격 가중치 파라미터
+            w1: 유사도 가중치
+            w2: 가격 가중치
+            
+        Returns:
+            np.ndarray: 최종 점수 배열
+        """
+        emb_norm = self.emb_norm  # type: ignore[assignment]
+        prices = self.prices  # type: ignore[assignment]
+        
+        # 코사인 유사도 계산
+        sim = emb_norm @ query_vec
+        
+        # 가격 가중치 계산
+        avg_price = float(prices.mean())
+        clog = np.log1p(prices)
+        qlog = np.log1p(avg_price)
+        price_score = np.exp(-alpha * np.abs(clog - qlog))
+        
+        # 최종 점수 계산
+        total = w1 * sim + w2 * price_score
+        
+        return total
+
     def recommend(
         self,
         positions: List[int],
@@ -257,20 +294,16 @@ class DbPosRecommender:
 
         k = max(1, min(int(top_k), n))
         emb_norm = self.emb_norm  # type: ignore[assignment]
-        prices = self.prices  # type: ignore[assignment]
 
+        # 쿼리 벡터 생성 및 정규화
         q = emb_norm[positions].mean(axis=0)
         qn = np.linalg.norm(q)
         if qn == 0:
             qn = 1e-8
         q = q / qn
 
-        sim = emb_norm @ q
-        qprice = float(prices[positions].mean())
-        clog = np.log1p(prices)
-        qlog = np.log1p(qprice)
-        price_score = np.exp(-alpha * np.abs(clog - qlog))
-        total = w1 * sim + w2 * price_score
+        # 공통 함수로 점수 계산
+        total = self._calculate_similarity_scores(q, alpha=alpha, w1=w1, w2=w2)
         total[np.array(positions, dtype=int)] = -np.inf
 
         if k >= n:
@@ -315,8 +348,6 @@ class DbPosRecommender:
 
         n = len(self.products)
         k = max(1, min(int(top_k), n))
-        emb_norm = self.emb_norm  # type: ignore[assignment]
-        prices = self.prices  # type: ignore[assignment]
 
         # 쿼리 벡터 정규화
         query_vec = np.array(query_embedding, dtype=np.float32)
@@ -325,17 +356,8 @@ class DbPosRecommender:
             query_norm = 1e-8
         query_vec = query_vec / query_norm
 
-        # 코사인 유사도 계산
-        sim = emb_norm @ query_vec
-        
-        # 가격 가중치 계산 (평균 가격 기준)
-        avg_price = float(prices.mean())
-        clog = np.log1p(prices)
-        qlog = np.log1p(avg_price)
-        price_score = np.exp(-alpha * np.abs(clog - qlog))
-        
-        # 최종 점수 계산
-        total = w1 * sim + w2 * price_score
+        # 공통 함수로 점수 계산
+        total = self._calculate_similarity_scores(query_vec, alpha=alpha, w1=w1, w2=w2)
 
         # 카테고리 필터링
         if category:

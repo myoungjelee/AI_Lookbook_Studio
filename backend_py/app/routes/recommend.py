@@ -28,6 +28,56 @@ def _candidate_budget(opts: RecommendationOptions) -> int:
     return base * 4
 
 
+def _convert_analysis_to_text(analysis: dict) -> str:
+    """
+    GPT-4.1 Mini 분석 결과를 임베딩 서버에 전송할 텍스트로 변환
+    """
+    text_parts = []
+    
+    # 전체 스타일
+    if "overall_style" in analysis:
+        text_parts.append(f"Overall style: {', '.join(analysis['overall_style'])}")
+    
+    # 카테고리별 스타일
+    for category in ["top", "pants", "shoes", "outer"]:
+        if category in analysis and analysis[category]:
+            text_parts.append(f"{category}: {', '.join(analysis[category])}")
+    
+    # 색상
+    if "colors" in analysis:
+        text_parts.append(f"Colors: {', '.join(analysis['colors'])}")
+    
+    # 태그
+    if "tags" in analysis:
+        text_parts.append(f"Tags: {', '.join(analysis['tags'])}")
+    
+    # 캡션
+    if "captions" in analysis:
+        text_parts.append(f"Description: {', '.join(analysis['captions'])}")
+    
+    return ". ".join(text_parts) if text_parts else "casual style clothing"
+
+
+def _format_db_recommendations(db_recs: list) -> dict:
+    """
+    DB 추천 결과를 카테고리별로 포맷팅
+    """
+    formatted = {
+        "top": [],
+        "pants": [],
+        "shoes": [],
+        "outer": [],
+        "accessories": []
+    }
+    
+    for rec in db_recs:
+        category = rec.get("category", "top").lower()
+        if category in formatted:
+            formatted[category].append(rec)
+    
+    return formatted
+
+
 def _requested_slots(
     clothing: ClothingItems | None = None,
     selected_ids: dict[str, str] | None = None,
@@ -321,8 +371,10 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
             analysis = azure_openai_service.analyze_style_from_images(
                 req.person, req.clothingItems
             )
+            print(f"🤖 GPT-4.1 Mini 스타일 분석 결과: {analysis}")
             analysis_method = "ai"
-        except Exception:
+        except Exception as e:
+            print(f"❌ GPT-4.1 Mini 분석 실패: {e}")
             analysis = {}
             analysis_method = "fallback"
     if not analysis:
@@ -335,13 +387,50 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
 
     svc = get_catalog_service()
     opts = req.options if req.options is not None else RecommendationOptions()
-    candidate_recs = _build_candidates(analysis, svc, opts)
+    
+    # 1. 임베딩 서버 연동으로 벡터 기반 추천 시도
+    candidate_recs = {}
+    if embedding_client.available() and analysis:
+        try:
+            print(f"🔍 임베딩 서버로 분석 결과 전송 중...")
+            # 분석 결과를 텍스트로 변환
+            analysis_text = _convert_analysis_to_text(analysis)
+            print(f"📝 분석 텍스트: {analysis_text}")
+            
+            # 임베딩 서버에서 벡터 생성
+            embedding_vector = embedding_client.get_embedding(analysis_text)
+            print(f"✅ 임베딩 벡터 생성 완료 (길이: {len(embedding_vector)})")
+            
+            # DB에서 임베딩 기반 추천 (by-positions와 동일한 방식)
+            if db_pos_recommender.available():
+                print(f"🗄️ DB에서 임베딩 기반 추천 중...")
+                # 임베딩 기반 추천 사용
+                db_recs = db_pos_recommender.recommend_by_embedding(
+                    query_embedding=embedding_vector,
+                    top_k=opts.maxPerCategory or 3,
+                    alpha=0.7,  # 임베딩 가중치
+                    w1=0.8,     # 스타일 가중치
+                    w2=0.2,     # 가격 가중치
+                )
+                print(f"📊 DB 추천 결과: {len(db_recs)}개")
+                candidate_recs = _format_db_recommendations(db_recs)
+            else:
+                print(f"⚠️ DB 추천 서비스 사용 불가, CatalogService로 폴백")
+                candidate_recs = _build_candidates(analysis, svc, opts)
+        except Exception as e:
+            print(f"❌ 임베딩 서버 연동 실패: {e}")
+            print(f"🔄 CatalogService로 폴백")
+            candidate_recs = _build_candidates(analysis, svc, opts)
+    else:
+        print(f"⚠️ 임베딩 서버 사용 불가 또는 분석 결과 없음, CatalogService 사용")
+        candidate_recs = _build_candidates(analysis, svc, opts)
 
     selected_ids = dict(req.selectedProductIds or {})
     active_slots = _requested_slots(
         req.clothingItems, selected_ids if selected_ids else None
     )
 
+    # 기존 임베딩 추천도 시도 (selectedProductIds가 있는 경우)
     embed_recs = _embedded_recommendations(
         selected_ids,
         opts.maxPerCategory or 3,
@@ -402,88 +491,4 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
     )
 
 
-@router.post("/from-fitting")
-def recommend_from_fitting(
-    req: RecommendationFromFittingRequest,
-) -> RecommendationResponse:
-    # For fitting: prefer Azure analysis on generated image
-    analysis_method = "fallback"
-    analysis = {
-        "overall_style": ["casual", "relaxed"],
-        "categories": ["top", "pants", "shoes", "outer"],
-    }
-    if azure_openai_service.available() and req.generatedImage:
-        try:
-            analysis = azure_openai_service.analyze_virtual_try_on(req.generatedImage)
-            analysis_method = "ai"
-        except Exception:
-            analysis_method = "fallback"
-    svc = get_catalog_service()
-    opts = req.options if req.options is not None else RecommendationOptions()
-    candidate_recs = _build_candidates(analysis, svc, opts)
-
-    selected_ids = dict(req.selectedProductIds or {})
-    # originalClothingItems 대신 clothingItems 사용 (프론트엔드에서 전송하는 필드명)
-    clothing_items = getattr(req, "clothingItems", None) or getattr(
-        req, "originalClothingItems", None
-    )
-    active_slots = _requested_slots(
-        clothing_items, selected_ids if selected_ids else None
-    )
-    # If user didn't explicitly provide slots, infer from analysis of generated image
-    if not active_slots:
-        inferred = _infer_slots_from_analysis(analysis)
-        if inferred:
-            active_slots = inferred
-
-    embed_recs = _embedded_recommendations(
-        selected_ids,
-        opts.maxPerCategory or 3,
-    )
-    if embed_recs:
-        for cat, items in embed_recs.items():
-            if items:
-                candidate_recs[cat] = items
-    # Strict slot gating: only return categories the user actually provided
-    # If no slots are active, suppress all category recommendations
-    for cat in list(candidate_recs.keys()):
-        if not active_slots or cat not in active_slots:
-            candidate_recs[cat] = []
-
-    max_k = opts.maxPerCategory or 3
-    user_llm_pref = opts.useLLMRerank
-    use_llm = user_llm_pref if user_llm_pref is not None else llm_ranker.available()
-    if use_llm and llm_ranker.available():
-        ids = llm_ranker.rerank(analysis, candidate_recs, top_k=max_k)
-        if ids:
-            recs = {cat: [] for cat in candidate_recs.keys()}
-            for cat in candidate_recs.keys():
-                idx = {str(p["id"]): p for p in candidate_recs[cat]}
-                for _id in ids.get(cat, []):
-                    if _id in idx:
-                        recs[cat].append(idx[_id])
-                for p in candidate_recs[cat]:
-                    if len(recs[cat]) >= max_k:
-                        break
-                    if p not in recs[cat]:
-                        recs[cat].append(p)
-        else:
-            recs = {cat: (candidate_recs[cat][:max_k]) for cat in candidate_recs.keys()}
-    else:
-        recs = {cat: (candidate_recs[cat][:max_k]) for cat in candidate_recs.keys()}
-
-    as_model = CategoryRecommendations(
-        top=[RecommendationItem(**p) for p in recs.get("top", [])],
-        pants=[RecommendationItem(**p) for p in recs.get("pants", [])],
-        shoes=[RecommendationItem(**p) for p in recs.get("shoes", [])],
-        outer=[RecommendationItem(**p) for p in recs.get("outer", [])],
-        accessories=[RecommendationItem(**p) for p in recs.get("accessories", [])],
-    )
-
-    return RecommendationResponse(
-        recommendations=as_model,
-        analysisMethod=analysis_method,
-        styleAnalysis=analysis if analysis_method == "ai" else None,
-        requestId=f"req_{int(datetime.utcnow().timestamp())}",
-        timestamp=datetime.utcnow().isoformat() + "Z",
-    )
+# from-fitting API 제거됨 - recommend API로 통합
