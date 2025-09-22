@@ -1,109 +1,43 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tryOnHistory, TryOnInputHistoryItem, TryOnOutputHistoryItem } from '../../../services/tryon_history.service';
-import type { RecommendationItem } from '../../../types';
+import type { RecommendationItem, UploadedImage } from '../../../types';
 import { Button, Card } from '../../ui';
 import { FullScreenImage } from '../common/FullScreenImage';
+import { ImageHistoryCard } from './ImageHistoryCard';
+import { ProductHistoryCard } from './ProductHistoryCard';
 
 interface TryOnHistoryProps {
   onApply?: (payload: { 
-    person?: string; 
-    top?: string; 
-    pants?: string; 
-    shoes?: string; 
-    topLabel?: string; 
-    pantsLabel?: string; 
-    shoesLabel?: string; 
-    outerLabel?: string;
     topProduct?: RecommendationItem;
     pantsProduct?: RecommendationItem;
     shoesProduct?: RecommendationItem;
     outerProduct?: RecommendationItem;
   }) => void;
+  onImageApply?: (slot: 'top' | 'pants' | 'shoes' | 'outer', image: UploadedImage, label: string) => Promise<void>;
 }
 
 interface HistoryItemCardProps {
   item: TryOnInputHistoryItem;
   onApply?: (payload: { 
-    person?: string; 
-    top?: string; 
-    pants?: string; 
-    shoes?: string; 
-    topLabel?: string; 
-    pantsLabel?: string; 
-    shoesLabel?: string; 
-    outerLabel?: string;
     topProduct?: RecommendationItem;
     pantsProduct?: RecommendationItem;
     shoesProduct?: RecommendationItem;
     outerProduct?: RecommendationItem;
   }) => void;
-  getHistoryItemImage: (item: TryOnInputHistoryItem) => Promise<string | null>;
+  onImageApply?: (slot: 'top' | 'pants' | 'shoes' | 'outer', image: UploadedImage, label: string) => Promise<void>;
 }
 
-const HistoryItemCard: React.FC<HistoryItemCardProps> = ({ item, onApply, getHistoryItemImage }) => {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadImage = async () => {
-      setLoading(true);
-      try {
-        const image = await getHistoryItemImage(item);
-        setImageUrl(image);
-      } catch (error) {
-        console.warn('이미지 로드 실패:', error);
-        setImageUrl(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadImage();
-  }, [item, getHistoryItemImage]);
-
-  const hasClothing = item.topLabel || item.pantsLabel || item.shoesLabel || item.outerLabel;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onApply?.({
-        person: undefined, 
-        top: undefined, 
-        pants: undefined, 
-        shoes: undefined, 
-        topLabel: item.topLabel, 
-        pantsLabel: item.pantsLabel, 
-        shoesLabel: item.shoesLabel,
-        outerLabel: item.outerLabel,
-        topProduct: item.topProduct,
-        pantsProduct: item.pantsProduct,
-        shoesProduct: item.shoesProduct,
-        outerProduct: item.outerProduct
-      })}
-      className="relative w-40 aspect-[4/5] rounded-md overflow-hidden bg-gray-100 ring-1 ring-transparent hover:ring-blue-200 transition"
-      title="클릭하면 기록을 적용합니다"
-    >
-      {loading ? (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
-          로딩...
-        </div>
-      ) : imageUrl ? (
-        <img src={imageUrl} alt="의류 이미지" className="absolute inset-0 w-full h-full object-cover" />
-      ) : hasClothing ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 p-2">
-          <span className="text-xs font-medium">의류 조합</span>
-          <span className="text-xs text-gray-500 mt-1">
-            {[item.topLabel, item.pantsLabel, item.shoesLabel, item.outerLabel].filter(Boolean).join(', ')}
-          </span>
-        </div>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">-</div>
-      )}
-    </button>
-  );
+const HistoryItemCard: React.FC<HistoryItemCardProps> = ({ item, onApply, onImageApply }) => {
+  // imageData가 있으면 이미지 카드, 없으면 상품 카드
+  const hasImageData = item.topImageData || item.pantsImageData || 
+                      item.shoesImageData || item.outerImageData;
+  
+  return hasImageData ? 
+    <ImageHistoryCard item={item} onApply={onApply} onImageApply={onImageApply} /> :
+    <ProductHistoryCard item={item} onApply={onApply} />;
 };
 
-export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
+export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply, onImageApply }) => {
   console.log('🔔 TryOnHistory 컴포넌트 렌더링됨');
   const [inputs, setInputs] = useState(tryOnHistory.inputs());
   const [outputs, setOutputs] = useState(tryOnHistory.outputs());
@@ -118,45 +52,17 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
   
   // 상품 데이터는 히스토리에 저장되므로 별도 캐시 불필요
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     const newInputs = tryOnHistory.inputs();
     const newOutputs = tryOnHistory.outputs();
     console.log('🔔 TryOnHistory refresh - 입력:', newInputs.length, '출력:', newOutputs.length);
     setInputs(newInputs);
     setOutputs(newOutputs);
-  };
+    console.log('🔔 refresh 후 상태 설정 완료');
+  }, []); // 의존성 배열을 비움
 
   // 추가 API 호출이 필요 없는 구조 (상품 메타데이터가 히스토리에 포함됨)
 
-  // 히스토리 아이템의 대표 이미지를 가져오는 함수 (실제 선택된 아이템 우선)
-  const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
-    console.log('🔍 getHistoryItemImage 호출:', {
-      topProduct: item.topProduct?.title,
-      pantsProduct: item.pantsProduct?.title,
-      shoesProduct: item.shoesProduct?.title,
-      outerProduct: item.outerProduct?.title
-    });
-    
-    // 실제로 선택된 아이템들만 필터링 (라벨이 있는 것들)
-    const selectedProducts = [];
-    if (item.topLabel && item.topProduct) selectedProducts.push(item.topProduct);
-    if (item.pantsLabel && item.pantsProduct) selectedProducts.push(item.pantsProduct);
-    if (item.shoesLabel && item.shoesProduct) selectedProducts.push(item.shoesProduct);
-    if (item.outerLabel && item.outerProduct) selectedProducts.push(item.outerProduct);
-    
-    console.log('🔍 선택된 상품들:', selectedProducts.map(p => p.title));
-    
-    // 선택된 상품 중 첫 번째 이미지 반환
-    for (const product of selectedProducts) {
-      if (product?.imageUrl) {
-        console.log('🔍 이미지 찾음:', product.title, product.imageUrl);
-        return product.imageUrl;
-      }
-    }
-    
-    console.log('🔍 이미지를 찾지 못함');
-    return null;
-  };
 
   useEffect(() => {
     console.log('🔔 TryOnHistory useEffect 실행, 리스너 구독 시작');
@@ -166,6 +72,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
     
     const unsub = tryOnHistory.subscribe(() => {
       console.log('🔔 TryOnHistory 리스너 호출됨, refresh 실행');
+      console.log('🔔 리스너 호출 시점 - 현재 outputs 개수:', tryOnHistory.outputs().length);
       refresh();
     });
     
@@ -241,7 +148,7 @@ export const TryOnHistory: React.FC<TryOnHistoryProps> = ({ onApply }) => {
             {inputs.length === 0 ? (
               <div className="row-span-2 flex items-center justify-center text-sm text-gray-500 w-80">기록이 없습니다.</div>
             ) : inputs.map(item => {
-              return <HistoryItemCard key={item.id} item={item} onApply={onApply} getHistoryItemImage={getHistoryItemImage} />;
+              return <HistoryItemCard key={item.id} item={item} onApply={onApply} onImageApply={onImageApply} />;
             })}
           </div>
         </div>

@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../../../services/api.service";
 import { imageProxy } from "../../../services/imageProxy.service";
 import { likesService } from "../../../services/likes.service";
 import { manageStorageSpace } from "../../../services/storage.service";
 import { tryOnHistory } from "../../../services/tryon_history.service";
+import { videoHistory } from "../../../services/video_history.service";
 import { virtualTryOnService } from "../../../services/virtualTryOn.service";
 import type {
   ApiFile,
@@ -22,7 +23,6 @@ import { ModelPicker } from "./ModelPicker";
 import { ResultDisplay } from "./ResultDisplay";
 import { SnsShareDialog } from "./SnsShareDialog";
 import { TryOnHistory } from "./TryOnHistory";
-import { videoHistory } from "../../../services/video_history.service";
 
 // Simple feature-flag helper (treats undefined as ON)
 const isFeatureEnabled = (value: unknown): boolean => {
@@ -174,7 +174,14 @@ const normalizeCategory = (raw: string): CategoryBucket => {
 export const VirtualTryOnUI: React.FC = () => {
   // 초기 상태를 localStorage에서 복원
   // ?곹깭瑜?localStorage?먯꽌 蹂듭썝
-  const [personImage, setPersonImage] = useState<UploadedImage | null>(null);
+  const [personImage, setPersonImage] = useState<UploadedImage | null>(() => {
+    try {
+      const saved = localStorage.getItem("virtualTryOn_personImage");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [topImage, setTopImage] = useState<UploadedImage | null>(null);
   const [pantsImage, setPantsImage] = useState<UploadedImage | null>(null);
   const [shoesImage, setShoesImage] = useState<UploadedImage | null>(null);
@@ -844,6 +851,12 @@ export const VirtualTryOnUI: React.FC = () => {
         pants: RecommendationItem;
         shoes: RecommendationItem;
         outer: RecommendationItem;
+      }>,
+      imageData?: Partial<{
+        top: string;
+        pants: string;
+        shoes: string;
+        outer: string;
       }>
     ) => {
       const src = sourceOverride ?? personSource;
@@ -873,6 +886,11 @@ export const VirtualTryOnUI: React.FC = () => {
         pantsProduct: products?.pants ?? originalItems.pants,
         shoesProduct: products?.shoes ?? originalItems.shoes,
         outerProduct: products?.outer ?? originalItems.outer,
+        // 업로드된 이미지 데이터 (base64)
+        topImageData: imageData?.top,
+        pantsImageData: imageData?.pants,
+        shoesImageData: imageData?.shoes,
+        outerImageData: imageData?.outer,
       });
     },
     [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]
@@ -924,146 +942,106 @@ export const VirtualTryOnUI: React.FC = () => {
         outerImageUndefined: typeof outerImage === "undefined",
       });
 
-      const result = await virtualTryOnService.combineImages({
+      // 1. 이미지 생성과 추천을 병렬로 시작
+      const imagePromise = virtualTryOnService.combineImages({
         person: personImage ? convertToApiFile(personImage) : null,
         clothingItems,
       });
 
+      // 각 슬롯별 추천을 병렬로 처리하는 함수
+      const getRecommendations = async (slot: "top" | "pants" | "shoes" | "outer") => {
+        const image = slot === "top" ? topImage : 
+                      slot === "pants" ? pantsImage :
+                      slot === "shoes" ? shoesImage : outerImage;
+        
+        const originalItem = slot === "top" ? originalItems.top :
+                            slot === "pants" ? originalItems.pants :
+                            slot === "shoes" ? originalItems.shoes : originalItems.outer;
+        
+        const clothingItem = slot === "top" ? clothingItems.top :
+                            slot === "pants" ? clothingItems.pants :
+                            slot === "shoes" ? clothingItems.shoes : clothingItems.outer;
+
+        if (!image) return null;
+        
+        try {
+          // 카탈로그 아이템인지 확인
+          if (originalItem) {
+            // 카탈로그 → by-positions
+            const posNum = Number.isFinite(originalItem.pos as any)
+              ? Number(originalItem.pos)
+              : Number.isFinite(Number(originalItem.id))
+              ? Number(originalItem.id)
+              : NaN;
+            
+            if (Number.isFinite(posNum)) {
+              const byPos = await virtualTryOnService.getRecommendationsByPositions({
+                positions: [posNum],
+                items: [{
+                  pos: posNum,
+                  category: originalItem.category,
+                  title: originalItem.title,
+                  tags: originalItem.tags,
+                  price: originalItem.price,
+                  brand: (originalItem as any).brandName,
+                  productUrl: originalItem.productUrl,
+                  imageUrl: originalItem.imageUrl,
+                }],
+                categories: [slot],
+                final_k: 3,
+                use_llm_rerank: true,
+              });
+              return { [slot]: byPos };
+            }
+          }
+          
+          // 업로드 이미지 → recommend
+          const options: RecommendationOptions = {};
+          if (minPrice) options.minPrice = Number(minPrice);
+          if (maxPrice) options.maxPrice = Number(maxPrice);
+          const trimmed = excludeTagsInput.trim();
+          if (trimmed) options.excludeTags = trimmed.split(",").map((t) => t.trim()).filter(Boolean);
+          
+          const recommendationsResult = await virtualTryOnService.getRecommendations({
+            person: null,
+            clothingItems: { [slot]: clothingItem } as unknown as ClothingItems,
+            generatedImage: null,
+            options,
+            selectedProductIds: null,
+          });
+          
+          return { [slot]: (recommendationsResult.recommendations as any)[slot] };
+        } catch (error) {
+          console.error(`${slot} recommendations failed:`, error);
+          return null;
+        }
+      };
+
+      // 2. 이미지 생성과 각 슬롯별 추천을 병렬로 실행
+      setIsLoadingRecommendations(true);
+      
+      const [result, topRec, pantsRec, shoesRec, outerRec] = await Promise.all([
+        imagePromise,
+        getRecommendations("top"),
+        getRecommendations("pants"), 
+        getRecommendations("shoes"),
+        getRecommendations("outer")
+      ]);
+
+      // 추천 결과 합치기
+      const allRecommendations = {
+        top: topRec?.top || [],
+        pants: pantsRec?.pants || [],
+        shoes: shoesRec?.shoes || [],
+        outer: outerRec?.outer || [],
+        accessories: []
+      };
+      
+      setRecommendations(allRecommendations);
+
       if (result.generatedImage) {
         setGeneratedImage(result.generatedImage);
-        // Record output history (data URI)
         await tryOnHistory.addOutput(result.generatedImage);
-
-        // Fetch recommendations after virtual fitting
-        setIsLoadingRecommendations(true);
-        try {
-          // 1) Try pos-based recommendation when originalItems are available
-          const selected: Array<{
-            slot: "top" | "pants" | "shoes" | "outer";
-            item: RecommendationItem;
-          }> = [] as any;
-          if (originalItems.top)
-            selected.push({ slot: "top", item: originalItems.top! });
-          if (originalItems.pants)
-            selected.push({ slot: "pants", item: originalItems.pants! });
-          if (originalItems.shoes)
-            selected.push({ slot: "shoes", item: originalItems.shoes! });
-          if (originalItems.outer)
-            selected.push({ slot: "outer", item: originalItems.outer! });
-
-          const positions: number[] = [];
-          const itemsPayload: any[] = [];
-          for (const s of selected) {
-            const idNum = Number(s.item.id);
-            const posNum = Number.isFinite(s.item.pos as any)
-              ? Number(s.item.pos)
-              : Number.isFinite(idNum)
-              ? idNum
-              : NaN;
-            if (!Number.isFinite(posNum)) continue; // skip if no numeric pos
-            positions.push(posNum as number);
-            itemsPayload.push({
-              pos: posNum as number,
-              category: s.item.category,
-              title: s.item.title,
-              tags: s.item.tags,
-              price: s.item.price,
-              brand: (s.item as any).brandName,
-              productUrl: s.item.productUrl,
-              imageUrl: s.item.imageUrl,
-            });
-          }
-
-          const toCategoryRecs = (arr: RecommendationItem[]) => {
-            const buckets: any = {
-              top: [],
-              pants: [],
-              shoes: [],
-              outer: [],
-              accessories: [],
-            };
-            for (const it of arr) {
-              const key = normalizeCategory(String(it.category || ""));
-              buckets[key].push(it);
-            }
-            return buckets;
-          };
-
-          if (positions.length > 0) {
-            try {
-              const byPos =
-                await virtualTryOnService.getRecommendationsByPositions({
-                  positions,
-                  items: itemsPayload,
-                  // Explicitly pass dressed categories to ensure all appear
-                  categories: selected.map((s) => s.slot),
-                  final_k: 3,
-                  use_llm_rerank: true,
-                });
-              setRecommendations(toCategoryRecs(byPos));
-            } catch (e) {
-              // Fallback to image-based when vector recommender is unavailable
-              const options: RecommendationOptions = {};
-              if (minPrice) options.minPrice = Number(minPrice);
-              if (maxPrice) options.maxPrice = Number(maxPrice);
-              const trimmed = excludeTagsInput.trim();
-              if (trimmed)
-                options.excludeTags = trimmed
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter(Boolean);
-
-              const usedClothingItems: any = {};
-              if (topImage) usedClothingItems.top = clothingItems.top;
-              if (pantsImage) usedClothingItems.pants = clothingItems.pants;
-              if (shoesImage) usedClothingItems.shoes = clothingItems.shoes;
-              if (outerImage) usedClothingItems.outer = clothingItems.outer;
-
-              const recommendationsResult =
-                await virtualTryOnService.getRecommendationsFromFitting({
-                  person: null,
-                  clothingItems: usedClothingItems,
-                  generatedImage: result.generatedImage,
-                  options,
-                  selectedProductIds: null,
-                });
-              setRecommendations(recommendationsResult.recommendations as any);
-            }
-          } else {
-            // 2) Fallback to image-based from-fitting when pos not available (uploaded images etc.)
-            const options: RecommendationOptions = {};
-            if (minPrice) options.minPrice = Number(minPrice);
-            if (maxPrice) options.maxPrice = Number(maxPrice);
-            const trimmed = excludeTagsInput.trim();
-            if (trimmed)
-              options.excludeTags = trimmed
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean);
-
-            // 입힌 아이템만 추천하도록 필터링 (아예 필드를 제외)
-            const usedClothingItems: any = {};
-            if (topImage) usedClothingItems.top = clothingItems.top;
-            if (pantsImage) usedClothingItems.pants = clothingItems.pants;
-            if (shoesImage) usedClothingItems.shoes = clothingItems.shoes;
-            if (outerImage) usedClothingItems.outer = clothingItems.outer;
-
-            const recommendationsResult =
-              await virtualTryOnService.getRecommendationsFromFitting({
-                person: null,
-                clothingItems: usedClothingItems,
-                generatedImage: result.generatedImage,
-                options,
-                selectedProductIds: null,
-              });
-
-            setRecommendations(recommendationsResult.recommendations as any);
-          }
-        } catch (recError) {
-          console.error("Failed to get recommendations:", recError);
-        } finally {
-          setIsLoadingRecommendations(false);
-        }
       } else {
         setError(
           "The AI could not generate an image. Please try again with different images."
@@ -1076,6 +1054,7 @@ export const VirtualTryOnUI: React.FC = () => {
       );
     } finally {
       setIsLoading(false);
+      setIsLoadingRecommendations(false);
     }
   }, [
     personImage,
@@ -1086,6 +1065,7 @@ export const VirtualTryOnUI: React.FC = () => {
     minPrice,
     maxPrice,
     excludeTagsInput,
+    originalItems,
   ]);
 
   const canCombine =
@@ -1433,6 +1413,13 @@ export const VirtualTryOnUI: React.FC = () => {
                       setPersonImage(img);
                       setPersonSource(img ? "upload" : "unknown");
                       setSelectedModelId(null);
+                      
+                      // localStorage에 저장
+                      if (img) {
+                        localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
+                      } else {
+                        localStorage.removeItem("virtualTryOn_personImage");
+                      }
                       recordInput(
                         { person: img },
                         undefined,
@@ -1455,6 +1442,10 @@ export const VirtualTryOnUI: React.FC = () => {
                     onPick={(img) => {
                       setPersonImage(img);
                       setPersonSource("model");
+                      
+                      // localStorage에 저장 (AI 모델은 최대 1장, 덮어쓰기)
+                      localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
+                      
                       recordInput({ person: img }, undefined, "delta", "model");
                     }}
                   />
@@ -1512,7 +1503,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           recordInput(
                             { outer: img },
                             { outer: label },
-                            "delta"
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { outer: img?.base64 }
                           );
                         }}
                         externalImage={outerImage}
@@ -1558,7 +1553,15 @@ export const VirtualTryOnUI: React.FC = () => {
                           setTopImage(img);
                           const label = img ? "Uploaded top" : undefined;
                           setTopLabel(label);
-                          recordInput({ top: img }, { top: label }, "delta");
+                          recordInput(
+                            { top: img }, 
+                            { top: label }, 
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { top: img?.base64 }
+                          );
                         }}
                         externalImage={topImage}
                         active={!!topImage}
@@ -1605,7 +1608,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           recordInput(
                             { pants: img },
                             { pants: label },
-                            "delta"
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { pants: img?.base64 }
                           );
                         }}
                         externalImage={pantsImage}
@@ -1653,7 +1660,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           recordInput(
                             { shoes: img },
                             { shoes: label },
-                            "delta"
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { shoes: img?.base64 }
                           );
                         }}
                         externalImage={shoesImage}
@@ -1695,44 +1706,33 @@ export const VirtualTryOnUI: React.FC = () => {
               <TryOnHistory
                 onApply={useCallback(
                   async (payload: {
-                    person?: string;
-                    top?: string;
-                    pants?: string;
-                    shoes?: string;
-                    topLabel?: string;
-                    pantsLabel?: string;
-                    shoesLabel?: string;
-                    outerLabel?: string;
                     topProduct?: RecommendationItem;
                     pantsProduct?: RecommendationItem;
                     shoesProduct?: RecommendationItem;
                     outerProduct?: RecommendationItem;
                   }) => {
-                    console.log("🔔 히스토리에서 적용 시도:", payload);
-
-                    // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
+                    console.log("🔔 히스토리에서 상품 적용 시도:", payload);
 
                     if (payload.topProduct) {
-                      console.log("🔔 상의 적용:", payload.topProduct.title);
+                      console.log("🔔 상의 상품 적용:", payload.topProduct.title);
                       await addCatalogItemToSlot(payload.topProduct, false);
                     }
                     if (payload.pantsProduct) {
-                      console.log("🔔 하의 적용:", payload.pantsProduct.title);
+                      console.log("🔔 하의 상품 적용:", payload.pantsProduct.title);
                       await addCatalogItemToSlot(payload.pantsProduct, false);
                     }
                     if (payload.shoesProduct) {
-                      console.log("🔔 신발 적용:", payload.shoesProduct.title);
+                      console.log("🔔 신발 상품 적용:", payload.shoesProduct.title);
                       await addCatalogItemToSlot(payload.shoesProduct, false);
                     }
                     if (payload.outerProduct) {
                       console.log(
-                        "🔔 아우터 적용:",
+                        "🔔 아우터 상품 적용:",
                         payload.outerProduct.title
                       );
                       await addCatalogItemToSlot(payload.outerProduct, false);
                     }
 
-                    // 히스토리에서 적용 완료 토스트
                     addToast(
                       toast.success("히스토리에서 적용했습니다", undefined, {
                         duration: 1500,
@@ -1740,6 +1740,31 @@ export const VirtualTryOnUI: React.FC = () => {
                     );
                   },
                   [addCatalogItemToSlot, addToast]
+                )}
+                onImageApply={useCallback(
+                  async (slot: 'top' | 'pants' | 'shoes' | 'outer', image: UploadedImage, label: string) => {
+                    console.log(`🔔 ${slot} 이미지 적용:`, label);
+                    
+                    switch (slot) {
+                      case 'top':
+                        setTopImage(image);
+                        setTopLabel(label);
+                        break;
+                      case 'pants':
+                        setPantsImage(image);
+                        setPantsLabel(label);
+                        break;
+                      case 'shoes':
+                        setShoesImage(image);
+                        setShoesLabel(label);
+                        break;
+                      case 'outer':
+                        setOuterImage(image);
+                        setOuterLabel(label);
+                        break;
+                    }
+                  },
+                  [setTopImage, setTopLabel, setPantsImage, setPantsLabel, setShoesImage, setShoesLabel, setOuterImage, setOuterLabel]
                 )}
               />
             </div>
@@ -2069,7 +2094,7 @@ export const VirtualTryOnUI: React.FC = () => {
                       <div className="flex items-center justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         <span className="ml-3 text-gray-600">
-                          異붿쿇 ?곹뭹??遺덈윭?ㅻ뒗 以?..
+                          추천 상품을 불러오는 중...
                         </span>
                       </div>
                     </div>

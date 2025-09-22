@@ -19,6 +19,11 @@ export type TryOnInputHistoryItem = {
   pantsProduct?: RecommendationItem;
   shoesProduct?: RecommendationItem;
   outerProduct?: RecommendationItem;
+  // 업로드된 이미지 데이터 (base64)
+  topImageData?: string;
+  pantsImageData?: string;
+  shoesImageData?: string;
+  outerImageData?: string;
 };
 
 export type TryOnOutputHistoryItem = {
@@ -189,10 +194,6 @@ export const tryOnHistory = {
 
     // 이미지 압축 (크기 줄이기) - 더 강한 압축
     const compressedImageDataUri = await compressImage(imageDataUri, 0.5, 600);
-    console.log(
-      "🔔 압축 후 이미지 데이터 길이:",
-      compressedImageDataUri.length
-    );
 
     const now: TryOnOutputHistoryItem = {
       id: `o-${Date.now()}-${Math.random().toString(36).slice(2)}`,
