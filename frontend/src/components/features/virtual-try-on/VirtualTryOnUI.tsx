@@ -821,6 +821,18 @@ export const VirtualTryOnUI: React.FC = () => {
     mimeType: uploadedImage.mimeType,
   });
 
+  // 이미지 데이터로부터 임의의 상품 ID 생성 (중복 체크용)
+  const generateImageId = useCallback((imageData: string) => {
+    // 이미지 데이터의 해시를 간단하게 만들어서 ID로 사용
+    let hash = 0;
+    for (let i = 0; i < imageData.length; i++) {
+      const char = imageData.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // 32bit 정수로 변환
+    }
+    return `img_${Math.abs(hash).toString(36)}`;
+  }, []);
+
   // toDataUrl 함수는 품질 저하 때문에 사용하지 않음 (이미지 데이터는 그대로 유지)
   // mode: 'delta' logs only provided overrides; 'snapshot' logs full current state
   const recordInput = useCallback(
@@ -877,10 +889,10 @@ export const VirtualTryOnUI: React.FC = () => {
         outerLabel:
           labels?.outer ?? (mode === "delta" ? undefined : outerLabel),
         // 이미지 메타데이터는 히스토리에만 저장해 용량 사용을 줄임
-        topProductId: productIds?.top,
-        pantsProductId: productIds?.pants,
-        shoesProductId: productIds?.shoes,
-        outerProductId: productIds?.outer,
+        topProductId: imageData?.top ? generateImageId(imageData.top) : productIds?.top,
+        pantsProductId: imageData?.pants ? generateImageId(imageData.pants) : productIds?.pants,
+        shoesProductId: imageData?.shoes ? generateImageId(imageData.shoes) : productIds?.shoes,
+        outerProductId: imageData?.outer ? generateImageId(imageData.outer) : productIds?.outer,
         // 추천된 상품 정보도 함께 보존 (이미지 URL 포함)
         topProduct: products?.top ?? originalItems.top,
         pantsProduct: products?.pants ?? originalItems.pants,
@@ -893,7 +905,7 @@ export const VirtualTryOnUI: React.FC = () => {
         outerImageData: imageData?.outer,
       });
     },
-    [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]
+    [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems, generateImageId]
   );
 
   const handleCombineClick = useCallback(async () => {

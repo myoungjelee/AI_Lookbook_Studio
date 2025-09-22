@@ -14,7 +14,10 @@ interface ProductHistoryCardProps {
 
 export const ProductHistoryCard: React.FC<ProductHistoryCardProps> = ({ item, onApply }) => {
   const getProductImage = () => {
-    const products = [item.topProduct, item.pantsProduct, item.shoesProduct, item.outerProduct].filter(Boolean);
+    const products = [item.topProduct && item.topLabel ? item.topProduct : null,
+    item.pantsProduct && item.pantsLabel ? item.pantsProduct : null,
+    item.shoesProduct && item.shoesLabel ? item.shoesProduct : null,
+    item.outerProduct && item.outerLabel ? item.outerProduct : null,].filter(Boolean);
     for (const product of products) {
       if (product?.imageUrl) return product.imageUrl;
     }
