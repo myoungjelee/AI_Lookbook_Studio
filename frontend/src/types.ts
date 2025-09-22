@@ -1,7 +1,7 @@
 ﻿// Frontend type definitions
 
 export interface UploadedImage {
-  file: File;
+  file?: File;
   previewUrl: string;
   base64: string;
   mimeType: string;

@@ -80,6 +80,13 @@ export const MyPage: React.FC = () => {
   }, []);
 
   const getHistoryItemImage = async (item: TryOnInputHistoryItem): Promise<string | null> => {
+    // 1. 업로드된 이미지 데이터가 있으면 우선 사용
+    if (item.topImageData) return `data:image/jpeg;base64,${item.topImageData}`;
+    if (item.pantsImageData) return `data:image/jpeg;base64,${item.pantsImageData}`;
+    if (item.shoesImageData) return `data:image/jpeg;base64,${item.shoesImageData}`;
+    if (item.outerImageData) return `data:image/jpeg;base64,${item.outerImageData}`;
+    
+    // 2. 상품 이미지 URL 사용
     const products = [item.topProduct, item.pantsProduct, item.shoesProduct, item.outerProduct].filter(Boolean);
     for (const product of products) {
       if (product?.imageUrl) return product.imageUrl;

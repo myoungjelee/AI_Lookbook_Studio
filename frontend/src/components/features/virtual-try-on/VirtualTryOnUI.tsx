@@ -174,7 +174,14 @@ const normalizeCategory = (raw: string): CategoryBucket => {
 export const VirtualTryOnUI: React.FC = () => {
   // 초기 상태를 localStorage에서 복원
   // ?곹깭瑜?localStorage?먯꽌 蹂듭썝
-  const [personImage, setPersonImage] = useState<UploadedImage | null>(null);
+  const [personImage, setPersonImage] = useState<UploadedImage | null>(() => {
+    try {
+      const saved = localStorage.getItem("virtualTryOn_personImage");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [topImage, setTopImage] = useState<UploadedImage | null>(null);
   const [pantsImage, setPantsImage] = useState<UploadedImage | null>(null);
   const [shoesImage, setShoesImage] = useState<UploadedImage | null>(null);
@@ -844,6 +851,12 @@ export const VirtualTryOnUI: React.FC = () => {
         pants: RecommendationItem;
         shoes: RecommendationItem;
         outer: RecommendationItem;
+      }>,
+      imageData?: Partial<{
+        top: string;
+        pants: string;
+        shoes: string;
+        outer: string;
       }>
     ) => {
       const src = sourceOverride ?? personSource;
@@ -873,6 +886,11 @@ export const VirtualTryOnUI: React.FC = () => {
         pantsProduct: products?.pants ?? originalItems.pants,
         shoesProduct: products?.shoes ?? originalItems.shoes,
         outerProduct: products?.outer ?? originalItems.outer,
+        // 업로드된 이미지 데이터 (base64)
+        topImageData: imageData?.top,
+        pantsImageData: imageData?.pants,
+        shoesImageData: imageData?.shoes,
+        outerImageData: imageData?.outer,
       });
     },
     [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems]
@@ -1395,6 +1413,13 @@ export const VirtualTryOnUI: React.FC = () => {
                       setPersonImage(img);
                       setPersonSource(img ? "upload" : "unknown");
                       setSelectedModelId(null);
+                      
+                      // localStorage에 저장
+                      if (img) {
+                        localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
+                      } else {
+                        localStorage.removeItem("virtualTryOn_personImage");
+                      }
                       recordInput(
                         { person: img },
                         undefined,
@@ -1417,6 +1442,10 @@ export const VirtualTryOnUI: React.FC = () => {
                     onPick={(img) => {
                       setPersonImage(img);
                       setPersonSource("model");
+                      
+                      // localStorage에 저장 (AI 모델은 최대 1장, 덮어쓰기)
+                      localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
+                      
                       recordInput({ person: img }, undefined, "delta", "model");
                     }}
                   />
@@ -1474,7 +1503,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           recordInput(
                             { outer: img },
                             { outer: label },
-                            "delta"
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { outer: img?.base64 }
                           );
                         }}
                         externalImage={outerImage}
@@ -1520,7 +1553,15 @@ export const VirtualTryOnUI: React.FC = () => {
                           setTopImage(img);
                           const label = img ? "Uploaded top" : undefined;
                           setTopLabel(label);
-                          recordInput({ top: img }, { top: label }, "delta");
+                          recordInput(
+                            { top: img }, 
+                            { top: label }, 
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { top: img?.base64 }
+                          );
                         }}
                         externalImage={topImage}
                         active={!!topImage}
@@ -1567,7 +1608,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           recordInput(
                             { pants: img },
                             { pants: label },
-                            "delta"
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { pants: img?.base64 }
                           );
                         }}
                         externalImage={pantsImage}
@@ -1615,7 +1660,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           recordInput(
                             { shoes: img },
                             { shoes: label },
-                            "delta"
+                            "delta",
+                            undefined,
+                            undefined,
+                            undefined,
+                            { shoes: img?.base64 }
                           );
                         }}
                         externalImage={shoesImage}
@@ -1657,44 +1706,33 @@ export const VirtualTryOnUI: React.FC = () => {
               <TryOnHistory
                 onApply={useCallback(
                   async (payload: {
-                    person?: string;
-                    top?: string;
-                    pants?: string;
-                    shoes?: string;
-                    topLabel?: string;
-                    pantsLabel?: string;
-                    shoesLabel?: string;
-                    outerLabel?: string;
                     topProduct?: RecommendationItem;
                     pantsProduct?: RecommendationItem;
                     shoesProduct?: RecommendationItem;
                     outerProduct?: RecommendationItem;
                   }) => {
-                    console.log("🔔 히스토리에서 적용 시도:", payload);
-
-                    // 히스토리에서 가져온 상품들을 addCatalogItemToSlot으로 처리
+                    console.log("🔔 히스토리에서 상품 적용 시도:", payload);
 
                     if (payload.topProduct) {
-                      console.log("🔔 상의 적용:", payload.topProduct.title);
+                      console.log("🔔 상의 상품 적용:", payload.topProduct.title);
                       await addCatalogItemToSlot(payload.topProduct, false);
                     }
                     if (payload.pantsProduct) {
-                      console.log("🔔 하의 적용:", payload.pantsProduct.title);
+                      console.log("🔔 하의 상품 적용:", payload.pantsProduct.title);
                       await addCatalogItemToSlot(payload.pantsProduct, false);
                     }
                     if (payload.shoesProduct) {
-                      console.log("🔔 신발 적용:", payload.shoesProduct.title);
+                      console.log("🔔 신발 상품 적용:", payload.shoesProduct.title);
                       await addCatalogItemToSlot(payload.shoesProduct, false);
                     }
                     if (payload.outerProduct) {
                       console.log(
-                        "🔔 아우터 적용:",
+                        "🔔 아우터 상품 적용:",
                         payload.outerProduct.title
                       );
                       await addCatalogItemToSlot(payload.outerProduct, false);
                     }
 
-                    // 히스토리에서 적용 완료 토스트
                     addToast(
                       toast.success("히스토리에서 적용했습니다", undefined, {
                         duration: 1500,
@@ -1702,6 +1740,31 @@ export const VirtualTryOnUI: React.FC = () => {
                     );
                   },
                   [addCatalogItemToSlot, addToast]
+                )}
+                onImageApply={useCallback(
+                  async (slot: 'top' | 'pants' | 'shoes' | 'outer', image: UploadedImage, label: string) => {
+                    console.log(`🔔 ${slot} 이미지 적용:`, label);
+                    
+                    switch (slot) {
+                      case 'top':
+                        setTopImage(image);
+                        setTopLabel(label);
+                        break;
+                      case 'pants':
+                        setPantsImage(image);
+                        setPantsLabel(label);
+                        break;
+                      case 'shoes':
+                        setShoesImage(image);
+                        setShoesLabel(label);
+                        break;
+                      case 'outer':
+                        setOuterImage(image);
+                        setOuterLabel(label);
+                        break;
+                    }
+                  },
+                  [setTopImage, setTopLabel, setPantsImage, setPantsLabel, setShoesImage, setShoesLabel, setOuterImage, setOuterLabel]
                 )}
               />
             </div>
@@ -2031,7 +2094,7 @@ export const VirtualTryOnUI: React.FC = () => {
                       <div className="flex items-center justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         <span className="ml-3 text-gray-600">
-                          異붿쿇 ?곹뭹??遺덈윭?ㅻ뒗 以?..
+                          추천 상품을 불러오는 중...
                         </span>
                       </div>
                     </div>
