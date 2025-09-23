@@ -392,9 +392,8 @@ export const VirtualTryOnUI: React.FC = () => {
     (operationName: string, attempt: number = 0) => {
       const execute = async () => {
         try {
-          const status = await virtualTryOnService.fetchVideoStatus(
-            operationName
-          );
+          const status =
+            await virtualTryOnService.fetchVideoStatus(operationName);
           let progress: number | null = null;
           const rawProgress = (status as any).progressPercent;
           if (typeof rawProgress === "number") {
@@ -696,12 +695,12 @@ export const VirtualTryOnUI: React.FC = () => {
           cat === "outer"
             ? "outer"
             : cat === "top"
-            ? "top"
-            : cat === "pants"
-            ? "pants"
-            : cat === "shoes"
-            ? "shoes"
-            : null;
+              ? "top"
+              : cat === "pants"
+                ? "pants"
+                : cat === "shoes"
+                  ? "shoes"
+                  : null;
 
         console.log("寃곗젙???щ’:", slot);
         if (!slot) {
@@ -781,24 +780,24 @@ export const VirtualTryOnUI: React.FC = () => {
           vtGender && vtGender !== "all" ? `&gender=${vtGender}` : "";
         const [tops, pants, shoes, outers] = await Promise.all([
           apiClient
-            .get<RecommendationItem[]>(
-              `/api/recommend/random?limit=${per}&category=top${gparam}`
-            )
+            .get<
+              RecommendationItem[]
+            >(`/api/recommend/random?limit=${per}&category=top${gparam}`)
             .catch(() => [] as RecommendationItem[]),
           apiClient
-            .get<RecommendationItem[]>(
-              `/api/recommend/random?limit=${per}&category=pants${gparam}`
-            )
+            .get<
+              RecommendationItem[]
+            >(`/api/recommend/random?limit=${per}&category=pants${gparam}`)
             .catch(() => [] as RecommendationItem[]),
           apiClient
-            .get<RecommendationItem[]>(
-              `/api/recommend/random?limit=${per}&category=shoes${gparam}`
-            )
+            .get<
+              RecommendationItem[]
+            >(`/api/recommend/random?limit=${per}&category=shoes${gparam}`)
             .catch(() => [] as RecommendationItem[]),
           apiClient
-            .get<RecommendationItem[]>(
-              `/api/recommend/random?limit=${per}&category=outer${gparam}`
-            )
+            .get<
+              RecommendationItem[]
+            >(`/api/recommend/random?limit=${per}&category=outer${gparam}`)
             .catch(() => [] as RecommendationItem[]),
         ]);
         setRandomItemsByCat({ top: tops, pants, shoes, outer: outers });
@@ -827,7 +826,7 @@ export const VirtualTryOnUI: React.FC = () => {
     let hash = 0;
     for (let i = 0; i < imageData.length; i++) {
       const char = imageData.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // 32bit 정수로 변환
     }
     return `img_${Math.abs(hash).toString(36)}`;
@@ -889,10 +888,18 @@ export const VirtualTryOnUI: React.FC = () => {
         outerLabel:
           labels?.outer ?? (mode === "delta" ? undefined : outerLabel),
         // 이미지 메타데이터는 히스토리에만 저장해 용량 사용을 줄임
-        topProductId: imageData?.top ? generateImageId(imageData.top) : productIds?.top,
-        pantsProductId: imageData?.pants ? generateImageId(imageData.pants) : productIds?.pants,
-        shoesProductId: imageData?.shoes ? generateImageId(imageData.shoes) : productIds?.shoes,
-        outerProductId: imageData?.outer ? generateImageId(imageData.outer) : productIds?.outer,
+        topProductId: imageData?.top
+          ? generateImageId(imageData.top)
+          : productIds?.top,
+        pantsProductId: imageData?.pants
+          ? generateImageId(imageData.pants)
+          : productIds?.pants,
+        shoesProductId: imageData?.shoes
+          ? generateImageId(imageData.shoes)
+          : productIds?.shoes,
+        outerProductId: imageData?.outer
+          ? generateImageId(imageData.outer)
+          : productIds?.outer,
         // 추천된 상품 정보도 함께 보존 (이미지 URL 포함)
         topProduct: products?.top ?? originalItems.top,
         pantsProduct: products?.pants ?? originalItems.pants,
@@ -905,7 +912,15 @@ export const VirtualTryOnUI: React.FC = () => {
         outerImageData: imageData?.outer,
       });
     },
-    [personSource, topLabel, pantsLabel, shoesLabel, outerLabel, originalItems, generateImageId]
+    [
+      personSource,
+      topLabel,
+      pantsLabel,
+      shoesLabel,
+      outerLabel,
+      originalItems,
+      generateImageId,
+    ]
   );
 
   const handleCombineClick = useCallback(async () => {
@@ -916,9 +931,9 @@ export const VirtualTryOnUI: React.FC = () => {
       outerImage
     );
     if (!hasAnyClothing) {
-  setError("최소 한 개의 의류를 선택하세요.");
-  return;
-}
+      setError("최소 한 개의 의류를 선택하세요.");
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -958,18 +973,38 @@ export const VirtualTryOnUI: React.FC = () => {
       });
 
       // 각 슬롯별 추천을 병렬로 처리하는 함수
-      const getRecommendations = async (slot: "top" | "pants" | "shoes" | "outer") => {
-        const image = slot === "top" ? topImage :
-                      slot === "pants" ? pantsImage :
-                      slot === "shoes" ? shoesImage : outerImage;
 
-        const originalItem = slot === "top" ? originalItems.top :
-                            slot === "pants" ? originalItems.pants :
-                            slot === "shoes" ? originalItems.shoes : originalItems.outer;
+      const getRecommendations = async (
+        slot: "top" | "pants" | "shoes" | "outer"
+      ) => {
+        const image =
+          slot === "top"
+            ? topImage
+            : slot === "pants"
+              ? pantsImage
+              : slot === "shoes"
+                ? shoesImage
+                : outerImage;
 
-        const clothingItem = slot === "top" ? clothingItems.top :
-                            slot === "pants" ? clothingItems.pants :
-                            slot === "shoes" ? clothingItems.shoes : clothingItems.outer;
+        console.log("REQ slot", slot, !!image);
+
+        const originalItem =
+          slot === "top"
+            ? originalItems.top
+            : slot === "pants"
+              ? originalItems.pants
+              : slot === "shoes"
+                ? originalItems.shoes
+                : originalItems.outer;
+
+        const clothingItem =
+          slot === "top"
+            ? clothingItems.top
+            : slot === "pants"
+              ? clothingItems.pants
+              : slot === "shoes"
+                ? clothingItems.shoes
+                : clothingItems.outer;
 
         if (!image) return null;
 
@@ -980,26 +1015,29 @@ export const VirtualTryOnUI: React.FC = () => {
             const posNum = Number.isFinite(originalItem.pos as any)
               ? Number(originalItem.pos)
               : Number.isFinite(Number(originalItem.id))
-              ? Number(originalItem.id)
-              : NaN;
+                ? Number(originalItem.id)
+                : NaN;
 
             if (Number.isFinite(posNum)) {
-              const byPos = await virtualTryOnService.getRecommendationsByPositions({
-                positions: [posNum],
-                items: [{
-                  pos: posNum,
-                  category: originalItem.category,
-                  title: originalItem.title,
-                  tags: originalItem.tags,
-                  price: originalItem.price,
-                  brand: (originalItem as any).brandName,
-                  productUrl: originalItem.productUrl,
-                  imageUrl: originalItem.imageUrl,
-                }],
-                categories: [slot],
-                final_k: 3,
-                use_llm_rerank: true,
-              });
+              const byPos =
+                await virtualTryOnService.getRecommendationsByPositions({
+                  positions: [posNum],
+                  items: [
+                    {
+                      pos: posNum,
+                      category: originalItem.category,
+                      title: originalItem.title,
+                      tags: originalItem.tags,
+                      price: originalItem.price,
+                      brand: (originalItem as any).brandName,
+                      productUrl: originalItem.productUrl,
+                      imageUrl: originalItem.imageUrl,
+                    },
+                  ],
+                  categories: [slot],
+                  final_k: 3,
+                  use_llm_rerank: true,
+                });
               return { [slot]: byPos };
             }
           }
@@ -1009,17 +1047,26 @@ export const VirtualTryOnUI: React.FC = () => {
           if (minPrice) options.minPrice = Number(minPrice);
           if (maxPrice) options.maxPrice = Number(maxPrice);
           const trimmed = excludeTagsInput.trim();
-          if (trimmed) options.excludeTags = trimmed.split(",").map((t) => t.trim()).filter(Boolean);
+          if (trimmed)
+            options.excludeTags = trimmed
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
 
-          const recommendationsResult = await virtualTryOnService.getRecommendations({
-            person: null,
-            clothingItems: { [slot]: clothingItem } as unknown as ClothingItems,
-            generatedImage: null,
-            options,
-            selectedProductIds: null,
-          });
+          const recommendationsResult =
+            await virtualTryOnService.getRecommendations({
+              person: null,
+              clothingItems: {
+                [slot]: clothingItem,
+              } as unknown as ClothingItems,
+              generatedImage: null,
+              options,
+              selectedProductIds: null,
+            });
 
-          return { [slot]: (recommendationsResult.recommendations as any)[slot] };
+          return {
+            [slot]: (recommendationsResult.recommendations as any)[slot],
+          };
         } catch (error) {
           console.error(`${slot} recommendations failed:`, error);
           return null;
@@ -1034,7 +1081,7 @@ export const VirtualTryOnUI: React.FC = () => {
         getRecommendations("top"),
         getRecommendations("pants"),
         getRecommendations("shoes"),
-        getRecommendations("outer")
+        getRecommendations("outer"),
       ]);
 
       // 추천 결과 합치기
@@ -1043,7 +1090,7 @@ export const VirtualTryOnUI: React.FC = () => {
         pants: pantsRec?.pants || [],
         shoes: shoesRec?.shoes || [],
         outer: outerRec?.outer || [],
-        accessories: []
+        accessories: [],
       };
 
       setRecommendations(allRecommendations);
@@ -1077,11 +1124,8 @@ export const VirtualTryOnUI: React.FC = () => {
     originalItems,
   ]);
 
-
   const hasAnyClothing = !!(topImage || pantsImage || shoesImage || outerImage);
-  const canCombine = !!personImage
-  ? hasAnyClothing
-  : hasAnyClothing; // 사람 없이도 의류 1개 이상이면 OK
+  const canCombine = !!personImage ? hasAnyClothing : hasAnyClothing; // 사람 없이도 의류 1개 이상이면 OK
 
   // Helper: add a catalog/recommendation item into proper slot
   const addCatalogItemToSlot = useCallback(
@@ -1260,20 +1304,20 @@ export const VirtualTryOnUI: React.FC = () => {
         slot === "outer"
           ? outerLabel
           : slot === "top"
-          ? topLabel
-          : slot === "pants"
-          ? pantsLabel
-          : shoesLabel;
+            ? topLabel
+            : slot === "pants"
+              ? pantsLabel
+              : shoesLabel;
 
       if (label) {
         const productId =
           slot === "outer"
             ? selectedOuterId
             : slot === "top"
-            ? selectedTopId
-            : slot === "pants"
-            ? selectedPantsId
-            : selectedShoesId;
+              ? selectedTopId
+              : slot === "pants"
+                ? selectedPantsId
+                : selectedShoesId;
 
         // 상품 ID가 있으면(카탈로그에서 가져온 항목) 그대로 사용
         if (productId) {
@@ -1287,10 +1331,10 @@ export const VirtualTryOnUI: React.FC = () => {
                   slot === "outer"
                     ? outerImage?.previewUrl || originalItem.imageUrl
                     : slot === "top"
-                    ? topImage?.previewUrl || originalItem.imageUrl
-                    : slot === "pants"
-                    ? pantsImage?.previewUrl || originalItem.imageUrl
-                    : shoesImage?.previewUrl || originalItem.imageUrl,
+                      ? topImage?.previewUrl || originalItem.imageUrl
+                      : slot === "pants"
+                        ? pantsImage?.previewUrl || originalItem.imageUrl
+                        : shoesImage?.previewUrl || originalItem.imageUrl,
               }
             : {
                 id: productId,
@@ -1300,10 +1344,10 @@ export const VirtualTryOnUI: React.FC = () => {
                   slot === "outer"
                     ? outerImage?.previewUrl || ""
                     : slot === "top"
-                    ? topImage?.previewUrl || ""
-                    : slot === "pants"
-                    ? pantsImage?.previewUrl || ""
-                    : shoesImage?.previewUrl || "",
+                      ? topImage?.previewUrl || ""
+                      : slot === "pants"
+                        ? pantsImage?.previewUrl || ""
+                        : shoesImage?.previewUrl || "",
                 category: slot,
                 tags: [],
               };
@@ -1328,10 +1372,10 @@ export const VirtualTryOnUI: React.FC = () => {
               slot === "outer"
                 ? outerImage?.previewUrl || ""
                 : slot === "top"
-                ? topImage?.previewUrl || ""
-                : slot === "pants"
-                ? pantsImage?.previewUrl || ""
-                : shoesImage?.previewUrl || "",
+                  ? topImage?.previewUrl || ""
+                  : slot === "pants"
+                    ? pantsImage?.previewUrl || ""
+                    : shoesImage?.previewUrl || "",
             category: slot,
             tags: [],
           };
@@ -1373,10 +1417,10 @@ export const VirtualTryOnUI: React.FC = () => {
         slot === "outer"
           ? outerLabel
           : slot === "top"
-          ? topLabel
-          : slot === "pants"
-          ? pantsLabel
-          : shoesLabel;
+            ? topLabel
+            : slot === "pants"
+              ? pantsLabel
+              : shoesLabel;
 
       if (label) {
         // 원본 상품 페이지에 URL이 있는지 확인
@@ -1427,7 +1471,10 @@ export const VirtualTryOnUI: React.FC = () => {
 
                       // localStorage에 저장
                       if (img) {
-                        localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
+                        localStorage.setItem(
+                          "virtualTryOn_personImage",
+                          JSON.stringify(img)
+                        );
                       } else {
                         localStorage.removeItem("virtualTryOn_personImage");
                       }
@@ -1455,7 +1502,10 @@ export const VirtualTryOnUI: React.FC = () => {
                       setPersonSource("model");
 
                       // localStorage에 저장 (AI 모델은 최대 1장, 덮어쓰기)
-                      localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
+                      localStorage.setItem(
+                        "virtualTryOn_personImage",
+                        JSON.stringify(img)
+                      );
 
                       recordInput({ person: img }, undefined, "delta", "model");
                     }}
@@ -1725,15 +1775,24 @@ export const VirtualTryOnUI: React.FC = () => {
                     console.log("🔔 히스토리에서 상품 적용 시도:", payload);
 
                     if (payload.topProduct) {
-                      console.log("🔔 상의 상품 적용:", payload.topProduct.title);
+                      console.log(
+                        "🔔 상의 상품 적용:",
+                        payload.topProduct.title
+                      );
                       await addCatalogItemToSlot(payload.topProduct, false);
                     }
                     if (payload.pantsProduct) {
-                      console.log("🔔 하의 상품 적용:", payload.pantsProduct.title);
+                      console.log(
+                        "🔔 하의 상품 적용:",
+                        payload.pantsProduct.title
+                      );
                       await addCatalogItemToSlot(payload.pantsProduct, false);
                     }
                     if (payload.shoesProduct) {
-                      console.log("🔔 신발 상품 적용:", payload.shoesProduct.title);
+                      console.log(
+                        "🔔 신발 상품 적용:",
+                        payload.shoesProduct.title
+                      );
                       await addCatalogItemToSlot(payload.shoesProduct, false);
                     }
                     if (payload.outerProduct) {
@@ -1753,29 +1812,42 @@ export const VirtualTryOnUI: React.FC = () => {
                   [addCatalogItemToSlot, addToast]
                 )}
                 onImageApply={useCallback(
-                  async (slot: 'top' | 'pants' | 'shoes' | 'outer', image: UploadedImage, label: string) => {
+                  async (
+                    slot: "top" | "pants" | "shoes" | "outer",
+                    image: UploadedImage,
+                    label: string
+                  ) => {
                     console.log(`🔔 ${slot} 이미지 적용:`, label);
 
                     switch (slot) {
-                      case 'top':
+                      case "top":
                         setTopImage(image);
                         setTopLabel(label);
                         break;
-                      case 'pants':
+                      case "pants":
                         setPantsImage(image);
                         setPantsLabel(label);
                         break;
-                      case 'shoes':
+                      case "shoes":
                         setShoesImage(image);
                         setShoesLabel(label);
                         break;
-                      case 'outer':
+                      case "outer":
                         setOuterImage(image);
                         setOuterLabel(label);
                         break;
                     }
                   },
-                  [setTopImage, setTopLabel, setPantsImage, setPantsLabel, setShoesImage, setShoesLabel, setOuterImage, setOuterLabel]
+                  [
+                    setTopImage,
+                    setTopLabel,
+                    setPantsImage,
+                    setPantsLabel,
+                    setShoesImage,
+                    setShoesLabel,
+                    setOuterImage,
+                    setOuterLabel,
+                  ]
                 )}
               />
             </div>

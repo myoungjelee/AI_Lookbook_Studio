@@ -51,7 +51,7 @@ def _normalize_slot(raw: Optional[str]) -> str:
     c = (str(raw or "").strip().lower())
     if not c:
         return "unknown"
-    
+
     # DB 카테고리 매핑만 사용
     if c in ["man_outer", "woman_outer"]:
         return "outer"
@@ -63,7 +63,7 @@ def _normalize_slot(raw: Optional[str]) -> str:
         return "shoes"
     elif c == "woman_dress_skirt":
         return "pants"  # 드레스/스커트는 하의로 분류
-    
+
     # 알 수 없는 카테고리는 그대로 반환
     return c
 
@@ -92,6 +92,12 @@ def _normalize_gender(raw: Optional[str]) -> str:
         return "male"
     return g.lower()
 
+def _parse_price(value: object) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return 0
+    digits = re.sub(r"[^0-9]", "", text)
+    return int(digits) if digits else 0
 
 class DbPosRecommender:
     """
@@ -183,7 +189,7 @@ class DbPosRecommender:
                     "id": str(r.get("pos")),
                     "pos": int(r.get("pos")),
                     "title": str(title),
-                    "price": int(r.get("Product_P") or 0),
+                    "price": _parse_price(r.get("Product_P")),
                     "tags": tags,
                     "category": norm_cat,
                     "gender": gender_norm,
@@ -240,40 +246,40 @@ class DbPosRecommender:
         return self.emb_norm is not None and len(self.products) > 0
 
     def _calculate_similarity_scores(
-        self, 
-        query_vec: np.ndarray, 
-        *, 
-        alpha: float = 0.38, 
-        w1: float = 0.97, 
+        self,
+        query_vec: np.ndarray,
+        *,
+        alpha: float = 0.38,
+        w1: float = 0.97,
         w2: float = 0.03
     ) -> np.ndarray:
         """
         코사인 유사도 + 가격 가중치 계산 공통 함수
-        
+
         Args:
             query_vec: 정규화된 쿼리 벡터
             alpha: 가격 가중치 파라미터
             w1: 유사도 가중치
             w2: 가격 가중치
-            
+
         Returns:
             np.ndarray: 최종 점수 배열
         """
         emb_norm = self.emb_norm  # type: ignore[assignment]
         prices = self.prices  # type: ignore[assignment]
-        
+
         # 코사인 유사도 계산
         sim = emb_norm @ query_vec
-        
+
         # 가격 가중치 계산
         avg_price = float(prices.mean())
         clog = np.log1p(prices)
         qlog = np.log1p(avg_price)
         price_score = np.exp(-alpha * np.abs(clog - qlog))
-        
+
         # 최종 점수 계산
         total = w1 * sim + w2 * price_score
-        
+
         return total
 
     def recommend(
@@ -331,7 +337,7 @@ class DbPosRecommender:
     ) -> List[Dict]:
         """
         외부 이미지에서 생성된 임베딩 벡터로 추천
-        
+
         Args:
             query_embedding: 쿼리 임베딩 벡터
             category: 카테고리 필터 (top, pants, shoes, outer)
@@ -339,7 +345,7 @@ class DbPosRecommender:
             alpha: 가격 가중치 파라미터
             w1: 유사도 가중치
             w2: 가격 가중치
-            
+
         Returns:
             List[Dict]: 추천 아이템 리스트
         """
@@ -366,10 +372,10 @@ class DbPosRecommender:
                 product_category = _normalize_slot(product.get("category", ""))
                 if product_category == category:
                     category_indices.append(i)
-            
+
             if not category_indices:
                 return []
-            
+
             # 카테고리 필터링된 인덱스로 점수 재계산
             filtered_total = np.full(n, -np.inf)
             for idx in category_indices:
@@ -390,7 +396,7 @@ class DbPosRecommender:
             p = dict(self.products[i])
             p["score"] = float(total[i])
             out.append(p)
-        
+
         return out
 
 

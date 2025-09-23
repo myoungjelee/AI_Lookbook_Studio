@@ -24,8 +24,8 @@ router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
 
 
 def _candidate_budget(opts: RecommendationOptions) -> int:
-    base = opts.maxPerCategory if opts.maxPerCategory is not None else 3
-    return base * 4
+    base = opts.maxPerCategory if opts.maxPerCategory is not None else 6
+    return base * 8
 
 
 def _convert_analysis_to_text(analysis: dict) -> str:
@@ -33,28 +33,28 @@ def _convert_analysis_to_text(analysis: dict) -> str:
     GPT-4.1 Mini 분석 결과를 임베딩 서버에 전송할 텍스트로 변환
     """
     text_parts = []
-    
+
     # 전체 스타일
     if "overall_style" in analysis:
         text_parts.append(f"Overall style: {', '.join(analysis['overall_style'])}")
-    
+
     # 카테고리별 스타일
     for category in ["top", "pants", "shoes", "outer"]:
         if category in analysis and analysis[category]:
             text_parts.append(f"{category}: {', '.join(analysis[category])}")
-    
+
     # 색상
     if "colors" in analysis:
         text_parts.append(f"Colors: {', '.join(analysis['colors'])}")
-    
+
     # 태그
     if "tags" in analysis:
         text_parts.append(f"Tags: {', '.join(analysis['tags'])}")
-    
+
     # 캡션
     if "captions" in analysis:
         text_parts.append(f"Description: {', '.join(analysis['captions'])}")
-    
+
     return ". ".join(text_parts) if text_parts else "casual style clothing"
 
 
@@ -69,12 +69,12 @@ def _format_db_recommendations(db_recs: list) -> dict:
         "outer": [],
         "accessories": []
     }
-    
+
     for rec in db_recs:
         category = rec.get("category", "top").lower()
         if category in formatted:
             formatted[category].append(rec)
-    
+
     return formatted
 
 
@@ -387,7 +387,7 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
 
     svc = get_catalog_service()
     opts = req.options if req.options is not None else RecommendationOptions()
-    
+
     # 1. 임베딩 서버 연동으로 벡터 기반 추천 시도
     candidate_recs = {}
     if embedding_client.available() and analysis:
@@ -396,11 +396,11 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
             # 분석 결과를 텍스트로 변환
             analysis_text = _convert_analysis_to_text(analysis)
             print(f"📝 분석 텍스트: {analysis_text}")
-            
+
             # 임베딩 서버에서 벡터 생성
             embedding_vector = embedding_client.get_embedding(analysis_text)
             print(f"✅ 임베딩 벡터 생성 완료 (길이: {len(embedding_vector)})")
-            
+
             # DB에서 임베딩 기반 추천 (by-positions와 동일한 방식)
             if db_pos_recommender.available():
                 print(f"🗄️ DB에서 임베딩 기반 추천 중...")
@@ -425,6 +425,9 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
         print(f"⚠️ 임베딩 서버 사용 불가 또는 분석 결과 없음, CatalogService 사용")
         candidate_recs = _build_candidates(analysis, svc, opts)
 
+    print(f"🔍 GPT-4.1 Mini 분석 결과: {analysis}")
+    print({"candidates": {cat: len(items) for cat, items in candidate_recs.items()}})
+
     selected_ids = dict(req.selectedProductIds or {})
     active_slots = _requested_slots(
         req.clothingItems, selected_ids if selected_ids else None
@@ -446,7 +449,7 @@ def recommend_from_upload(req: RecommendationRequest) -> RecommendationResponse:
             candidate_recs[cat] = []
 
     # Optional LLM rerank (default to Azure OpenAI when configured)
-    max_k = opts.maxPerCategory or 3
+    max_k = opts.maxPerCategory or 10
     user_llm_pref = opts.useLLMRerank
     use_llm = user_llm_pref if user_llm_pref is not None else llm_ranker.available()
     if use_llm and llm_ranker.available():

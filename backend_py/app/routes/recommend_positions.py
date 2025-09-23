@@ -265,6 +265,26 @@ def recommend_by_positions(req: PositionsRequest, response: Response) -> List[Re
             raise HTTPException(status_code=500, detail=str(e))
 
     if pool is None:
+        try:
+            svc = get_catalog_service()
+            catalog = svc.get_all()
+            pool = [
+                {
+                    "id": str(p.get("id")),
+                    "pos": int(p.get("pos", p.get("id") or 0)),
+                    "title": p.get("title") or "",
+                    "price": int(p.get("price") or 0),
+                    "tags": p.get("tags") or [],
+                    "category": p.get("category") or "top",
+                    "imageUrl": p.get("imageUrl"),
+                    "productUrl": p.get("productUrl"),
+                    "score": 0.0,
+                }
+                for p in catalog
+            ]
+        except Exception:
+            pool = None  # 그대로 503 반환
+    if pool is None:
         raise HTTPException(status_code=503, detail="No recommender available (internal/external)")
 
     # Build per-category top-N so that every dressed category surfaces results
@@ -377,8 +397,24 @@ def recommend_by_positions(req: PositionsRequest, response: Response) -> List[Re
                             break
                 except Exception:
                     pass
+            if use_llm and llm_ranker.available():
+                analysis = build_analysis_for(cat)
+                cand = {cat: cat_pool[: min(len(cat_pool), max(req.final_k * 10, 20))]}
+                ids_map = {str(it.get("id")): it for it in cat_pool}
+                picked = llm_ranker.rerank(analysis, cand, top_k=req.final_k) or {}
+                order_ids = picked.get(cat) or []
+                ranked = [ids_map[i] for i in order_ids if i in ids_map]
+                if len(ranked) < req.final_k:
+                    for it in cat_pool:
+                        if it not in ranked:
+                            ranked.append(it)
+                        if len(ranked) >= req.final_k:
+                            break
+            cat_pick_map[cat] = _diversify_pick(ranked, req.final_k)
+        else:
             cat_pick_map[cat] = _diversify_pick(cat_pool, req.final_k)
-            cat_pool_map[cat] = cat_pool
+
+        cat_pool_map[cat] = cat_pool
 
         # Global de-dup across categories while keeping per-category quotas
         seen_ids: set[str] = set()
