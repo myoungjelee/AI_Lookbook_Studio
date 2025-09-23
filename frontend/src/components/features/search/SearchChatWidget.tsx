@@ -15,6 +15,26 @@ const panelStyle: React.CSSProperties = {
   zIndex: 50,
 };
 
+const closedWrapStyle: React.CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  flexDirection: 'row-reverse',
+};
+
+const closedBubbleStyle: React.CSSProperties = {
+  background: '#fff',
+  color: '#111',
+  padding: '10px 14px',
+  borderRadius: 18,
+  fontSize: 13,
+  lineHeight: 1.5,
+  boxShadow: '0 12px 24px rgba(0,0,0,0.24)',
+  pointerEvents: 'none',
+  position: 'relative',
+};
+
 const cardStyle: React.CSSProperties = {
   width: 'min(520px, 92vw)',
   height: 'min(82vh, 960px)',
@@ -95,7 +115,7 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
 
       setMessages((m) => [
         ...m,
-        { role: 'assistant', content: `${summary}\n총 ${items.length}개를 찾았어요.` },
+        { role: 'assistant', content: `${summary}:항목에서 말씀하신 아이템들을 찾았어요.` },
       ]);
       onApplyResults?.(items, q);
     } catch (err) {
@@ -119,6 +139,7 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
   return (
     <div style={panelStyle}>
       {!open && (
+        <div style={closedWrapStyle}>
         <button
           type="button"
           aria-label="검색 챗 열기"
@@ -127,15 +148,23 @@ export const SearchChatWidget: React.FC<Props> = ({ onApplyResults }) => {
             width: 56,
             height: 56,
             borderRadius: 28,
-            background: '#111',
-            color: '#fff',
+            background: '#fff',
+            color: '#111',
             border: 'none',
             boxShadow: '0 8px 20px rgba(0,0,0,0.22)',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
           }}
         >
-          💬
+          <img src="/icons/chatbot.png" alt="챗봇" style={{ width: 28, height: 28 }} />
         </button>
+          <div style={closedBubbleStyle}>
+      채팅형식으로 원하시는 옷을 찾아보세요
+    </div>
+  </div>
       )}
 
       {open && (
