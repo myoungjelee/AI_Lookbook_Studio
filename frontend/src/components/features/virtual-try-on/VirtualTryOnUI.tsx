@@ -915,13 +915,10 @@ export const VirtualTryOnUI: React.FC = () => {
       shoesImage ||
       outerImage
     );
-    const hasAllClothing = !!(topImage && pantsImage && shoesImage);
-    const allowWithoutPerson = !personImage && hasAllClothing;
-    const allowWithPerson = !!personImage && hasAnyClothing;
-    if (!(allowWithoutPerson || allowWithPerson)) {
-      setError("Upload a person photo or select top, pants, and shoes.");
-      return;
-    }
+    if (!hasAnyClothing) {
+  setError("최소 한 개의 의류를 선택하세요.");
+  return;
+}
 
     setIsLoading(true);
     setError(null);
@@ -962,20 +959,20 @@ export const VirtualTryOnUI: React.FC = () => {
 
       // 각 슬롯별 추천을 병렬로 처리하는 함수
       const getRecommendations = async (slot: "top" | "pants" | "shoes" | "outer") => {
-        const image = slot === "top" ? topImage : 
+        const image = slot === "top" ? topImage :
                       slot === "pants" ? pantsImage :
                       slot === "shoes" ? shoesImage : outerImage;
-        
+
         const originalItem = slot === "top" ? originalItems.top :
                             slot === "pants" ? originalItems.pants :
                             slot === "shoes" ? originalItems.shoes : originalItems.outer;
-        
+
         const clothingItem = slot === "top" ? clothingItems.top :
                             slot === "pants" ? clothingItems.pants :
                             slot === "shoes" ? clothingItems.shoes : clothingItems.outer;
 
         if (!image) return null;
-        
+
         try {
           // 카탈로그 아이템인지 확인
           if (originalItem) {
@@ -985,7 +982,7 @@ export const VirtualTryOnUI: React.FC = () => {
               : Number.isFinite(Number(originalItem.id))
               ? Number(originalItem.id)
               : NaN;
-            
+
             if (Number.isFinite(posNum)) {
               const byPos = await virtualTryOnService.getRecommendationsByPositions({
                 positions: [posNum],
@@ -1006,14 +1003,14 @@ export const VirtualTryOnUI: React.FC = () => {
               return { [slot]: byPos };
             }
           }
-          
+
           // 업로드 이미지 → recommend
           const options: RecommendationOptions = {};
           if (minPrice) options.minPrice = Number(minPrice);
           if (maxPrice) options.maxPrice = Number(maxPrice);
           const trimmed = excludeTagsInput.trim();
           if (trimmed) options.excludeTags = trimmed.split(",").map((t) => t.trim()).filter(Boolean);
-          
+
           const recommendationsResult = await virtualTryOnService.getRecommendations({
             person: null,
             clothingItems: { [slot]: clothingItem } as unknown as ClothingItems,
@@ -1021,7 +1018,7 @@ export const VirtualTryOnUI: React.FC = () => {
             options,
             selectedProductIds: null,
           });
-          
+
           return { [slot]: (recommendationsResult.recommendations as any)[slot] };
         } catch (error) {
           console.error(`${slot} recommendations failed:`, error);
@@ -1031,11 +1028,11 @@ export const VirtualTryOnUI: React.FC = () => {
 
       // 2. 이미지 생성과 각 슬롯별 추천을 병렬로 실행
       setIsLoadingRecommendations(true);
-      
+
       const [result, topRec, pantsRec, shoesRec, outerRec] = await Promise.all([
         imagePromise,
         getRecommendations("top"),
-        getRecommendations("pants"), 
+        getRecommendations("pants"),
         getRecommendations("shoes"),
         getRecommendations("outer")
       ]);
@@ -1048,7 +1045,7 @@ export const VirtualTryOnUI: React.FC = () => {
         outer: outerRec?.outer || [],
         accessories: []
       };
-      
+
       setRecommendations(allRecommendations);
 
       if (result.generatedImage) {
@@ -1080,9 +1077,11 @@ export const VirtualTryOnUI: React.FC = () => {
     originalItems,
   ]);
 
-  const canCombine =
-    (!!personImage && (topImage || pantsImage || shoesImage || outerImage)) ||
-    (!personImage && !!(topImage && pantsImage && shoesImage));
+
+  const hasAnyClothing = !!(topImage || pantsImage || shoesImage || outerImage);
+  const canCombine = !!personImage
+  ? hasAnyClothing
+  : hasAnyClothing; // 사람 없이도 의류 1개 이상이면 OK
 
   // Helper: add a catalog/recommendation item into proper slot
   const addCatalogItemToSlot = useCallback(
@@ -1425,7 +1424,7 @@ export const VirtualTryOnUI: React.FC = () => {
                       setPersonImage(img);
                       setPersonSource(img ? "upload" : "unknown");
                       setSelectedModelId(null);
-                      
+
                       // localStorage에 저장
                       if (img) {
                         localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
@@ -1454,10 +1453,10 @@ export const VirtualTryOnUI: React.FC = () => {
                     onPick={(img) => {
                       setPersonImage(img);
                       setPersonSource("model");
-                      
+
                       // localStorage에 저장 (AI 모델은 최대 1장, 덮어쓰기)
                       localStorage.setItem("virtualTryOn_personImage", JSON.stringify(img));
-                      
+
                       recordInput({ person: img }, undefined, "delta", "model");
                     }}
                   />
@@ -1566,8 +1565,8 @@ export const VirtualTryOnUI: React.FC = () => {
                           const label = img ? "Uploaded top" : undefined;
                           setTopLabel(label);
                           recordInput(
-                            { top: img }, 
-                            { top: label }, 
+                            { top: img },
+                            { top: label },
                             "delta",
                             undefined,
                             undefined,
@@ -1756,7 +1755,7 @@ export const VirtualTryOnUI: React.FC = () => {
                 onImageApply={useCallback(
                   async (slot: 'top' | 'pants' | 'shoes' | 'outer', image: UploadedImage, label: string) => {
                     console.log(`🔔 ${slot} 이미지 적용:`, label);
-                    
+
                     switch (slot) {
                       case 'top':
                         setTopImage(image);
