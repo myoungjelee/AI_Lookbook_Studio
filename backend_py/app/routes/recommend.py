@@ -21,7 +21,7 @@ from ..services.llm_ranker import llm_ranker
 from ..utils.slot_classifier import validate_slot_data
 
 router = APIRouter(prefix="/api/recommend", tags=["Recommendations"])
-
+# 임베딩 서버 + DB 기반 추천 구현
 
 def _candidate_budget(opts: RecommendationOptions) -> int:
     base = opts.maxPerCategory if opts.maxPerCategory is not None else 6
