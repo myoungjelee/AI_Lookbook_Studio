@@ -11,11 +11,11 @@ router = APIRouter(tags=["health"])
 async def check_database_connection():
     """PostgreSQL 데이터베이스 연결 상태를 확인합니다."""
     try:
-        db_host = os.getenv('DB_HOST', 'ai-final-team1-db.postgres.database.azure.com')
-        db_user = os.getenv('DB_USER', 'adminDB')
-        db_password = os.getenv('DB_PASSWORD', 'qwer123!')
-        db_name = os.getenv('DB_NAME', 'postgres')
-        db_port = int(os.getenv('DB_PORT', 5432))
+        db_host = os.getenv('DB_HOST')
+        db_user = os.getenv('DB_USER')
+        db_password = os.getenv('DB_PASSWORD')
+        db_name = os.getenv('DB_NAME')
+        db_port = int(os.getenv('DB_PORT'))
 
         dsn = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}?sslmode=require"
 
