@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..services.catalog import get_catalog_service
 from ..services.azure_openai_service import azure_openai_service
+from ..services.db_recommender import db_pos_recommender
 
 router = APIRouter(prefix="/api/search", tags=["Search"])
 
@@ -89,8 +90,12 @@ def semantic_search(
     Otherwise falls back to substring scoring via CatalogService.search.
     """
     svc = get_catalog_service()
-    all_products = svc.get_all()
-    # apply coarse filters first to shrink candidates
+
+    if db_pos_recommender.available():
+        all_products = list(db_pos_recommender.products)
+    else:
+        all_products = svc.get_all()
+
     filtered = _filter_products(all_products, category, minPrice, maxPrice)
 
     # Attempt vector search
