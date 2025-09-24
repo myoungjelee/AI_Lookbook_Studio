@@ -1462,8 +1462,8 @@ export const VirtualTryOnUI: React.FC = () => {
                 <div className="md:col-span-1 space-y-2 border-r border-gray-200 pr-4">
                   <ImageUploader
                     id="person-image"
-                    title="Person"
-                    description="Upload a full-body photo."
+                    title="인물 (상반신)"
+                    description="얼굴이 잘 보이는 상반신 사진을 올려야 결과물이 좋습니다."
                     onImageUpload={(img) => {
                       setPersonImage(img);
                       setPersonSource(img ? "upload" : "unknown");
@@ -1555,8 +1555,8 @@ export const VirtualTryOnUI: React.FC = () => {
                     >
                       <ImageUploader
                         id="outer-image"
-                        title="Outer"
-                        description="Upload a photo of outerwear."
+                        title="아우터"
+                        description="드래그 앤 드롭 또는 쇼핑몰내 사진 클릭하여 업로드"
                         onImageUpload={(img) => {
                           setOuterImage(img);
                           const label = img ? "Uploaded outer" : undefined;
@@ -1608,8 +1608,8 @@ export const VirtualTryOnUI: React.FC = () => {
                     >
                       <ImageUploader
                         id="top-image"
-                        title="Top"
-                        description="Upload a photo of a top."
+                        title="상의"
+                        description="드래그 앤 드롭 또는 쇼핑몰내 사진 클릭하여 업로드"
                         onImageUpload={(img) => {
                           setTopImage(img);
                           const label = img ? "Uploaded top" : undefined;
@@ -1660,8 +1660,8 @@ export const VirtualTryOnUI: React.FC = () => {
                     >
                       <ImageUploader
                         id="pants-image"
-                        title="Pants"
-                        description="Upload a photo of pants."
+                        title="하의"
+                        description="드래그 앤 드롭 또는 쇼핑몰내 사진 클릭하여 업로드"
                         onImageUpload={(img) => {
                           setPantsImage(img);
                           const label = img ? "Uploaded pants" : undefined;
@@ -1712,8 +1712,8 @@ export const VirtualTryOnUI: React.FC = () => {
                     >
                       <ImageUploader
                         id="shoes-image"
-                        title="Shoes"
-                        description="Upload a photo of shoes."
+                        title="신발"
+                        description="드래그 앤 드롭 또는 쇼핑몰내 사진 클릭하여 업로드"
                         onImageUpload={(img) => {
                           setShoesImage(img);
                           const label = img ? "Uploaded shoes" : undefined;
@@ -1879,7 +1879,7 @@ export const VirtualTryOnUI: React.FC = () => {
                       disabled={!generatedImage}
                       onClick={() => setShareOpen(true)}
                     >
-                      Save share image
+                      이미지 공유용 저장
                     </Button>
                   </div>
                   <SnsShareDialog
@@ -1893,10 +1893,10 @@ export const VirtualTryOnUI: React.FC = () => {
                 <Card className="space-y-3">
                   <div className="space-y-1">
                     <h3 className="text-lg font-semibold text-gray-800">
-                      Create video clip
+                      룩북 비디오 생성
                     </h3>
                     <p className="text-sm text-gray-500">
-                      Turn the generated look into a short clip.
+                      생성된 룩을 짧은 클립으로 변환합니다.
                     </p>
                     {isSafari && (
                       <p className="text-xs text-amber-600">
@@ -1905,7 +1905,7 @@ export const VirtualTryOnUI: React.FC = () => {
                       </p>
                     )}
                   </div>
-                  <div className="space-y-2">
+                  {/*                   <div className="space-y-2">
                     <label
                       className="text-xs font-medium text-gray-500 uppercase tracking-wide"
                       htmlFor="video-prompt"
@@ -1923,7 +1923,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         videoStatus === "polling"
                       }
                     />
-                  </div>
+                  </div> */}
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       onClick={handleStartVideoGeneration}
@@ -1936,7 +1936,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         videoStatus === "starting" || videoStatus === "polling"
                       }
                     >
-                      Generate video
+                      나만의 룩북 생성
                     </Button>
                     <Button
                       variant="ghost"
@@ -1946,7 +1946,7 @@ export const VirtualTryOnUI: React.FC = () => {
                         videoStatus !== "starting" && videoStatus !== "polling"
                       }
                     >
-                      Cancel
+                      생성 중단
                     </Button>
                     {(videoStatus === "starting" ||
                       videoStatus === "polling") && (
@@ -1964,11 +1964,6 @@ export const VirtualTryOnUI: React.FC = () => {
                     <p className="text-xs text-gray-500">
                       Progress:{" "}
                       {Math.min(100, Math.max(0, Math.round(videoProgress)))}%
-                    </p>
-                  )}
-                  {videoOperationName && (
-                    <p className="text-xs text-gray-400 break-all">
-                      Operation: {videoOperationName}
                     </p>
                   )}
                   {videoError && (

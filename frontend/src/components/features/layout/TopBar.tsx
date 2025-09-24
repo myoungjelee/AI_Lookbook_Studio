@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 interface TopBarProps {
-  onNavigate?: (page: 'home' | 'try-on' | 'likes' | 'my') => void;
+  onNavigate?: (page: "home" | "try-on" | "likes" | "my") => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
   const envLogo = (import.meta as any).env?.VITE_LOGO_URL as string | undefined;
-  const [logoSrc, setLogoSrc] = useState<string>(envLogo || '/logo.png');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [logoSrc, setLogoSrc] = useState<string>(envLogo || "/logo.png");
+  const [searchTerm, setSearchTerm] = useState("");
   // const handleLogoError = () => {
   //   if (!envLogo && logoSrc !== '/logo.jpg') {
   //     setLogoSrc('/logo.jpg');
@@ -18,34 +18,41 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
   //     setLogoSrc('');
   //   }
   // };
-  const primaryNav: Array<{ id: string; label: string; go?: 'home' | 'try-on' | 'likes' | 'my' }> = [
-    { id: 'musinsa', label: 'MUSINSA', go: 'home' },
-    { id: 'beauty', label: 'BEAUTY' },
-    { id: 'player', label: 'PLAYER' },
-    { id: 'outlet', label: 'OUTLET' },
-    { id: 'boutique', label: 'BOUTIQUE' },
-    { id: 'shoes', label: 'SHOES' },
-    { id: 'kids', label: 'KIDS' },
-    { id: 'used', label: 'USED' },
+  const primaryNav: Array<{
+    id: string;
+    label: string;
+    go?: "home" | "try-on" | "likes" | "my";
+  }> = [
+    { id: "musinsa", label: "MUSINSA", go: "home" },
+    { id: "beauty", label: "2025추석" },
+    { id: "player", label: "GIFT" },
+    { id: "outlet", label: "SHOW" },
+    { id: "boutique", label: "BEST" },
+    { id: "shoes", label: "NEW" },
+    { id: "kids", label: "Brand" },
+    { id: "used", label: "Re.Green" },
   ];
 
   const utilityNav = [
-    { id: 'store', label: '오프라인 스토어' },
+    //{ id: "store", label: "" },
     // 검색: 메인 섹션의 검색 입력을 사용하므로 제거
-    { id: 'likes', label: '좋아요', go: 'likes' as const },
-    { id: 'my', label: '마이', go: 'my' as const },
-    { id: 'login', label: '로그인 / 회원가입' },
+    { id: "likes", label: "좋아요", go: "likes" as const },
+    { id: "my", label: "마이룩북", go: "my" as const },
+    { id: "login", label: "로그인 / 회원가입" },
   ];
 
-  const secondaryNav: Array<{ id: string; label: string; go?: 'home' | 'try-on' | 'likes' | 'my' }> = [
-    { id: 'recommend', label: '추천', go: 'home' },
-    { id: 'ranking', label: '랭킹' },
-    { id: 'sale', label: '세일' },
-    { id: 'brand', label: '브랜드' },
-    { id: 'new', label: '발매' },
-    { id: 'fashion', label: '패션 매거진' },
-    { id: 'spa', label: 'SPA샵' },
-    { id: 'try-on', label: '버추얼 피팅', go: 'try-on' },
+  const secondaryNav: Array<{
+    id: string;
+    label: string;
+    go?: "home" | "try-on" | "likes" | "my";
+  }> = [
+    { id: "try-on", label: "버추얼 피팅", go: "try-on" },
+    { id: "recommend", label: "추천", go: "home" },
+    { id: "ranking", label: "상의" },
+    { id: "sale", label: "아우터" },
+    { id: "brand", label: "바지" },
+    { id: "new", label: "원피스" },
+    { id: "fashion", label: "신발" },
   ];
 
   return (
@@ -56,14 +63,20 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
             <button
               key={item.id}
               onClick={() => item.go && onNavigate?.(item.go)}
-              aria-label={idx === 0 ? 'Home' : undefined}
-              className={`${idx === 0 ? 'flex items-center' : 'text-sm font-medium tracking-wide hover:text-gray-700'} transition-colors`}
+              aria-label={idx === 0 ? "Home" : undefined}
+              className={`${idx === 0 ? "flex items-center" : "text-sm font-medium tracking-wide hover:text-gray-700"} transition-colors`}
             >
               {idx === 0 ? (
                 logoSrc ? (
-                  <img src={logoSrc} alt="logo" className="h-6 w-auto object-contain" />
+                  <img
+                    src={logoSrc}
+                    alt="logo"
+                    className="h-6 w-auto object-contain"
+                  />
                 ) : (
-                  <span className="text-lg font-extrabold tracking-tight">MUSINSA</span>
+                  <span className="text-lg font-extrabold tracking-tight">
+                    MUSINSA
+                  </span>
                 )
               ) : (
                 item.label
@@ -71,7 +84,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
             </button>
           ))}
           <div className="ml-auto flex items-center gap-4 text-xs text-gray-600">
-            {utilityNav.map(item => (
+            {utilityNav.map((item) => (
               <button
                 key={item.id}
                 onClick={() => item.go && onNavigate?.(item.go)}
@@ -90,7 +103,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
               <button
                 key={item.id}
                 onClick={() => item.go && onNavigate?.(item.go)}
-                className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 ${idx === 0 ? 'border-gray-900 text-gray-900' : ''}`}
+                className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 ${idx === 0 ? "border-gray-900 text-gray-900" : ""}`}
               >
                 {item.label}
               </button>
@@ -102,7 +115,9 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
             onSubmit={(e) => {
               e.preventDefault();
               const q = searchTerm.trim();
-              window.dispatchEvent(new CustomEvent('semantic-search', { detail: { q, limit: 24 } }));
+              window.dispatchEvent(
+                new CustomEvent("semantic-search", { detail: { q, limit: 24 } })
+              );
             }}
             role="search"
             aria-label="상품 검색"
@@ -121,4 +136,3 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
 };
 
 export default TopBar;
-
