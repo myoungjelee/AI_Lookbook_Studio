@@ -20,11 +20,42 @@ export const SnsShareDialog: React.FC<{
   open: boolean;
   onClose: () => void;
   image?: string | null;
-}> = ({ open, onClose, image }) => {
+  initialTips?: string[];
+  initialScore?: number | null;
+  initialSource?: "ai" | "fallback" | null;
+}> = ({
+  open,
+  onClose,
+  image,
+  initialTips,
+  initialScore,
+  initialSource,
+}) => {
   const [size, setSize] = useState<SizeKey>("square");
   const [loading, setLoading] = useState(false);
   const [tips, setTips] = useState<string[]>([]);
   const [score, setScore] = useState<number | null>(null);
+  const [source, setSource] = useState<"ai" | "fallback" | null>(
+    initialSource ?? null
+  );
+
+  useEffect(() => {
+    if (initialTips !== undefined) {
+      setTips(initialTips);
+    }
+  }, [initialTips]);
+
+  useEffect(() => {
+    if (initialScore !== undefined) {
+      setScore(initialScore ?? null);
+    }
+  }, [initialScore]);
+
+  useEffect(() => {
+    if (initialSource !== undefined) {
+      setSource(initialSource ?? null);
+    }
+  }, [initialSource]);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +63,12 @@ export const SnsShareDialog: React.FC<{
       if (!image) {
         setTips([]);
         setScore(null);
+        setSource(null);
+        setLoading(false);
+        return;
+      }
+      if (initialTips !== undefined || initialScore !== undefined) {
+        setLoading(false);
         return;
       }
       setLoading(true);
@@ -40,16 +77,19 @@ export const SnsShareDialog: React.FC<{
           generatedImage: image,
         });
         if (cancelled) return;
-        setTips((res.tips || []).slice(0, 4));
-        setScore(
+        const nextTips = (res.tips || []).slice(0, 4);
+        const nextScore =
           typeof res.score === "number"
             ? Math.max(0, Math.min(100, res.score))
-            : null
-        );
+            : null;
+        setTips(nextTips);
+        setScore(nextScore);
+        setSource((res.source as "ai" | "fallback") ?? null);
       } catch {
         if (!cancelled) {
           setTips([]);
           setScore(null);
+          setSource(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -59,7 +99,7 @@ export const SnsShareDialog: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [open, image]);
+  }, [open, image, initialTips, initialScore, initialSource]);
 
   const dims = SIZES[size];
   const containerStyle: React.CSSProperties = useMemo(
@@ -104,8 +144,13 @@ export const SnsShareDialog: React.FC<{
             {/* Card background */}
             <div className="w-full h-full bg-white flex flex-col">
               <div className="flex items-center justify-between px-6 pt-6">
-                <div className="text-gray-800 font-semibold">
-                  AI Virtual Try-On
+                <div className="flex items-center gap-2 text-gray-800 font-semibold">
+                  <span>AI Virtual Try-On</span>
+                  {source && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                      {source.toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 {typeof score === "number" && (
                   <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 text-yellow-700">

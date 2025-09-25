@@ -6,6 +6,12 @@ import type { StyleTipsResponse } from "../../../types";
 
 interface StyleTipsCardProps {
   generatedImage?: string | null;
+  onTipsLoaded?: (payload: {
+    tips: string[];
+    score: number | null;
+    source: "ai" | "fallback" | null;
+    image?: string | null;
+  }) => void;
 }
 
 const featureEnabled = (): boolean => {
@@ -17,6 +23,7 @@ const featureEnabled = (): boolean => {
 
 export const StyleTipsCard: React.FC<StyleTipsCardProps> = ({
   generatedImage,
+  onTipsLoaded,
 }) => {
   const [tips, setTips] = useState<string[] | null>(null);
   const [source, setSource] = useState<"ai" | "fallback" | null>(null);
@@ -45,8 +52,10 @@ export const StyleTipsCard: React.FC<StyleTipsCardProps> = ({
         await virtualTryOnService.getStyleTips(payload);
       console.log("[StyleTips] response", res.score, res.tips);
 
-      setTips(res.tips || []);
-      setSource(res.source as any);
+      const nextTips = res.tips || [];
+      const nextSource = (res.source as "ai" | "fallback") ?? null;
+      setTips(nextTips);
+      setSource(nextSource);
       const normalized =
         typeof res.score === "number"
           ? Math.max(0, Math.min(100, res.score))
@@ -73,6 +82,13 @@ export const StyleTipsCard: React.FC<StyleTipsCardProps> = ({
           });
         }
       }
+
+      onTipsLoaded?.({
+        tips: nextTips,
+        score: normalized,
+        source: nextSource,
+        image: generatedImage,
+      });
     } catch (e: any) {
       setError(e?.message || "Failed to load tips");
     } finally {

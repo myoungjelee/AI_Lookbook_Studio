@@ -342,6 +342,15 @@ export const VirtualTryOnUI: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { addToast } = useToast();
   const [shareOpen, setShareOpen] = useState<boolean>(false);
+  const [styleTipsSnapshot, setStyleTipsSnapshot] = useState<
+    | {
+        tips: string[];
+        score: number | null;
+        source: "ai" | "fallback" | null;
+        image?: string | null;
+      }
+    | null
+  >(null);
   // Video generation state
   const [videoPrompt, setVideoPrompt] = useState<string>(
     (import.meta as any).env?.VITE_VIDEO_PROMPT ||
@@ -388,6 +397,23 @@ export const VirtualTryOnUI: React.FC = () => {
           );
         })()
       : false;
+
+  useEffect(() => {
+    if (!generatedImage) {
+      setStyleTipsSnapshot(null);
+      return;
+    }
+    setStyleTipsSnapshot((prev) =>
+      prev && prev.image === generatedImage ? prev : null
+    );
+  }, [generatedImage]);
+
+  const currentStyleTips =
+    styleTipsSnapshot &&
+    generatedImage &&
+    styleTipsSnapshot.image === generatedImage
+      ? styleTipsSnapshot
+      : null;
   // UI highlight states
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
@@ -1981,7 +2007,10 @@ export const VirtualTryOnUI: React.FC = () => {
                 onFullScreenChange={setIsFullScreen}
               />
               {/* Style Tips below result */}
-              <StyleTipsCard generatedImage={generatedImage || undefined} />
+              <StyleTipsCard
+                generatedImage={generatedImage || undefined}
+                onTipsLoaded={setStyleTipsSnapshot}
+              />
               {/* Share button (feature flag default ON) */}
               {shareFeatureEnabled && (
                 <>
@@ -2004,6 +2033,13 @@ export const VirtualTryOnUI: React.FC = () => {
                       setIsFullScreen(false);
                     }}
                     image={generatedImage || undefined}
+                    initialTips={currentStyleTips ? currentStyleTips.tips : undefined}
+                    initialScore={
+                      currentStyleTips ? currentStyleTips.score : undefined
+                    }
+                    initialSource={
+                      currentStyleTips ? currentStyleTips.source : undefined
+                    }
                   />
                 </>
               )}
