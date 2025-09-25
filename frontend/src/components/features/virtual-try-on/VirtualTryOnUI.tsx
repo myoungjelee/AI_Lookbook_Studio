@@ -1629,6 +1629,9 @@ export const VirtualTryOnUI: React.FC = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => {
+                        setPersonImage(null);
+                        setPersonSource("unknown");
+                        setSelectedModelId(null);
                         setOuterImage(null);
                         setTopImage(null);
                         setPantsImage(null);
