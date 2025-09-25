@@ -4,6 +4,7 @@ import { getStorageUsage, manageStorageSpace } from "./storage.service";
 export type TryOnInputHistoryItem = {
   id: string;
   ts: number;
+
   person: "model" | "upload" | "unknown";
   topLabel?: string;
   pantsLabel?: string;
@@ -30,6 +31,7 @@ export type TryOnOutputHistoryItem = {
   id: string;
   ts: number;
   image: string; // data URI
+  originalImage?: string; // 원본 data URI (점수 업데이트용)
   evaluation?: {
     score: number;
     reasoning?: string;
@@ -210,8 +212,9 @@ export const tryOnHistory = {
       id: `o-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       ts: Date.now(),
       image: compressedImageDataUri,
+      originalImage: imageDataUri,
       evaluation: {
-        score: 85, // 기본 점수
+        score: 50, // 기본 점수
         reasoning: "자동 생성된 결과",
         model: "virtual-try-on",
         ts: Date.now(),
