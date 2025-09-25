@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import type { RecommendationItem } from "../../../types";
 import type {
   TryOnInputHistoryItem,
   TryOnOutputHistoryItem,
@@ -127,14 +128,17 @@ export const MyPage: React.FC = () => {
       return `data:image/jpeg;base64,${item.outerImageData}`;
 
     // 2. 상품 이미지 URL 사용
-    const products = [
-      item.topProduct,
-      item.pantsProduct,
-      item.shoesProduct,
-      item.outerProduct,
-    ].filter(Boolean);
-    for (const product of products) {
-      if (product?.imageUrl) return product.imageUrl;
+    const productCandidates: Array<{ product?: RecommendationItem; id?: string; image?: string }> = [
+      { product: item.topProduct, id: item.topProductId },
+      { product: item.pantsProduct, id: item.pantsProductId },
+      { product: item.shoesProduct, id: item.shoesProductId },
+      { product: item.outerProduct, id: item.outerProductId },
+    ];
+    for (const candidate of productCandidates) {
+      if (!candidate.id) continue;
+      if (candidate.product?.imageUrl) return candidate.product.imageUrl;
+      if (candidate.product?.imageUrl === undefined && candidate.image)
+        return candidate.image;
     }
     return null;
   };
