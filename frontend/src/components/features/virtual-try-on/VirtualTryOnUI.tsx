@@ -184,10 +184,112 @@ export const VirtualTryOnUI: React.FC = () => {
       return null;
     }
   });
-  const [topImage, setTopImage] = useState<UploadedImage | null>(null);
-  const [pantsImage, setPantsImage] = useState<UploadedImage | null>(null);
-  const [shoesImage, setShoesImage] = useState<UploadedImage | null>(null);
-  const [outerImage, setOuterImage] = useState<UploadedImage | null>(null);
+
+  const [topImage, setTopImage] = useState<UploadedImage | null>(() => {
+    try {
+      const saved = localStorage.getItem("virtualTryOn_topImage");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (topImage && topImage.base64 && topImage.mimeType) {
+        const payload = {
+          previewUrl: topImage.previewUrl,
+          base64: topImage.base64,
+          mimeType: topImage.mimeType,
+        };
+        localStorage.setItem("virtualTryOn_topImage", JSON.stringify(payload));
+      } else {
+        localStorage.removeItem("virtualTryOn_topImage");
+      }
+    } catch (err) {
+      console.warn("Failed to persist topImage:", err);
+    }
+  }, [topImage]);
+  const [pantsImage, setPantsImage] = useState<UploadedImage | null>(() => {
+    try {
+      const saved = localStorage.getItem("virtualTryOn_pantsImage");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (pantsImage && pantsImage.base64 && pantsImage.mimeType) {
+        const payload = {
+          previewUrl: pantsImage.previewUrl,
+          base64: pantsImage.base64,
+          mimeType: pantsImage.mimeType,
+        };
+        localStorage.setItem(
+          "virtualTryOn_pantsImage",
+          JSON.stringify(payload)
+        );
+      } else {
+        localStorage.removeItem("virtualTryOn_pantsImage");
+      }
+    } catch (err) {
+      console.warn("Failed to persist pantsImage:", err);
+    }
+  }, [pantsImage]);
+  const [shoesImage, setShoesImage] = useState<UploadedImage | null>(() => {
+    try {
+      const saved = localStorage.getItem("virtualTryOn_shoesImage");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (shoesImage && shoesImage.base64 && shoesImage.mimeType) {
+        const payload = {
+          previewUrl: shoesImage.previewUrl,
+          base64: shoesImage.base64,
+          mimeType: shoesImage.mimeType,
+        };
+        localStorage.setItem(
+          "virtualTryOn_shoesImage",
+          JSON.stringify(payload)
+        );
+      } else {
+        localStorage.removeItem("virtualTryOn_shoesImage");
+      }
+    } catch (err) {
+      console.warn("Failed to persist shoesImage:", err);
+    }
+  }, [shoesImage]);
+  const [outerImage, setOuterImage] = useState<UploadedImage | null>(() => {
+    try {
+      const saved = localStorage.getItem("virtualTryOn_outerImage");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (outerImage && outerImage.base64 && outerImage.mimeType) {
+        const payload = {
+          previewUrl: outerImage.previewUrl,
+          base64: outerImage.base64,
+          mimeType: outerImage.mimeType,
+        };
+        localStorage.setItem(
+          "virtualTryOn_outerImage",
+          JSON.stringify(payload)
+        );
+      } else {
+        localStorage.removeItem("virtualTryOn_outerImage");
+      }
+    } catch (err) {
+      console.warn("Failed to persist outerImage:", err);
+    }
+  }, [outerImage]);
   const [personSource, setPersonSource] = useState<
     "model" | "upload" | "unknown"
   >(() => {
