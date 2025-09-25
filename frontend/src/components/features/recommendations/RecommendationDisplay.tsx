@@ -6,6 +6,7 @@ import type {
 } from "../../../types";
 import { HeartIcon } from "../../icons/HeartIcon";
 import { Card, toast, useToast } from "../../ui";
+import { ProductCardOverlay } from "../ecommerce/ProductCardOverlay";
 
 interface RecommendationDisplayProps {
   recommendations: CategoryRecommendations;
@@ -56,6 +57,7 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
 
   const ItemCard: React.FC<{ item: RecommendationItem }> = ({ item }) => {
     const { addToast } = useToast();
+    const [overlayOpen, setOverlayOpen] = useState(false);
     const [liked, setLiked] = useState<boolean>(() =>
       likesService.isLiked(item.id)
     );
@@ -76,6 +78,8 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
       <Card
         className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
         onClick={() => onItemClick?.(item)}
+        onMouseEnter={() => setOverlayOpen(true)}
+        onMouseLeave={() => setOverlayOpen(false)}
         data-card-id={item.id}
       >
         <div className="aspect-square bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
@@ -96,16 +100,28 @@ export const RecommendationDisplay: React.FC<RecommendationDisplayProps> = ({
               No Image
             </div>
           )}
+          <ProductCardOverlay
+            isVisible={overlayOpen}
+            onVirtualFitting={() => onItemClick?.(item)}
+            onBuy={() => {
+              if (item.productUrl) {
+                window.open(item.productUrl, "_blank", "noopener,noreferrer");
+              } else {
+                addToast(toast.info("상품 링크가 없습니다.", item.title));
+              }
+            }}
+          />
+
           <button
             type="button"
             onClick={onToggleLike}
             aria-pressed={liked}
             aria-label={liked ? "좋아요 해제" : "좋아요 추가"}
-            className={`absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full border bg-white/90 text-gray-500 shadow-sm transition hover:bg-white hover:text-red-500 ${
+            className={`absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full border bg-white/90 text-gray-500 shadow-sm transition hover:bg-white hover:text-red-500 ${
               liked ? "border-red-200 text-red-500" : "border-white/70"
             }`}
           >
-            <HeartIcon className="h-4 w-4" />
+            <HeartIcon className="h-3 w-3" />
           </button>
 
           {/* 오버레이 제거 - 유사상품추천에서는 오버레이 없음 */}

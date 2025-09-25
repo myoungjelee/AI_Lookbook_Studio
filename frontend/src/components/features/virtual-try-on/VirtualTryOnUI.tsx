@@ -8,6 +8,7 @@ import { videoHistory } from "../../../services/video_history.service";
 import { virtualTryOnService } from "../../../services/virtualTryOn.service";
 import type {
   ApiFile,
+  CategoryRecommendations,
   ClothingItems,
   RecommendationItem,
   RecommendationOptions,
@@ -23,6 +24,7 @@ import { ModelPicker } from "./ModelPicker";
 import { ResultDisplay } from "./ResultDisplay";
 import { SnsShareDialog } from "./SnsShareDialog";
 import { TryOnHistory } from "./TryOnHistory";
+import { ProductCardOverlay } from "../ecommerce/ProductCardOverlay";
 
 // Simple feature-flag helper (treats undefined as ON)
 const isFeatureEnabled = (value: unknown): boolean => {
@@ -228,8 +230,10 @@ export const VirtualTryOnUI: React.FC = () => {
       return undefined;
     }
   });
+
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<any>(null);
+  const [recommendations, setRecommendations] =
+    useState<CategoryRecommendations | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isLoadingRecommendations, setIsLoadingRecommendations] =
     useState<boolean>(false);
@@ -770,6 +774,7 @@ export const VirtualTryOnUI: React.FC = () => {
     shoes: RecommendationItem[];
     outer: RecommendationItem[];
   }>({ top: [], pants: [], shoes: [], outer: [] });
+  const [hoveredRandomId, setHoveredRandomId] = useState<string | null>(null);
   const [isLoadingRandom, setIsLoadingRandom] = useState<boolean>(false);
   const fetchRandom = useCallback(
     async (limit: number = 12) => {
@@ -2212,13 +2217,16 @@ export const VirtualTryOnUI: React.FC = () => {
                             <Card
                               key={item.id}
                               className="cursor-pointer hover:shadow-lg transition-shadow"
-                              onClick={() => addToSlotForced(item, "top")}
                               padding="sm"
+                              onMouseEnter={() =>
+                                setHoveredRandomId(String(item.id))
+                              }
+                              onMouseLeave={() => setHoveredRandomId(null)}
                             >
                               <div
-                                className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                                   selectedTopId === String(item.id)
-                                    ? "ring-2 ring-blue-500"
+                                    ? "ring-2 ring-black"
                                     : ""
                                 }`}
                               >
@@ -2229,6 +2237,30 @@ export const VirtualTryOnUI: React.FC = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 )}
+                                <ProductCardOverlay
+                                  isVisible={
+                                    hoveredRandomId === String(item.id)
+                                  }
+                                  onVirtualFitting={() =>
+                                    addToSlotForced(item, "top")
+                                  }
+                                  onBuy={() => {
+                                    if (item.productUrl) {
+                                      window.open(
+                                        item.productUrl,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                      );
+                                    } else {
+                                      addToast(
+                                        toast.info(
+                                          "상품 링크가 없습니다.",
+                                          item.title
+                                        )
+                                      );
+                                    }
+                                  }}
+                                />
                               </div>
                               <p
                                 className="text-xs text-gray-700 truncate"
@@ -2249,13 +2281,16 @@ export const VirtualTryOnUI: React.FC = () => {
                             <Card
                               key={item.id}
                               className="cursor-pointer hover:shadow-lg transition-shadow"
-                              onClick={() => addToSlotForced(item, "pants")}
                               padding="sm"
+                              onMouseEnter={() =>
+                                setHoveredRandomId(String(item.id))
+                              }
+                              onMouseLeave={() => setHoveredRandomId(null)}
                             >
                               <div
-                                className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                                   selectedPantsId === String(item.id)
-                                    ? "ring-2 ring-blue-500"
+                                    ? "ring-2 ring-black"
                                     : ""
                                 }`}
                               >
@@ -2266,6 +2301,30 @@ export const VirtualTryOnUI: React.FC = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 )}
+                                <ProductCardOverlay
+                                  isVisible={
+                                    hoveredRandomId === String(item.id)
+                                  }
+                                  onVirtualFitting={() =>
+                                    addToSlotForced(item, "pants")
+                                  }
+                                  onBuy={() => {
+                                    if (item.productUrl) {
+                                      window.open(
+                                        item.productUrl,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                      );
+                                    } else {
+                                      addToast(
+                                        toast.info(
+                                          "상품 링크가 없습니다.",
+                                          item.title
+                                        )
+                                      );
+                                    }
+                                  }}
+                                />
                               </div>
                               <p
                                 className="text-xs text-gray-700 truncate"
@@ -2286,13 +2345,16 @@ export const VirtualTryOnUI: React.FC = () => {
                             <Card
                               key={item.id}
                               className="cursor-pointer hover:shadow-lg transition-shadow"
-                              onClick={() => addToSlotForced(item, "outer")}
                               padding="sm"
+                              onMouseEnter={() =>
+                                setHoveredRandomId(String(item.id))
+                              }
+                              onMouseLeave={() => setHoveredRandomId(null)}
                             >
                               <div
-                                className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                                   selectedOuterId === String(item.id)
-                                    ? "ring-2 ring-blue-500"
+                                    ? "ring-2 ring-black"
                                     : ""
                                 }`}
                               >
@@ -2303,6 +2365,30 @@ export const VirtualTryOnUI: React.FC = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 )}
+                                <ProductCardOverlay
+                                  isVisible={
+                                    hoveredRandomId === String(item.id)
+                                  }
+                                  onVirtualFitting={() =>
+                                    addToSlotForced(item, "outer")
+                                  }
+                                  onBuy={() => {
+                                    if (item.productUrl) {
+                                      window.open(
+                                        item.productUrl,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                      );
+                                    } else {
+                                      addToast(
+                                        toast.info(
+                                          "상품 링크가 없습니다.",
+                                          item.title
+                                        )
+                                      );
+                                    }
+                                  }}
+                                />
                               </div>
                               <p
                                 className="text-xs text-gray-700 truncate"
@@ -2323,13 +2409,16 @@ export const VirtualTryOnUI: React.FC = () => {
                             <Card
                               key={item.id}
                               className="cursor-pointer hover:shadow-lg transition-shadow"
-                              onClick={() => addToSlotForced(item, "shoes")}
                               padding="sm"
+                              onMouseEnter={() =>
+                                setHoveredRandomId(String(item.id))
+                              }
+                              onMouseLeave={() => setHoveredRandomId(null)}
                             >
                               <div
-                                className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                                   selectedShoesId === String(item.id)
-                                    ? "ring-2 ring-blue-500"
+                                    ? "ring-2 ring-black"
                                     : ""
                                 }`}
                               >
@@ -2340,6 +2429,30 @@ export const VirtualTryOnUI: React.FC = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 )}
+                                <ProductCardOverlay
+                                  isVisible={
+                                    hoveredRandomId === String(item.id)
+                                  }
+                                  onVirtualFitting={() =>
+                                    addToSlotForced(item, "shoes")
+                                  }
+                                  onBuy={() => {
+                                    if (item.productUrl) {
+                                      window.open(
+                                        item.productUrl,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                      );
+                                    } else {
+                                      addToast(
+                                        toast.info(
+                                          "상품 링크가 없습니다.",
+                                          item.title
+                                        )
+                                      );
+                                    }
+                                  }}
+                                />
                               </div>
                               <p
                                 className="text-xs text-gray-700 truncate"
@@ -2424,13 +2537,14 @@ export const VirtualTryOnUI: React.FC = () => {
                       <Card
                         key={item.id}
                         className="cursor-pointer hover:shadow-lg transition-shadow"
-                        onClick={() => addToSlotForced(item, "top")}
                         padding="sm"
+                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
+                        onMouseLeave={() => setHoveredRandomId(null)}
                       >
                         <div
-                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                             selectedTopId === String(item.id)
-                              ? "ring-2 ring-blue-500"
+                              ? "ring-2 ring-black"
                               : ""
                           }`}
                         >
@@ -2441,6 +2555,28 @@ export const VirtualTryOnUI: React.FC = () => {
                               className="w-full h-full object-cover"
                             />
                           )}
+                          <ProductCardOverlay
+                            isVisible={hoveredRandomId === String(item.id)}
+                            onVirtualFitting={() =>
+                              addToSlotForced(item, "top")
+                            }
+                            onBuy={() => {
+                              if (item.productUrl) {
+                                window.open(
+                                  item.productUrl,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                );
+                              } else {
+                                addToast(
+                                  toast.info(
+                                    "상품 링크가 없습니다.",
+                                    item.title
+                                  )
+                                );
+                              }
+                            }}
+                          />
                         </div>
                         <p
                           className="text-xs text-gray-700 truncate"
@@ -2461,13 +2597,14 @@ export const VirtualTryOnUI: React.FC = () => {
                       <Card
                         key={item.id}
                         className="cursor-pointer hover:shadow-lg transition-shadow"
-                        onClick={() => addToSlotForced(item, "pants")}
                         padding="sm"
+                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
+                        onMouseLeave={() => setHoveredRandomId(null)}
                       >
                         <div
-                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                             selectedPantsId === String(item.id)
-                              ? "ring-2 ring-blue-500"
+                              ? "ring-2 ring-black"
                               : ""
                           }`}
                         >
@@ -2478,6 +2615,28 @@ export const VirtualTryOnUI: React.FC = () => {
                               className="w-full h-full object-cover"
                             />
                           )}
+                          <ProductCardOverlay
+                            isVisible={hoveredRandomId === String(item.id)}
+                            onVirtualFitting={() =>
+                              addToSlotForced(item, "pants")
+                            }
+                            onBuy={() => {
+                              if (item.productUrl) {
+                                window.open(
+                                  item.productUrl,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                );
+                              } else {
+                                addToast(
+                                  toast.info(
+                                    "상품 링크가 없습니다.",
+                                    item.title
+                                  )
+                                );
+                              }
+                            }}
+                          />
                         </div>
                         <p
                           className="text-xs text-gray-700 truncate"
@@ -2498,13 +2657,14 @@ export const VirtualTryOnUI: React.FC = () => {
                       <Card
                         key={item.id}
                         className="cursor-pointer hover:shadow-lg transition-shadow"
-                        onClick={() => addToSlotForced(item, "outer")}
                         padding="sm"
+                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
+                        onMouseLeave={() => setHoveredRandomId(null)}
                       >
                         <div
-                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                             selectedOuterId === String(item.id)
-                              ? "ring-2 ring-blue-500"
+                              ? "ring-2 ring-black"
                               : ""
                           }`}
                         >
@@ -2515,6 +2675,28 @@ export const VirtualTryOnUI: React.FC = () => {
                               className="w-full h-full object-cover"
                             />
                           )}
+                          <ProductCardOverlay
+                            isVisible={hoveredRandomId === String(item.id)}
+                            onVirtualFitting={() =>
+                              addToSlotForced(item, "outer")
+                            }
+                            onBuy={() => {
+                              if (item.productUrl) {
+                                window.open(
+                                  item.productUrl,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                );
+                              } else {
+                                addToast(
+                                  toast.info(
+                                    "상품 링크가 없습니다.",
+                                    item.title
+                                  )
+                                );
+                              }
+                            }}
+                          />
                         </div>
                         <p
                           className="text-xs text-gray-700 truncate"
@@ -2535,13 +2717,14 @@ export const VirtualTryOnUI: React.FC = () => {
                       <Card
                         key={item.id}
                         className="cursor-pointer hover:shadow-lg transition-shadow"
-                        onClick={() => addToSlotForced(item, "shoes")}
                         padding="sm"
+                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
+                        onMouseLeave={() => setHoveredRandomId(null)}
                       >
                         <div
-                          className={`aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
                             selectedShoesId === String(item.id)
-                              ? "ring-2 ring-blue-500"
+                              ? "ring-2 ring-black"
                               : ""
                           }`}
                         >
@@ -2552,6 +2735,28 @@ export const VirtualTryOnUI: React.FC = () => {
                               className="w-full h-full object-cover"
                             />
                           )}
+                          <ProductCardOverlay
+                            isVisible={hoveredRandomId === String(item.id)}
+                            onVirtualFitting={() =>
+                              addToSlotForced(item, "shoes")
+                            }
+                            onBuy={() => {
+                              if (item.productUrl) {
+                                window.open(
+                                  item.productUrl,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                );
+                              } else {
+                                addToast(
+                                  toast.info(
+                                    "상품 링크가 없습니다.",
+                                    item.title
+                                  )
+                                );
+                              }
+                            }}
+                          />
                         </div>
                         <p
                           className="text-xs text-gray-700 truncate"

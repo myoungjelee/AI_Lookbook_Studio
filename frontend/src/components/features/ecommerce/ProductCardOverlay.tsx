@@ -1,5 +1,5 @@
-import React from 'react';
-import { Button } from '../../ui';
+import React from "react";
+import { Button } from "../../ui";
 
 interface ProductCardOverlayProps {
   isVisible: boolean;
@@ -27,17 +27,23 @@ export const ProductCardOverlay: React.FC<ProductCardOverlayProps> = ({
       <div className="rounded-xl bg-white/90 shadow-lg ring-1 ring-black/5 backdrop-blur px-5 py-4 flex flex-col gap-2 min-w-[180px]">
         <Button
           variant="primary"
-          onClick={(e) => { e.stopPropagation(); onVirtualFitting(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onVirtualFitting();
+          }}
           className="w-full font-semibold"
         >
           입어보기
         </Button>
         <Button
           variant="outline"
-          onClick={(e) => { console.log('사이드바에 담기 클릭'); e.stopPropagation(); onBuy(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onBuy();
+          }}
           className="w-full font-semibold"
         >
-          사이드바에 담기
+          구매하기
         </Button>
       </div>
     </div>
@@ -45,4 +51,3 @@ export const ProductCardOverlay: React.FC<ProductCardOverlayProps> = ({
 };
 
 export default ProductCardOverlay;
-

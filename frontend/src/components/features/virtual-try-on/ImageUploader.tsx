@@ -111,7 +111,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       <h3 className="font-semibold text-gray-800 text-xs">{title}</h3>
       <label
         htmlFor={id}
-        className={`relative w-full aspect-square min-h-[100px] md:min-h-[120px] lg:min-h-[140px] xl:min-h-[160px] border-2 border-dashed rounded-xl flex flex-col justify-center items-center text-center p-1 cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors duration-200 ${active ? "border-blue-600 ring-4 ring-blue-200" : "border-gray-300"}`}
+        className={`relative w-full aspect-square min-h-[100px] md:min-h-[120px] lg:min-h-[140px] xl:min-h-[160px] border-2 border-dashed rounded-xl flex flex-col justify-center items-center text-center p-1 cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors duration-200 ${active ? "border-black-600 ring-4 ring-black-200" : "border-gray-300"}`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
