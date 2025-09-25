@@ -111,15 +111,18 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate, currentPage }) => {
             ))}
           </div>
           {/* 검색창: 서브 탑 네비의 우측(유틸리티 아래) 배치 */}
-          {currentPage !== "try-on" && (
+          {currentPage === "home" && (
             <form
               className="ml-auto flex items-center flex-shrink-0"
               onSubmit={(e) => {
                 e.preventDefault();
                 const q = searchTerm.trim();
                 window.dispatchEvent(
-                  new CustomEvent("semantic-search", { detail: { q, limit: 24 } })
+                  new CustomEvent("semantic-search", {
+                    detail: { q, limit: 24 },
+                  })
                 );
+                setSearchTerm(""); // 검색 후 입력창 초기화
               }}
               role="search"
               aria-label="상품 검색"

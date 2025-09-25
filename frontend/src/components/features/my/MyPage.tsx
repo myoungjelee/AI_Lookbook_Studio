@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { RecommendationItem } from "../../../types";
 import type {
   TryOnInputHistoryItem,
   TryOnOutputHistoryItem,
@@ -9,6 +8,7 @@ import type { VideoHistoryItem } from "../../../services/video_history.service";
 import { videoHistory } from "../../../services/video_history.service";
 import { Button, Card } from "../../ui";
 import { FullScreenImage } from "../common/FullScreenImage";
+import type { RecommendationItem } from "../../../types";
 
 interface MyPageHistoryItemProps {
   item: TryOnInputHistoryItem;
@@ -128,7 +128,11 @@ export const MyPage: React.FC = () => {
       return `data:image/jpeg;base64,${item.outerImageData}`;
 
     // 2. 상품 이미지 URL 사용
-    const productCandidates: Array<{ product?: RecommendationItem; id?: string; image?: string }> = [
+    const productCandidates: Array<{
+      product?: RecommendationItem;
+      id?: string;
+      image?: string;
+    }> = [
       { product: item.topProduct, id: item.topProductId },
       { product: item.pantsProduct, id: item.pantsProductId },
       { product: item.shoesProduct, id: item.shoesProductId },
