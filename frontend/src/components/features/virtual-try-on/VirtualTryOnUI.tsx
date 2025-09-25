@@ -1558,15 +1558,15 @@ export const VirtualTryOnUI: React.FC = () => {
   );
 
   return (
-    <div className="flex flex-col items-center bg-[var(--page-bg)] pt-[88px] sm:pt-[96px] md:pt-[104px] px-4 sm:px-6 lg:px-8 pb-20">
+    <div className="flex flex-col items-center bg-[var(--page-bg)] pt-[88px] sm:pt-[96px] md:pt-[104px] px-3 sm:px-5 lg:px-8 pb-20">
       <div className="w-full">
         <main className="mx-auto w-full max-w-screen-xl xl:max-w-[1400px] 2xl:max-w-[1600px]">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-10 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 xl:gap-10 items-start">
             {/* Input Section */}
-            <div className="lg:col-span-8 order-1 bg-white p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="lg:col-span-8 order-1 bg-white p-5 sm:p-6 xl:p-7 rounded-2xl shadow-sm border border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-4">
                 {/* 왼쪽 영역: Person + AI 샘플 */}
-                <div className="md:col-span-1 space-y-2 border-r border-gray-200 pr-4">
+                <div className="md:col-span-1 space-y-2 pb-5 border-b border-gray-200 md:border-b-0 md:pb-0 md:pr-4 md:border-r md:border-gray-200">
                   <ImageUploader
                     id="person-image"
                     title="인물 (상반신)"
@@ -1620,7 +1620,7 @@ export const VirtualTryOnUI: React.FC = () => {
                 </div>
 
                 {/* 오른쪽 영역: 의류 4칸 */}
-                <div className="md:col-span-2 pl-4">
+                <div className="md:col-span-2 pt-4 md:pt-0 md:pl-4">
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="text-sm font-medium text-gray-700">
                       카테고리 아이템
@@ -1655,7 +1655,7 @@ export const VirtualTryOnUI: React.FC = () => {
                       전체 비우기
                     </Button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
                     <div
                       onMouseEnter={() => outerImage && setHoveredSlot("outer")}
                       onMouseLeave={() => setHoveredSlot(null)}

@@ -58,13 +58,13 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
   return (
     <header className="fixed top-0 left-0 right-0 z-30 shadow-sm">
       <div className="bg-[#FEF8E7] text-gray-900">
-        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-6 px-8">
+        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-4 px-4 sm:px-6 lg:px-8 overflow-x-auto whitespace-nowrap">
           {primaryNav.map((item, idx) => (
             <button
               key={item.id}
               onClick={() => item.go && onNavigate?.(item.go)}
               aria-label={idx === 0 ? "Home" : undefined}
-              className={`${idx === 0 ? "flex items-center" : "text-sm font-medium tracking-wide hover:text-gray-700"} transition-colors`}
+              className={`${idx === 0 ? "flex items-center" : "text-sm font-medium tracking-wide hover:text-gray-700"} transition-colors flex-shrink-0`}
             >
               {idx === 0 ? (
                 logoSrc ? (
@@ -88,7 +88,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
               <button
                 key={item.id}
                 onClick={() => item.go && onNavigate?.(item.go)}
-                className="transition-colors hover:text-gray-900"
+                className="transition-colors hover:text-gray-900 flex-shrink-0"
               >
                 {item.label}
               </button>
@@ -97,13 +97,13 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
         </div>
       </div>
       <div className="border-t border-[#ecdcb7] bg-[#FEF8E7] text-gray-900">
-        <div className="mx-auto flex h-12 max-w-[1280px] items-center gap-5 px-8 text-sm">
-          <div className="flex items-center gap-5">
+        <div className="mx-auto flex h-12 max-w-[1280px] items-center gap-4 px-4 sm:px-6 lg:px-8 text-sm overflow-x-auto whitespace-nowrap">
+          <div className="flex items-center gap-4 flex-shrink-0">
             {secondaryNav.map((item, idx) => (
               <button
                 key={item.id}
                 onClick={() => item.go && onNavigate?.(item.go)}
-                className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 ${idx === 0 ? "border-gray-900 text-gray-900" : ""}`}
+                className={`border-b-2 border-transparent pb-1 font-medium tracking-tight transition-all hover:border-gray-900/40 hover:text-gray-900 flex-shrink-0 ${idx === 0 ? "border-gray-900 text-gray-900" : ""}`}
               >
                 {item.label}
               </button>
@@ -111,7 +111,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
           </div>
           {/* 검색창: 서브 탑 네비의 우측(유틸리티 아래) 배치 */}
           <form
-            className="ml-auto flex items-center"
+            className="ml-auto flex items-center flex-shrink-0"
             onSubmit={(e) => {
               e.preventDefault();
               const q = searchTerm.trim();
@@ -126,7 +126,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="검색어를 입력하고 Enter"
-              className="h-9 w-56 md:w-72 rounded-full border border-[#dad0b8] bg-white px-4 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/30"
+              className="h-9 w-48 sm:w-56 md:w-72 rounded-full border border-[#dad0b8] bg-white px-4 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/30"
             />
           </form>
         </div>
