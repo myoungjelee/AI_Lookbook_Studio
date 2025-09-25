@@ -35,9 +35,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
         {isLoading && (
           <div className="flex flex-col items-center gap-4 text-gray-600">
             <Spinner size="lg" />
-            <span className="font-medium">Generating your image...</span>
+            <span className="font-medium">쇼룸 준비중...</span>
             <span className="text-sm text-gray-400 text-center">
-              This may take a moment.
+              모델이 착장을 위해 준비중입니다.
             </span>
           </div>
         )}

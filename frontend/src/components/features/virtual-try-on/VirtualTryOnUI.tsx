@@ -14,7 +14,7 @@ import type {
   RecommendationOptions,
   UploadedImage,
 } from "../../../types";
-import { Button, Card, Input, toast, useToast } from "../../ui";
+import { Button, Card, Input, Modal, toast, useToast } from "../../ui";
 import { RecommendationDisplay } from "../recommendations/RecommendationDisplay";
 import { StyleTipsCard } from "../tips/StyleTipsCard";
 import { ClothingItemOverlay } from "./ClothingItemOverlay";
@@ -333,6 +333,18 @@ export const VirtualTryOnUI: React.FC = () => {
     }
   });
 
+  const [consentGiven, setConsentGiven] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("virtualTryOn_consent_v1") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [consentModalOpen, setConsentModalOpen] = useState<boolean>(false);
+  const [consentChecked, setConsentChecked] = useState<boolean>(false);
+  const [consentPromptShown, setConsentPromptShown] = useState<boolean>(false);
+
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [recommendations, setRecommendations] =
     useState<CategoryRecommendations | null>(null);
@@ -399,6 +411,14 @@ export const VirtualTryOnUI: React.FC = () => {
       : false;
 
   useEffect(() => {
+    if (!consentGiven && !consentPromptShown) {
+      setConsentChecked(false);
+      setConsentModalOpen(true);
+      setConsentPromptShown(true);
+    }
+  }, [consentGiven, consentPromptShown]);
+
+  useEffect(() => {
     if (!generatedImage) {
       setStyleTipsSnapshot(null);
       return;
@@ -421,6 +441,52 @@ export const VirtualTryOnUI: React.FC = () => {
     );
   const showRecommendationsPanel =
     !!generatedImage && (isLoadingRecommendations || hasAnyRecommendations);
+
+  const handleConsentAccept = useCallback(() => {
+    if (!consentChecked) return;
+    try {
+      localStorage.setItem("virtualTryOn_consent_v1", "1");
+    } catch {
+      // ignore storage errors
+    }
+    setConsentGiven(true);
+    setConsentModalOpen(false);
+    addToast(
+      toast.success("동의 완료", "이미지 합성을 이용할 수 있습니다.", {
+        duration: 2200,
+      })
+    );
+  }, [consentChecked, addToast]);
+
+  const handleConsentClose = useCallback(() => {
+    if (!consentGiven) {
+      setConsentModalOpen(false);
+      addToast(
+        toast.info(
+          "동의 후에만 이미지 합성이 가능합니다.",
+          undefined,
+          {
+            duration: 2400,
+          }
+        )
+      );
+      return;
+    }
+    setConsentModalOpen(false);
+  }, [consentGiven, addToast]);
+
+  const requireConsent = useCallback(() => {
+    if (consentGiven) return true;
+    setConsentChecked(false);
+    setConsentModalOpen(true);
+    setConsentPromptShown(true);
+    addToast(
+      toast.info("이미지 합성 이용을 위해 동의가 필요합니다.", undefined, {
+        duration: 2200,
+      })
+    );
+    return false;
+  }, [consentGiven, addToast]);
   // UI highlight states
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
@@ -649,6 +715,9 @@ export const VirtualTryOnUI: React.FC = () => {
   }, [videoFeatureEnabled, clearVideoPoll]);
 
   const handleStartVideoGeneration = useCallback(async () => {
+    if (!requireConsent()) {
+      return;
+    }
     if (!generatedImage) {
       addToast(
         toast.info("Generate a try-on image first.", undefined, {
@@ -708,7 +777,14 @@ export const VirtualTryOnUI: React.FC = () => {
       setVideoError(message);
       addToast(toast.error(message, undefined, { duration: 2200 }));
     }
-  }, [generatedImage, videoPrompt, clearVideoPoll, pollVideoStatus, addToast]);
+  }, [
+    generatedImage,
+    videoPrompt,
+    clearVideoPoll,
+    pollVideoStatus,
+    addToast,
+    requireConsent,
+  ]);
 
   const handleCancelVideoPolling = useCallback(() => {
     clearVideoPoll();
@@ -1064,6 +1140,9 @@ export const VirtualTryOnUI: React.FC = () => {
   );
 
   const handleCombineClick = useCallback(async () => {
+    if (!requireConsent()) {
+      return;
+    }
     console.trace; // Debug trace
     const hasAnyClothing = !!(
       topImage ||
@@ -1263,6 +1342,7 @@ export const VirtualTryOnUI: React.FC = () => {
     maxPrice,
     excludeTagsInput,
     originalItems,
+    requireConsent,
   ]);
 
   const hasAnyClothing = !!(topImage || pantsImage || shoesImage || outerImage);
@@ -2003,7 +2083,7 @@ export const VirtualTryOnUI: React.FC = () => {
             >
               <CombineButton
                 onClick={handleCombineClick}
-                disabled={!canCombine || isLoading}
+                disabled={!consentGiven || !canCombine || isLoading}
                 isLoading={isLoading}
               />
               <ResultDisplay
@@ -2649,6 +2729,55 @@ export const VirtualTryOnUI: React.FC = () => {
               </Card>
             )}
           </section>
+
+          <Modal
+            isOpen={consentModalOpen}
+            onClose={handleConsentClose}
+            title="이미지 합성에 대한 동의"
+            size="md"
+            showCloseButton={consentGiven}
+          >
+            <div className="space-y-4 text-sm text-gray-700">
+              <p className="leading-relaxed">
+                버추얼 피팅 기능을 사용하기 위해서는 아래 항목에 동의해 주셔야 합니다.
+                동의하지 않을 경우 이미지 합성 기능이 제한될 수 있습니다.
+              </p>
+              <ul className="list-disc space-y-1 pl-5 text-gray-600">
+                <li>
+                  업로드하거나 선택한 이미지는 오직 가상 피팅 결과 생성을 위해 사용되며,
+                  결과 확인 후 언제든지 삭제할 수 있습니다.
+                </li>
+                <li>
+                  모델 생성 결과는 참고용으로 제공되며, 실제 상품과 차이가 있을 수 있습니다.
+                </li>
+                <li>
+                  개인정보가 포함된 이미지를 업로드할 경우 사용자 본인이 이에 대한 책임을 집니다.
+                </li>
+              </ul>
+              <label className="flex items-center gap-3 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
+                  checked={consentChecked}
+                  onChange={(event) => setConsentChecked(event.target.checked)}
+                />
+                <span>위 내용을 확인했으며 이미지 합성에 동의합니다.</span>
+              </label>
+              <div className="flex justify-end gap-2 pt-2">
+                {!consentGiven && (
+                  <Button variant="ghost" onClick={handleConsentClose}>
+                    나중에 동의할게요
+                  </Button>
+                )}
+                <Button
+                  onClick={handleConsentAccept}
+                  disabled={!consentChecked}
+                >
+                  동의하고 시작하기
+                </Button>
+              </div>
+            </div>
+          </Modal>
         </main>
       </div>
     </div>
