@@ -58,7 +58,7 @@ function App() {
     <ErrorBoundary>
       <ToastProvider>
         <div className="min-h-screen bg-[var(--page-bg)] text-[var(--text-base)]">
-          <TopBar onNavigate={(p) => setCurrentPage(p)} />
+          <TopBar currentPage={currentPage} onNavigate={(p) => setCurrentPage(p)} />
           {renderCurrentPage()}
         </div>
       </ToastProvider>

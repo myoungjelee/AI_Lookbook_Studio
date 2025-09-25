@@ -2,9 +2,10 @@ import React, { useState } from "react";
 
 interface TopBarProps {
   onNavigate?: (page: "home" | "try-on" | "likes" | "my") => void;
+  currentPage?: "home" | "try-on" | "likes" | "my";
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
+export const TopBar: React.FC<TopBarProps> = ({ onNavigate, currentPage }) => {
   const envLogo = (import.meta as any).env?.VITE_LOGO_URL as string | undefined;
   const [logoSrc, setLogoSrc] = useState<string>(envLogo || "/logo.png");
   const [searchTerm, setSearchTerm] = useState("");
@@ -110,25 +111,27 @@ export const TopBar: React.FC<TopBarProps> = ({ onNavigate }) => {
             ))}
           </div>
           {/* 검색창: 서브 탑 네비의 우측(유틸리티 아래) 배치 */}
-          <form
-            className="ml-auto flex items-center flex-shrink-0"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const q = searchTerm.trim();
-              window.dispatchEvent(
-                new CustomEvent("semantic-search", { detail: { q, limit: 24 } })
-              );
-            }}
-            role="search"
-            aria-label="상품 검색"
-          >
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="검색어를 입력하고 Enter"
-              className="h-9 w-48 sm:w-56 md:w-72 rounded-full border border-[#dad0b8] bg-white px-4 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/30"
-            />
-          </form>
+          {currentPage !== "try-on" && (
+            <form
+              className="ml-auto flex items-center flex-shrink-0"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const q = searchTerm.trim();
+                window.dispatchEvent(
+                  new CustomEvent("semantic-search", { detail: { q, limit: 24 } })
+                );
+              }}
+              role="search"
+              aria-label="상품 검색"
+            >
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="검색어를 입력하고 Enter"
+                className="h-9 w-48 sm:w-56 md:w-72 rounded-full border border-[#dad0b8] bg-white px-4 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/30"
+              />
+            </form>
+          )}
         </div>
       </div>
     </header>
