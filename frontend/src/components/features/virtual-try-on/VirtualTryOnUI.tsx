@@ -2151,7 +2151,7 @@ export const VirtualTryOnUI: React.FC = () => {
               {likedItems.length > 0 && (
                 <Card className="space-y-3">
                   <h3 className="text-lg font-semibold text-gray-800">
-                    Quick add from likes
+                    찜한 상품
                   </h3>
                   <div className="overflow-x-auto whitespace-nowrap flex gap-4 pb-1">
                     {likedItems.map((item) => {
@@ -2270,11 +2270,11 @@ export const VirtualTryOnUI: React.FC = () => {
                           >
                             {item.title}
                           </p>
-                          <div className="mt-1">
+                          {/* <div className="mt-1">
                             <Button size="sm" onClick={handleAdd}>
                               Use ({slot})
                             </Button>
-                          </div>
+                          </div> */}
                         </div>
                       );
                     })}
