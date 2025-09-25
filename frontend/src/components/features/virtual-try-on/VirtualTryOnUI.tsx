@@ -1031,6 +1031,7 @@ export const VirtualTryOnUI: React.FC = () => {
   );
 
   const handleCombineClick = useCallback(async () => {
+    console.trace; // Debug trace
     const hasAnyClothing = !!(
       topImage ||
       pantsImage ||

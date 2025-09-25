@@ -255,7 +255,7 @@ class GeminiImageService:
                 " Align to feet orientation and add subtle contact shadow."
             ),
         }
-        for key in ("top", "pants", "shoes", "outer"):
+        for key in ("top", "outer","pants", "shoes", ):
             item = clothing_items.get(key)
             print(f"[gemini] {key} 아이템 확인: {item}")
             if item and item.get("base64"):
@@ -317,7 +317,7 @@ class GeminiImageService:
             # The new API mirrors Node but uses snake_case fields
             # If a PERSON image is present in parts, use a lower temperature to improve adherence/stability
             has_person = any(isinstance(p, dict) and isinstance(p.get("inline_data"), dict) for p in parts[:4])
-            temp = min(self.temperature, 0.5) if has_person else self.temperature
+            temp = min(self.temperature, 0.2) if has_person else self.temperature
             resp = client.models.generate_content(
                 model=self.model,
                 contents=[{"role": "user", "parts": norm_parts}],
