@@ -212,6 +212,7 @@ class GeminiImageService:
                     {
                         "text": (
                             "LAYERING RULES: apply garments in this order—TOP first, OUTER layered over TOP,"
+                            "If no TOP image provided, treat the BASE PERSON's existing top as a placeholder and layer the OUTER garment over it.”
                             " then PANTS (or DRESS), then SHOES. Use only the provided garments; do not add accessories."
                         )
                     },
