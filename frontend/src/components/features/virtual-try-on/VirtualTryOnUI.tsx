@@ -414,6 +414,13 @@ export const VirtualTryOnUI: React.FC = () => {
     styleTipsSnapshot.image === generatedImage
       ? styleTipsSnapshot
       : null;
+  const hasAnyRecommendations =
+    !!recommendations &&
+    Object.values(recommendations).some(
+      (items) => Array.isArray(items) && items.length > 0
+    );
+  const showRecommendationsPanel =
+    !!generatedImage && (isLoadingRecommendations || hasAnyRecommendations);
   // UI highlight states
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [selectedTopId, setSelectedTopId] = useState<string | null>(null);
@@ -2317,314 +2324,6 @@ export const VirtualTryOnUI: React.FC = () => {
                   </div>
                 </Card>
               )}
-
-              {/* Recommendations Section */}
-              {(recommendations || isLoadingRecommendations) && (
-                <div className="mt-8">
-                  {isLoadingRecommendations ? (
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        <span className="ml-3 text-gray-600">
-                          추천 상품을 불러오는 중...
-                        </span>
-                      </div>
-                    </div>
-                  ) : recommendations ? (
-                    <RecommendationDisplay
-                      recommendations={recommendations}
-                      onItemClick={addCatalogItemToSlot}
-                    />
-                  ) : null}
-                </div>
-              )}
-              {/* LLM 평가: 히스토리 선택 최소 수 */}
-              {/* HistoryEvaluator removed per request */}
-              {/* Fallback random items before recommendations are available (hidden here; moved to bottom full-width) */}
-              {!recommendations && !isLoadingRecommendations && (
-                <div className="mt-8 hidden">
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl font-bold text-gray-800">
-                        랜덤 아이템
-                      </h2>
-                      <Button
-                        size="sm"
-                        onClick={() => fetchRandom(12)}
-                        loading={isLoadingRandom}
-                      >
-                        새로고침
-                      </Button>
-                    </div>
-                    <div className="space-y-6">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                          상의
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {randomItemsByCat.top.map((item) => (
-                            <Card
-                              key={item.id}
-                              className="cursor-pointer hover:shadow-lg transition-shadow"
-                              padding="sm"
-                              onMouseEnter={() =>
-                                setHoveredRandomId(String(item.id))
-                              }
-                              onMouseLeave={() => setHoveredRandomId(null)}
-                            >
-                              <div
-                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                                  selectedTopId === String(item.id)
-                                    ? "ring-2 ring-black"
-                                    : ""
-                                }`}
-                              >
-                                {item.imageUrl && (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.title}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                                <ProductCardOverlay
-                                  isVisible={
-                                    hoveredRandomId === String(item.id)
-                                  }
-                                  onVirtualFitting={() =>
-                                    addToSlotForced(item, "top")
-                                  }
-                                  onBuy={() => {
-                                    if (item.productUrl) {
-                                      window.open(
-                                        item.productUrl,
-                                        "_blank",
-                                        "noopener,noreferrer"
-                                      );
-                                    } else {
-                                      addToast(
-                                        toast.info(
-                                          "상품 링크가 없습니다.",
-                                          item.title
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <p
-                                className="text-xs text-gray-700 truncate"
-                                title={item.title}
-                              >
-                                {item.title}
-                              </p>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                          하의
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {randomItemsByCat.pants.map((item) => (
-                            <Card
-                              key={item.id}
-                              className="cursor-pointer hover:shadow-lg transition-shadow"
-                              padding="sm"
-                              onMouseEnter={() =>
-                                setHoveredRandomId(String(item.id))
-                              }
-                              onMouseLeave={() => setHoveredRandomId(null)}
-                            >
-                              <div
-                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                                  selectedPantsId === String(item.id)
-                                    ? "ring-2 ring-black"
-                                    : ""
-                                }`}
-                              >
-                                {item.imageUrl && (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.title}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                                <ProductCardOverlay
-                                  isVisible={
-                                    hoveredRandomId === String(item.id)
-                                  }
-                                  onVirtualFitting={() =>
-                                    addToSlotForced(item, "pants")
-                                  }
-                                  onBuy={() => {
-                                    if (item.productUrl) {
-                                      window.open(
-                                        item.productUrl,
-                                        "_blank",
-                                        "noopener,noreferrer"
-                                      );
-                                    } else {
-                                      addToast(
-                                        toast.info(
-                                          "상품 링크가 없습니다.",
-                                          item.title
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <p
-                                className="text-xs text-gray-700 truncate"
-                                title={item.title}
-                              >
-                                {item.title}
-                              </p>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                          아우터
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {randomItemsByCat.outer.map((item) => (
-                            <Card
-                              key={item.id}
-                              className="cursor-pointer hover:shadow-lg transition-shadow"
-                              padding="sm"
-                              onMouseEnter={() =>
-                                setHoveredRandomId(String(item.id))
-                              }
-                              onMouseLeave={() => setHoveredRandomId(null)}
-                            >
-                              <div
-                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                                  selectedOuterId === String(item.id)
-                                    ? "ring-2 ring-black"
-                                    : ""
-                                }`}
-                              >
-                                {item.imageUrl && (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.title}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                                <ProductCardOverlay
-                                  isVisible={
-                                    hoveredRandomId === String(item.id)
-                                  }
-                                  onVirtualFitting={() =>
-                                    addToSlotForced(item, "outer")
-                                  }
-                                  onBuy={() => {
-                                    if (item.productUrl) {
-                                      window.open(
-                                        item.productUrl,
-                                        "_blank",
-                                        "noopener,noreferrer"
-                                      );
-                                    } else {
-                                      addToast(
-                                        toast.info(
-                                          "상품 링크가 없습니다.",
-                                          item.title
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <p
-                                className="text-xs text-gray-700 truncate"
-                                title={item.title}
-                              >
-                                {item.title}
-                              </p>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                          신발
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {randomItemsByCat.shoes.map((item) => (
-                            <Card
-                              key={item.id}
-                              className="cursor-pointer hover:shadow-lg transition-shadow"
-                              padding="sm"
-                              onMouseEnter={() =>
-                                setHoveredRandomId(String(item.id))
-                              }
-                              onMouseLeave={() => setHoveredRandomId(null)}
-                            >
-                              <div
-                                className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                                  selectedShoesId === String(item.id)
-                                    ? "ring-2 ring-black"
-                                    : ""
-                                }`}
-                              >
-                                {item.imageUrl && (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.title}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                                <ProductCardOverlay
-                                  isVisible={
-                                    hoveredRandomId === String(item.id)
-                                  }
-                                  onVirtualFitting={() =>
-                                    addToSlotForced(item, "shoes")
-                                  }
-                                  onBuy={() => {
-                                    if (item.productUrl) {
-                                      window.open(
-                                        item.productUrl,
-                                        "_blank",
-                                        "noopener,noreferrer"
-                                      );
-                                    } else {
-                                      addToast(
-                                        toast.info(
-                                          "상품 링크가 없습니다.",
-                                          item.title
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <p
-                                className="text-xs text-gray-700 truncate"
-                                title={item.title}
-                              >
-                                {item.title}
-                              </p>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                      {randomItemsByCat.top.length +
-                        randomItemsByCat.pants.length +
-                        randomItemsByCat.shoes.length ===
-                        0 && (
-                        <div className="text-center text-gray-500 py-6">
-                          아이템을 불러올 수 없거나 결과가 없습니다.
-                        </div>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-              )}
               {/* close result panel */}
             </div>
             {/* close grid container */}
@@ -2663,270 +2362,292 @@ export const VirtualTryOnUI: React.FC = () => {
 
           {/* Bottom full-width Random Items section */}
           <section className="mt-10">
-            <Card>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-800">
-                  랜덤 아이템
-                </h2>
-                <Button
-                  size="sm"
-                  onClick={() => fetchRandom(12)}
-                  loading={isLoadingRandom}
-                >
-                  새로고침
-                </Button>
-              </div>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    상의
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.top.map((item) => (
-                      <Card
-                        key={item.id}
-                        className="cursor-pointer hover:shadow-lg transition-shadow"
-                        padding="sm"
-                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
-                        onMouseLeave={() => setHoveredRandomId(null)}
-                      >
-                        <div
-                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                            selectedTopId === String(item.id)
-                              ? "ring-2 ring-black"
-                              : ""
-                          }`}
-                        >
-                          {item.imageUrl && (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                          <ProductCardOverlay
-                            isVisible={hoveredRandomId === String(item.id)}
-                            onVirtualFitting={() =>
-                              addToSlotForced(item, "top")
-                            }
-                            onBuy={() => {
-                              if (item.productUrl) {
-                                window.open(
-                                  item.productUrl,
-                                  "_blank",
-                                  "noopener,noreferrer"
-                                );
-                              } else {
-                                addToast(
-                                  toast.info(
-                                    "상품 링크가 없습니다.",
-                                    item.title
-                                  )
-                                );
-                              }
-                            }}
-                          />
-                        </div>
-                        <p
-                          className="text-xs text-gray-700 truncate"
-                          title={item.title}
-                        >
-                          {item.title}
-                        </p>
-                      </Card>
-                    ))}
-                  </div>
+            {showRecommendationsPanel ? (
+              isLoadingRecommendations ? (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-center gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                  <span className="text-gray-600">추천 상품을 불러오는 중...</span>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    하의
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.pants.map((item) => (
-                      <Card
-                        key={item.id}
-                        className="cursor-pointer hover:shadow-lg transition-shadow"
-                        padding="sm"
-                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
-                        onMouseLeave={() => setHoveredRandomId(null)}
-                      >
-                        <div
-                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                            selectedPantsId === String(item.id)
-                              ? "ring-2 ring-black"
-                              : ""
-                          }`}
-                        >
-                          {item.imageUrl && (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                          <ProductCardOverlay
-                            isVisible={hoveredRandomId === String(item.id)}
-                            onVirtualFitting={() =>
-                              addToSlotForced(item, "pants")
-                            }
-                            onBuy={() => {
-                              if (item.productUrl) {
-                                window.open(
-                                  item.productUrl,
-                                  "_blank",
-                                  "noopener,noreferrer"
-                                );
-                              } else {
-                                addToast(
-                                  toast.info(
-                                    "상품 링크가 없습니다.",
-                                    item.title
-                                  )
-                                );
-                              }
-                            }}
-                          />
-                        </div>
-                        <p
-                          className="text-xs text-gray-700 truncate"
-                          title={item.title}
-                        >
-                          {item.title}
-                        </p>
-                      </Card>
-                    ))}
-                  </div>
+              ) : recommendations ? (
+                <RecommendationDisplay
+                  recommendations={recommendations}
+                  onItemClick={addCatalogItemToSlot}
+                />
+              ) : null
+            ) : (
+              <Card>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    랜덤 아이템
+                  </h2>
+                  <Button
+                    size="sm"
+                    onClick={() => fetchRandom(12)}
+                    loading={isLoadingRandom}
+                  >
+                    새로고침
+                  </Button>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    아우터
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.outer.map((item) => (
-                      <Card
-                        key={item.id}
-                        className="cursor-pointer hover:shadow-lg transition-shadow"
-                        padding="sm"
-                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
-                        onMouseLeave={() => setHoveredRandomId(null)}
-                      >
-                        <div
-                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                            selectedOuterId === String(item.id)
-                              ? "ring-2 ring-black"
-                              : ""
-                          }`}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      상의
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {randomItemsByCat.top.map((item) => (
+                        <Card
+                          key={item.id}
+                          className="cursor-pointer hover:shadow-lg transition-shadow"
+                          padding="sm"
+                          onMouseEnter={() =>
+                            setHoveredRandomId(String(item.id))
+                          }
+                          onMouseLeave={() => setHoveredRandomId(null)}
                         >
-                          {item.imageUrl && (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                          <ProductCardOverlay
-                            isVisible={hoveredRandomId === String(item.id)}
-                            onVirtualFitting={() =>
-                              addToSlotForced(item, "outer")
-                            }
-                            onBuy={() => {
-                              if (item.productUrl) {
-                                window.open(
-                                  item.productUrl,
-                                  "_blank",
-                                  "noopener,noreferrer"
-                                );
-                              } else {
-                                addToast(
-                                  toast.info(
-                                    "상품 링크가 없습니다.",
-                                    item.title
-                                  )
-                                );
+                          <div
+                            className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                              selectedTopId === String(item.id)
+                                ? "ring-2 ring-black"
+                                : ""
+                            }`}
+                          >
+                            {item.imageUrl && (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <ProductCardOverlay
+                              isVisible={hoveredRandomId === String(item.id)}
+                              onVirtualFitting={() =>
+                                addToSlotForced(item, "top")
                               }
-                            }}
-                          />
-                        </div>
-                        <p
-                          className="text-xs text-gray-700 truncate"
-                          title={item.title}
-                        >
-                          {item.title}
-                        </p>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    신발
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {randomItemsByCat.shoes.map((item) => (
-                      <Card
-                        key={item.id}
-                        className="cursor-pointer hover:shadow-lg transition-shadow"
-                        padding="sm"
-                        onMouseEnter={() => setHoveredRandomId(String(item.id))}
-                        onMouseLeave={() => setHoveredRandomId(null)}
-                      >
-                        <div
-                          className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
-                            selectedShoesId === String(item.id)
-                              ? "ring-2 ring-black"
-                              : ""
-                          }`}
-                        >
-                          {item.imageUrl && (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className="w-full h-full object-cover"
+                              onBuy={() => {
+                                if (item.productUrl) {
+                                  window.open(
+                                    item.productUrl,
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                  );
+                                } else {
+                                  addToast(
+                                    toast.info(
+                                      "상품 링크가 없습니다.",
+                                      item.title
+                                    )
+                                  );
+                                }
+                              }}
                             />
-                          )}
-                          <ProductCardOverlay
-                            isVisible={hoveredRandomId === String(item.id)}
-                            onVirtualFitting={() =>
-                              addToSlotForced(item, "shoes")
-                            }
-                            onBuy={() => {
-                              if (item.productUrl) {
-                                window.open(
-                                  item.productUrl,
-                                  "_blank",
-                                  "noopener,noreferrer"
-                                );
-                              } else {
-                                addToast(
-                                  toast.info(
-                                    "상품 링크가 없습니다.",
-                                    item.title
-                                  )
-                                );
-                              }
-                            }}
-                          />
-                        </div>
-                        <p
-                          className="text-xs text-gray-700 truncate"
-                          title={item.title}
+                          </div>
+                          <p
+                            className="text-xs text-gray-700 truncate"
+                            title={item.title}
+                          >
+                            {item.title}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      하의
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {randomItemsByCat.pants.map((item) => (
+                        <Card
+                          key={item.id}
+                          className="cursor-pointer hover:shadow-lg transition-shadow"
+                          padding="sm"
+                          onMouseEnter={() =>
+                            setHoveredRandomId(String(item.id))
+                          }
+                          onMouseLeave={() => setHoveredRandomId(null)}
                         >
-                          {item.title}
-                        </p>
-                      </Card>
-                    ))}
+                          <div
+                            className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                              selectedPantsId === String(item.id)
+                                ? "ring-2 ring-black"
+                                : ""
+                            }`}
+                          >
+                            {item.imageUrl && (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <ProductCardOverlay
+                              isVisible={hoveredRandomId === String(item.id)}
+                              onVirtualFitting={() =>
+                                addToSlotForced(item, "pants")
+                              }
+                              onBuy={() => {
+                                if (item.productUrl) {
+                                  window.open(
+                                    item.productUrl,
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                  );
+                                } else {
+                                  addToast(
+                                    toast.info(
+                                      "상품 링크가 없습니다.",
+                                      item.title
+                                    )
+                                  );
+                                }
+                              }}
+                            />
+                          </div>
+                          <p
+                            className="text-xs text-gray-700 truncate"
+                            title={item.title}
+                          >
+                            {item.title}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      아우터
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {randomItemsByCat.outer.map((item) => (
+                        <Card
+                          key={item.id}
+                          className="cursor-pointer hover:shadow-lg transition-shadow"
+                          padding="sm"
+                          onMouseEnter={() =>
+                            setHoveredRandomId(String(item.id))
+                          }
+                          onMouseLeave={() => setHoveredRandomId(null)}
+                        >
+                          <div
+                            className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                              selectedOuterId === String(item.id)
+                                ? "ring-2 ring-black"
+                                : ""
+                            }`}
+                          >
+                            {item.imageUrl && (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <ProductCardOverlay
+                              isVisible={hoveredRandomId === String(item.id)}
+                              onVirtualFitting={() =>
+                                addToSlotForced(item, "outer")
+                              }
+                              onBuy={() => {
+                                if (item.productUrl) {
+                                  window.open(
+                                    item.productUrl,
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                  );
+                                } else {
+                                  addToast(
+                                    toast.info(
+                                      "상품 링크가 없습니다.",
+                                      item.title
+                                    )
+                                  );
+                                }
+                              }}
+                            />
+                          </div>
+                          <p
+                            className="text-xs text-gray-700 truncate"
+                            title={item.title}
+                          >
+                            {item.title}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      신발
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {randomItemsByCat.shoes.map((item) => (
+                        <Card
+                          key={item.id}
+                          className="cursor-pointer hover:shadow-lg transition-shadow"
+                          padding="sm"
+                          onMouseEnter={() =>
+                            setHoveredRandomId(String(item.id))
+                          }
+                          onMouseLeave={() => setHoveredRandomId(null)}
+                        >
+                          <div
+                            className={`relative aspect-[4/5] rounded-lg overflow-hidden bg-gray-100 mb-2 ${
+                              selectedShoesId === String(item.id)
+                                ? "ring-2 ring-black"
+                                : ""
+                            }`}
+                          >
+                            {item.imageUrl && (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <ProductCardOverlay
+                              isVisible={hoveredRandomId === String(item.id)}
+                              onVirtualFitting={() =>
+                                addToSlotForced(item, "shoes")
+                              }
+                              onBuy={() => {
+                                if (item.productUrl) {
+                                  window.open(
+                                    item.productUrl,
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                  );
+                                } else {
+                                  addToast(
+                                    toast.info(
+                                      "상품 링크가 없습니다.",
+                                      item.title
+                                    )
+                                  );
+                                }
+                              }}
+                            />
+                          </div>
+                          <p
+                            className="text-xs text-gray-700 truncate"
+                            title={item.title}
+                          >
+                            {item.title}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                  {randomItemsByCat.top.length +
+                    randomItemsByCat.pants.length +
+                    randomItemsByCat.shoes.length ===
+                    0 && (
+                    <div className="text-center text-gray-500 py-6">
+                      아이템을 불러올 수 없거나 결과가 없습니다.
+                    </div>
+                  )}
                 </div>
-                {randomItemsByCat.top.length +
-                  randomItemsByCat.pants.length +
-                  randomItemsByCat.shoes.length ===
-                  0 && (
-                  <div className="text-center text-gray-500 py-6">
-                    아이템을 불러올 수 없거나 결과가 없습니다.
-                  </div>
-                )}
-              </div>
-            </Card>
+              </Card>
+            )}
           </section>
         </main>
       </div>
