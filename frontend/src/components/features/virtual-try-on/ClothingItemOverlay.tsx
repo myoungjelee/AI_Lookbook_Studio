@@ -34,6 +34,7 @@ export const ClothingItemOverlay: React.FC<ClothingItemOverlayProps> = ({
       {onRemove && (
         <button
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onRemove();
           }}
@@ -59,6 +60,7 @@ export const ClothingItemOverlay: React.FC<ClothingItemOverlayProps> = ({
       <div className="flex flex-col gap-2 p-3">
         <Button
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onLike();
           }}
@@ -70,6 +72,7 @@ export const ClothingItemOverlay: React.FC<ClothingItemOverlayProps> = ({
         </Button>
         <Button
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onBuy();
           }}
