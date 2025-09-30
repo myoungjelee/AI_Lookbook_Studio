@@ -1,0 +1,4 @@
+@base = http://localhost:3001
+
+
+GET https://7ai-team1-backend-test-d5dwcda0eseug7fp.koreacentral-01.azurewebsites.net//api/recommend/random?limit=4&category=shoes

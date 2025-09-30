@@ -73,12 +73,86 @@ class AzureOpenAIService:
                 content.append(part)
 
         if clothing_items:
-            for v in clothing_items.values():
+            items_dict = (
+                clothing_items
+                if isinstance(clothing_items, dict)
+                else clothing_items.model_dump(exclude_none=True)
+            )
+            for v in items_dict.values():
                 part = to_image_part(v)
                 if part:
                     content.append(part)
-
         return self._chat_to_json(content)
+
+    def analyze_clothing_item(self, image_data: Dict) -> str:
+        """옷 아이템만 분석하여 설명을 추출합니다."""
+        if not self.available():
+            raise RuntimeError("Azure OpenAI is not configured")
+
+        content: List[Dict] = [
+            {"type": "text", "text": "이 옷의 스타일, 색상, 카테고리를 간단히 설명해주세요."},
+        ]
+
+        # 이미지 데이터 추가
+        if image_data and image_data.get("base64"):
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{image_data.get('mimeType', 'image/jpeg')};base64,{image_data['base64']}"
+                }
+            })
+
+        try:
+            if self.client:
+                response = self.client.chat.completions.create(
+                    model=self.deployment_id,
+                    messages=[{"role": "user", "content": content}],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                return response.choices[0].message.content or "옷 아이템"
+            else:
+                # HTTP fallback
+                return self._http_analyze_clothing(image_data)
+        except Exception as e:
+            print(f"❌ Azure OpenAI 옷 분석 실패: {e}")
+            return "옷 아이템"
+
+    def _http_analyze_clothing(self, image_data: Dict) -> str:
+        """HTTP fallback for clothing analysis"""
+        try:
+            import httpx
+            with httpx.Client() as client:
+                response = client.post(
+                    f"{self.endpoint}/openai/deployments/{self.deployment_id}/chat/completions",
+                    headers={
+                        "api-key": self.api_key,
+                        "Content-Type": "application/json"
+                    },
+                    params={"api-version": self.api_version},
+                    json={
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "이 옷의 스타일, 색상, 카테고리를 간단히 설명해주세요."},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{image_data.get('mimeType', 'image/jpeg')};base64,{image_data['base64']}"
+                                    }
+                                }
+                            ]
+                        }],
+                        "temperature": self.temperature,
+                        "max_tokens": self.max_tokens
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"] or "옷 아이템"
+        except Exception as e:
+            print(f"❌ HTTP fallback 옷 분석 실패: {e}")
+            return "옷 아이템"
 
     def analyze_virtual_try_on(self, generated_image_data_uri: str) -> Dict:
         if not self.available():
@@ -86,6 +160,24 @@ class AzureOpenAIService:
         content: List[Dict] = [
             {"type": "text", "text": self._vto_prompt()},
             {"type": "image_url", "image_url": {"url": generated_image_data_uri, "detail": "high"}},
+        ]
+        return self._chat_to_json(content)
+
+    def parse_search_text(self, text: str) -> Dict:
+        """Extract shopping-related entities from a free-form query text.
+
+        Returns JSON with keys:
+          - category: one of [top, pants, shoes, outer, accessories] or null
+          - tokens: string[] concise search tokens
+          - colors: string[] normalized color names
+          - gender: one of [male, female, unisex, kids] or null
+          - priceRange: { min?: number, max?: number }
+        """
+        if not self.available():
+            raise RuntimeError("Azure OpenAI is not configured")
+        content: List[Dict] = [
+            {"type": "text", "text": self._parse_prompt()},
+            {"type": "text", "text": text},
         ]
         return self._chat_to_json(content)
 
@@ -196,6 +288,19 @@ class AzureOpenAIService:
         return (
             "Analyze this virtual try-on image and output ONLY JSON with keys: "
             "top, pants, shoes, overall_style, colors, fit, silhouette (arrays of concise attributes)."
+        )
+
+    @staticmethod
+    def _parse_prompt() -> str:
+        return (
+            "You are a shopping search assistant. Given a short description (Korean or "
+            "English), extract ONLY JSON with keys: category, tokens, colors, gender, priceRange.\n"
+            "- category: one of [top, pants, shoes, outer, accessories] or null.\n"
+            "- tokens: 3-8 concise keywords for catalog search (no stopwords).\n"
+            "- colors: normalized color names like [black, white, beige, navy, blue, green, red, brown, gray].\n"
+            "- gender: one of [male, female, unisex, kids] or null.\n"
+            "- priceRange: object with optional integer won values {min, max}. If user hints 'under 5만원' → {max:50000}.\n"
+            "Respond with STRICT JSON only."
         )
 
 

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect } from 'react';
 
 export interface ModalProps {
     isOpen: boolean;
@@ -42,31 +42,27 @@ const Modal: React.FC<ModalProps> = ({
         md: 'max-w-lg',
         lg: 'max-w-2xl',
         xl: 'max-w-4xl',
-    };
+    } as const;
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="flex min-h-screen items-center justify-center p-4">
-                {/* Backdrop */}
                 <div
-                    className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+                    className="fixed inset-0 bg-black/60"
                     onClick={onClose}
                 />
-
-                {/* Modal */}
-                <div className={`relative w-full ${sizeClasses[size]} transform rounded-lg bg-white shadow-xl transition-all`}>
-                    {/* Header */}
+                <div className={`relative w-full ${sizeClasses[size]} transform overflow-hidden rounded-[24px] border border-[var(--divider)] bg-[var(--surface-bg)] shadow-xl transition-all`}>
                     {(title || showCloseButton) && (
-                        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                        <div className="flex items-center justify-between border-b border-[var(--divider)] px-6 py-4">
                             {title && (
-                                <h3 className="text-lg font-semibold text-gray-900">
+                                <h3 className="text-lg font-semibold text-[var(--text-strong)]">
                                     {title}
                                 </h3>
                             )}
                             {showCloseButton && (
                                 <button
                                     onClick={onClose}
-                                    className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    className="rounded-full p-2 text-[var(--text-muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-strong)] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                                 >
                                     <svg
                                         className="h-5 w-5"
@@ -86,9 +82,7 @@ const Modal: React.FC<ModalProps> = ({
                             )}
                         </div>
                     )}
-
-                    {/* Content */}
-                    <div className="px-6 py-4">
+                    <div className="px-6 py-5 text-[var(--text-base)]">
                         {children}
                     </div>
                 </div>

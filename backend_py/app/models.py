@@ -1,4 +1,5 @@
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -11,12 +12,14 @@ class ClothingItems(BaseModel):
     top: Optional[ApiFile] = None
     pants: Optional[ApiFile] = None
     shoes: Optional[ApiFile] = None
+    outer: Optional[ApiFile] = None
 
 
 class VirtualTryOnRequest(BaseModel):
     # Person can be omitted to allow outfit-only composition
     person: Optional[ApiFile] = None
     clothingItems: ClothingItems
+    prompt: Optional[str] = None
 
 
 class VirtualTryOnResponse(BaseModel):
@@ -40,16 +43,19 @@ class RecommendationRequest(BaseModel):
     clothingItems: Optional[ClothingItems] = None
     generatedImage: Optional[str] = None
     options: Optional[RecommendationOptions] = None
+    selectedProductIds: Optional[Dict[str, str]] = None
 
 
 class RecommendationFromFittingRequest(BaseModel):
     generatedImage: str
     originalClothingItems: Optional[ClothingItems] = None
     options: Optional[RecommendationOptions] = None
+    selectedProductIds: Optional[Dict[str, str]] = None
 
 
 class RecommendationItem(BaseModel):
     id: str
+    pos: Optional[int] = None
     title: str
     price: int
     tags: List[str]
@@ -63,6 +69,7 @@ class CategoryRecommendations(BaseModel):
     top: List[RecommendationItem]
     pants: List[RecommendationItem]
     shoes: List[RecommendationItem]
+    outer: List[RecommendationItem]
     accessories: List[RecommendationItem]
 
 

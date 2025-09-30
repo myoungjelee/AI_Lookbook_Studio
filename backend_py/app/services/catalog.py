@@ -7,7 +7,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_CATALOG_PATH = ROOT_DIR / "data" / "catalog.json"
 REC_CONFIG_PATH = ROOT_DIR / "config" / "recommendation.config.json"
@@ -18,7 +17,7 @@ class CatalogServiceConfig:
     catalog_path: Path = Path(os.getenv("CATALOG_PATH", str(DEFAULT_CATALOG_PATH)))
     max_recommendations: int = 10
     score_threshold: float = 0.0
-    categories: Tuple[str, ...] = ("top", "pants", "shoes", "accessories")
+    categories: Tuple[str, ...] = ("top", "pants", "shoes", "outer", "accessories")
     exact_weight: float = 1.0
     partial_weight: float = 0.5
     rec_config_path: Path = Path(os.getenv("REC_CONFIG_PATH", str(REC_CONFIG_PATH)))
@@ -35,10 +34,13 @@ class CatalogService:
         try:
             data = json.loads(Path(self.config.catalog_path).read_text(encoding="utf-8"))
             # Basic normalization
-            for p in data:
+            for idx, p in enumerate(data):
                 p.setdefault("tags", [])
                 p.setdefault("title", "")
                 p.setdefault("category", "")
+                # Enforce index-based identity across the stack
+                p["pos"] = int(idx)
+                p["id"] = str(idx)
             self._catalog = data
             print(f"[CatalogService] Loaded {len(self._catalog)} products from {self.config.catalog_path}")
         except Exception as e:
@@ -108,35 +110,64 @@ class CatalogService:
                     score += self.config.partial_weight
         return score
 
-    def search(self, keywords: List[str], *, categories: Optional[List[str]] = None, max_results: int = 10,
-               score_threshold: float = 0.0) -> List[Dict]:
+    def search(
+        self,
+        keywords: List[str],
+        *,
+        categories: Optional[List[str]] = None,
+        max_results: int = 10,
+        score_threshold: float = 0.0,
+        products: Optional[List[Dict]] = None,
+    ) -> List[Dict]:
         categories = categories or list(self.config.categories)
         normalized = [k.strip().lower() for k in keywords if k and k.strip()]
         results: List[Tuple[float, Dict]] = []
-        for product in self._catalog:
+        dataset = products if products is not None else self._catalog
+        for product in dataset:
             if product.get("category") not in categories:
                 continue
             s = self._score_product(product, normalized)
             if s > score_threshold:
                 copy = dict(product)
                 copy["score"] = s
+                pid = copy.get("id")
+                if pid is not None:
+                    try:
+                        copy["pos"] = int(pid)
+                    except (TypeError, ValueError):
+                        copy["pos"] = pid
                 results.append((s, copy))
         results.sort(key=lambda t: t[0], reverse=True)
         return [p for _, p in results[:max_results]]
 
-    def find_similar(self, analysis: Dict, *, max_per_category: int = 3, include_score: bool = True,
-                      min_price: Optional[int] = None, max_price: Optional[int] = None,
-                      exclude_tags: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
+    def find_similar(
+        self,
+        analysis: Dict,
+        *,
+        max_per_category: int = 3,
+        include_score: bool = True,
+        min_price: Optional[int] = None,
+        max_price: Optional[int] = None,
+        exclude_tags: Optional[List[str]] = None,
+        products: Optional[List[Dict]] = None,
+    ) -> Dict[str, List[Dict]]:
         keywords: List[str] = []
         # collect keywords from analysis structure
         for key in ("tags", "captions", "top", "pants", "shoes", "overall_style", "detected_style", "colors", "categories"):
             val = analysis.get(key)
             if isinstance(val, list):
                 keywords.extend([str(v) for v in val])
+        
+        print(f"🔍 GPT-4.1 Mini 분석에서 추출한 키워드: {keywords}")
 
         recs = {c: [] for c in self.config.categories}
         for cat in self.config.categories:
-            cat_products = self.search(keywords, categories=[cat], max_results=max_per_category * 3)
+            cat_products = self.search(
+                keywords,
+                categories=[cat],
+                max_results=max_per_category * 3,
+                products=products,
+            )
             # filters
             if min_price is not None or max_price is not None:
                 cat_products = [p for p in cat_products if (min_price or 0) <= int(p.get("price", 0)) <= (max_price or 1_000_000_000)]
@@ -148,6 +179,13 @@ class CatalogService:
             if not include_score:
                 for p in cat_products:
                     p.pop("score", None)
+            for p in cat_products:
+                pid = p.get("id") if isinstance(p, dict) else None
+                if pid is not None:
+                    try:
+                        p["pos"] = int(pid)
+                    except (TypeError, ValueError):
+                        p.setdefault("pos", pid)
             recs[cat] = cat_products
 
         return recs

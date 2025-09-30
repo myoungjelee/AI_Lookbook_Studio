@@ -1,6 +1,7 @@
-import type { RecommendationItem } from '../types';
+import type { RecommendationItem } from "../types";
+import { safeSetItem } from "./storage.service";
 
-const STORAGE_KEY = 'app:likes:v1';
+const STORAGE_KEY = "app:likes:v1";
 
 type Listener = (items: RecommendationItem[]) => void;
 
@@ -14,18 +15,18 @@ function read(): RecommendationItem[] {
 }
 
 function write(items: RecommendationItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // ignore quota or serialization errors
-  }
+  safeSetItem(STORAGE_KEY, items);
 }
 
 const listeners: Set<Listener> = new Set();
 
 function notify(items: RecommendationItem[]) {
   listeners.forEach((fn) => {
-    try { fn(items); } catch { /* noop */ }
+    try {
+      fn(items);
+    } catch {
+      /* noop */
+    }
   });
 }
 
@@ -58,6 +59,10 @@ export const likesService = {
     notify(next);
     return !exists;
   },
+  clear() {
+    write([]);
+    notify([]);
+  },
   subscribe(listener: Listener) {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -65,4 +70,3 @@ export const likesService = {
 };
 
 export type { RecommendationItem };
-

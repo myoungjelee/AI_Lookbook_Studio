@@ -13,10 +13,21 @@ out/
 
 # Environment variables (중요: API 키 보안)
 .env
+*.env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.dev
+.env.prod
+.env.development
+.env.staging
+.env.production
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+backend_py/.env.local
+backend_py/.env.dev
+backend_py/.env.prod
+.env*
+!.env.example
 
 # Runtime data
 pids
@@ -70,9 +81,6 @@ jspm_packages/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env.test
-
 # parcel-bundler cache
 .cache
 .parcel-cache
@@ -124,6 +132,7 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+temp_*.txt
 
 # Logs
 logs
@@ -141,11 +150,33 @@ __pycache__/
 .Python
 *.pyc
 *.so
-
-# Ignore additional environment files (security)
-.env.development
-.env.production
-frontend/.env.development
 .venv
 .pyc
+test.httpㅇ
 
+# === Local-only: mise & uv ===
+# mise: keep local-only runtime/tool settings untracked
+mise.toml
+agents.md
+backend_py/gen-lang-client-0009734645-6e8394415d7d.json
+
+# uv: local caches and venvs (per-developer)
+.uv/
+.uv-cache/
+uv.lock
+pyproject.toml
+.python-version
+*.egg-info/
+
+/venv/
+/backend_py/venv/
+
+# AI Service Keys
+**/gemini_key*
+**/azure_key*
+**/openai_key*
+
+# Sensitive data
+secrets/
+keys/
+credentials/

@@ -1,13 +1,14 @@
-from datetime import datetime
-import os
-import httpx
 import base64
 import io
+import os
+from datetime import datetime
 from typing import Dict, Optional
+
+import httpx
 from fastapi import APIRouter, HTTPException
+
 from ..models import VirtualTryOnRequest, VirtualTryOnResponse
 from ..services.gemini_image_service import gemini_image_service
-
 
 router = APIRouter(prefix="/api/generate", tags=["VirtualTryOn"])
 
@@ -42,8 +43,12 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
     except Exception as e:  # noqa: BLE001
         print(f"[generate] PIL not available for collage fallback: {e}")
         return None
-    # Collect present images in display order
-    order = ["top", "pants", "shoes"]
+    # Collect present images for a simple tile collage.
+    # To avoid confusing results from product photos that include full bodies,
+    # we exclude OUTER from collage when no TOP is present.
+    core_order = ["top", "pants", "shoes"]
+    include_outer = bool(items.get("top") and items.get("outer"))
+    order = (core_order + (["outer"] if include_outer else []))
     present: list[Image.Image] = []
     try:
         for key in order:
@@ -51,7 +56,7 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
             if not f:
                 continue
             b64 = f.get("base64") if isinstance(f, dict) else None  # type: ignore[assignment]
-            mime = (f.get("mimeType") if isinstance(f, dict) else None) or "image/jpeg"
+            _ = (f.get("mimeType") if isinstance(f, dict) else None) or "image/jpeg"
             if not b64:
                 continue
             raw = base64.b64decode(b64)
@@ -92,14 +97,38 @@ def _compose_outfit_collage(items: Dict[str, Optional[Dict]]) -> Optional[str]:
 
 @router.post("")
 def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
+    # 디버깅: 요청 데이터 로그
+    print("[generate] 요청 수신:")
+    print(f"  - person: {'있음' if req.person else '없음'}")
+    if req.clothingItems:
+        print("  - clothingItems:")
+        for key in ["top", "pants", "shoes", "outer"]:
+            item = getattr(req.clothingItems, key, None)
+            print(f"    - {key}: {'있음' if item else '없음'}")
+            if item:
+                print(
+                    f"      - base64 길이: {len(item.base64) if hasattr(item, 'base64') else 'N/A'}"
+                )
+                print(f"      - mimeType: {getattr(item, 'mimeType', 'N/A')}")
+    else:
+        print("  - clothingItems: 없음")
     # Option A: Use native Python Gemini service if available
     if gemini_image_service.available():
         try:
             # 호환성: 혹시 클라이언트가 prprompt로 보낸 경우 대비
-            user_prompt = getattr(req, 'prompt', None) or getattr(req, 'prprompt', None)
+            user_prompt = getattr(req, "prompt", None) or getattr(req, "prprompt", None)
+
+            # 디버깅: Gemini 서비스 호출 전 데이터 확인
+            person_data = req.person.model_dump() if req.person else None
+            clothing_data = req.clothingItems.model_dump() if req.clothingItems else {}
+            print("[generate] Gemini 서비스 호출 데이터:")
+            print(f"  - person: {'있음' if person_data else '없음'}")
+            print(f"  - clothing_items: {clothing_data}")
+            print(f"  - prompt: {user_prompt}")
+
             result = gemini_image_service.generate_virtual_try_on_image(
-                person=req.person.model_dump(),
-                clothing_items=(req.clothingItems.model_dump() if req.clothingItems else {}),
+                person=person_data,
+                clothing_items=clothing_data,
                 prompt=(user_prompt or None),
             )
             if result:
@@ -110,7 +139,9 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
                 )
             else:
                 # No image returned: log and gracefully fall back
-                print("[generate] Gemini returned no image; falling back to proxy/placeholder")
+                print(
+                    "[generate] Gemini returned no image; falling back to proxy/placeholder"
+                )
         except Exception as e:
             # Log and fall back (do not surface 502 from this stage)
             print(f"[generate] Python Gemini error, falling back: {e}")
@@ -118,8 +149,8 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
     # Option A1: If person is not provided, still attempt Gemini using prompt/clothing-only
     if gemini_image_service.available() and req.person is None:
         try:
-            user_prompt = getattr(req, 'prompt', None) or getattr(req, 'prprompt', None)
-            clothing_dict = (req.clothingItems.model_dump() if req.clothingItems else {})
+            user_prompt = getattr(req, "prompt", None) or getattr(req, "prprompt", None)
+            clothing_dict = req.clothingItems.model_dump() if req.clothingItems else {}
             result = gemini_image_service.generate_virtual_try_on_image(
                 person=None,
                 clothing_items=clothing_dict,
@@ -136,12 +167,15 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
 
     # Option A2: If no person provided, attempt local collage composition from clothing items
     if req.person is None and req.clothingItems:
-        clothing = req.clothingItems.model_dump() if hasattr(req.clothingItems, "model_dump") else dict(req.clothingItems)
-        # Require at least three items for person-less composition (ideal)
-        present = [k for k in ("top", "pants", "shoes") if clothing.get(k)]
-        present_count = len(present)
-        print(f"[generate] no-person path: clothing present={present}")
-        if present_count >= 3:
+        clothing = (
+            req.clothingItems.model_dump()
+            if hasattr(req.clothingItems, "model_dump")
+            else dict(req.clothingItems)
+        )
+        # Prefer a collage when at least two core garments are present (top+pants). Shoes optional.
+        core_present = [k for k in ("top", "pants", "shoes") if clothing.get(k)]
+        print(f"[generate] no-person path: core_present={core_present}, outer={'있음' if clothing.get('outer') else '없음'}")
+        if len(core_present) >= 2 and all(k in core_present for k in ("top", "pants")):
             collaged = _compose_outfit_collage(clothing)
             if collaged:
                 return VirtualTryOnResponse(
@@ -152,7 +186,7 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
             else:
                 print("[generate] collage failed, falling back to single item data URI")
         # Last-resort: return the first available clothing image as the result
-        for k in ("top", "pants", "shoes"):
+        for k in ("top", "pants", "shoes", "outer"):
             f = clothing.get(k)
             if f and isinstance(f, dict) and f.get("base64"):
                 mime = f.get("mimeType") or "image/jpeg"
@@ -163,6 +197,13 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
                     timestamp=datetime.utcnow().isoformat() + "Z",
                 )
 
+    if req.person is not None:
+        # Person 이미지가 있는데도 위 단계에서 결과를 만들지 못했으면 실패로 처리
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to generate with provided person image. Please retry with a different image or later.",
+        )
+
     # Option B: Proxy to existing Node backend if configured (recommended during migration)
     proxy_target = os.getenv("GENERATE_PROXY_TARGET")
     if proxy_target:
@@ -172,7 +213,9 @@ def generate(req: VirtualTryOnRequest) -> VirtualTryOnResponse:
             resp.raise_for_status()
             data = resp.json()
             if not data.get("generatedImage"):
-                raise HTTPException(status_code=502, detail="Proxy responded without generatedImage")
+                raise HTTPException(
+                    status_code=502, detail="Proxy responded without generatedImage"
+                )
             return VirtualTryOnResponse(
                 generatedImage=data["generatedImage"],
                 requestId=data.get("requestId"),
