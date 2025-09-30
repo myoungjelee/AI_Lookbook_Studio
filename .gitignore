@@ -180,3 +180,6 @@ pyproject.toml
 secrets/
 keys/
 credentials/
+
+
+*.mp4
